@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GTM Operating Model{% block title %}{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .table-fixed-head thead th { position: sticky; top: 0; z-index: 10; }
+    .metric-good { color: #16a34a; }
+    .metric-warn { color: #d97706; }
+    .metric-bad  { color: #dc2626; }
+    .btn-active { background-color: #1e40af; color: white; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+<!-- Top nav -->
+<nav class="bg-gray-900 text-white shadow">
+  <div class="max-w-screen-2xl mx-auto px-4 flex items-center justify-between h-14">
+    <div class="flex items-center gap-2">
+      <span class="font-bold text-lg tracking-tight">Belfry GTM</span>
+    </div>
+    <div class="flex items-center gap-1 overflow-x-auto">
+      {% for endpoint, label in nav %}
+      <a href="{{ url_for(endpoint) }}"
+         class="px-3 py-1.5 rounded text-sm whitespace-nowrap transition
+                {% if active == endpoint %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+      <a href="{{ url_for('logout') }}" class="ml-4 px-3 py-1.5 rounded text-sm text-gray-400 hover:text-white">
+        Logout
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- Page content -->
+<main class="max-w-screen-2xl mx-auto px-4 py-6">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>
