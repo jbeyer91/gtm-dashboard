@@ -36,11 +36,11 @@ SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
     {"type": "link",  "endpoint": "call_stats",       "label": "Call Stats"},
-    {"type": "group", "label": "Pipeline", "items": [
+    {"type": "group", "label": "Pipeline", "children": [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
         {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
     ]},
-    {"type": "group", "label": "Deals", "items": [
+    {"type": "group", "label": "Deals", "children": [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
