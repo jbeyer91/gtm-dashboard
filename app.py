@@ -185,6 +185,26 @@ def book_coverage():
     return render_template("book_coverage.html", data=data, nav=NAV, active="book_coverage")
 
 
+@app.route("/api/debug/company-properties")
+@login_required
+def debug_company_properties():
+    """List company properties whose label or name matches coverage-related keywords."""
+    import requests
+    from hubspot import BASE_URL, HEADERS
+    resp = requests.get(f"{BASE_URL}/crm/v3/properties/companies?limit=500", headers=HEADERS)
+    if not resp.ok:
+        return jsonify({"error": resp.status_code, "body": resp.text}), resp.status_code
+    keywords = {"sequence", "activity", "called", "overdue", "task", "icp", "rank"}
+    matches = []
+    for p in resp.json().get("results", []):
+        label = p.get("label", "").lower()
+        name  = p.get("name", "").lower()
+        if any(k in label or k in name for k in keywords):
+            matches.append({"name": p["name"], "label": p["label"], "type": p.get("type")})
+    matches.sort(key=lambda x: x["label"])
+    return jsonify(matches)
+
+
 @app.route("/api/debug/deal-sources")
 @login_required
 def debug_deal_sources():
