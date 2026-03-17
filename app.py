@@ -186,42 +186,35 @@ def win_rate_by_source():
 @app.route("/api/debug/teams")
 @login_required
 def debug_teams():
-    """Diagnostic endpoint — shows raw HubSpot team data and resolved owner IDs."""
+    """Diagnostic endpoint — shows owner team membership and resolved filter."""
     import requests
     from hubspot import BASE_URL, HEADERS, TEAM_FILTER, get_team_owner_ids
 
-    resp_owners = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
-    resp_teams  = requests.get(f"{BASE_URL}/settings/v3/users/teams", headers=HEADERS)
+    resp = requests.get(
+        f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
+        headers=HEADERS,
+    )
 
-    user_to_owner = {}
-    if resp_owners.ok:
-        for o in resp_owners.json().get("results", []):
-            uid = o.get("userId")
-            if uid:
-                user_to_owner[str(uid)] = {"owner_id": str(o["id"]), "name": f"{o.get('firstName','')} {o.get('lastName','')}".strip()}
-
-    # Summarise teams in a readable way
-    teams_summary = []
-    if resp_teams.ok:
-        for t in resp_teams.json().get("results", []):
-            teams_summary.append({
-                "id":                t.get("id"),
-                "name":              t.get("name"),
-                "parentTeamId":      t.get("parentTeamId"),
-                "userIds":           t.get("userIds", []),
-                "secondaryUserIds":  t.get("secondaryUserIds", []),
-                "name_in_filter":    t.get("name") in TEAM_FILTER,
+    owners_with_teams = []
+    if resp.ok:
+        for o in resp.json().get("results", []):
+            name = f"{o.get('firstName','')} {o.get('lastName','')}".strip()
+            team_names = [t.get("name") for t in o.get("teams", [])]
+            owners_with_teams.append({
+                "owner_id":      str(o["id"]),
+                "name":          name,
+                "teams":         team_names,
+                "in_filter":     any(t in TEAM_FILTER for t in team_names),
             })
 
+    allowed = get_team_owner_ids()
     return jsonify({
         "team_filter":        list(TEAM_FILTER),
-        "resolved_owner_ids": sorted(get_team_owner_ids()),
-        "resolved_count":     len(get_team_owner_ids()),
-        "owners_api_ok":      resp_owners.ok,
-        "teams_api_ok":       resp_teams.ok,
-        "teams_api_status":   resp_teams.status_code,
-        "teams_summary":      teams_summary,
-        "user_to_owner_map":  user_to_owner,
+        "resolved_count":     len(allowed),
+        "resolved_owner_ids": sorted(allowed),
+        "owners_api_ok":      resp.ok,
+        "owners_api_status":  resp.status_code,
+        "owners_with_teams":  owners_with_teams,
     })
 
 
