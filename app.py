@@ -42,7 +42,6 @@ NAV = [
     ("deals_won", "Deals Won"),
     ("deals_lost", "Deals Lost"),
     ("inbound_funnel", "Inbound Funnel"),
-    ("win_rate_by_source", "Win-Rate by Source"),
 ]
 
 
@@ -170,17 +169,6 @@ def inbound_funnel():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="inbound_funnel")
     return render_template("inbound_funnel.html", data=data, periods=PERIODS, period=period, nav=NAV, active="inbound_funnel")
-
-
-@app.route("/win-rate-by-source")
-@login_required
-def win_rate_by_source():
-    period = request.args.get("period", "this_quarter")
-    try:
-        data = analytics.compute_win_rate_by_source(period)
-    except Exception as e:
-        return render_template("error.html", message=str(e), nav=NAV, active="win_rate_by_source")
-    return render_template("win_rate_by_source.html", data=data, periods=PERIODS, period=period, nav=NAV, active="win_rate_by_source")
 
 
 @app.route("/api/debug/teams")
