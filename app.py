@@ -129,7 +129,7 @@ def pipeline_coverage():
 @app.route("/deal-advancement")
 @login_required
 def deal_advancement():
-    period = request.args.get("period", "this_month")
+    period = request.args.get("period", "last_30")
     source = request.args.get("source", "All")
     try:
         data = analytics.compute_deal_advancement(period, source)

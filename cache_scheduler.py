@@ -93,7 +93,7 @@ def _refresh_period_data(period: str):
     # stage movements from deals created before the selected period.
     try:
         wide_start = end - timedelta(days=548)
-        hubspot.get_deals(wide_start, end, _force=True)
+        hubspot.get_deals(wide_start, end, "createdate", _force=True)
     except Exception as exc:
         log.warning("  ✗ get_deals_wide(%s, ...): %s", period, exc)
 

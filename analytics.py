@@ -373,13 +373,11 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
 
-    # "Created" count: deals created within the selected period.
+    # "Created" count — deals whose createdate falls in the period.
     period_deals = get_deals(start, end, "createdate")
 
-    # Advancement counts: use an 18-month lookback so we capture deals
-    # created before the period that moved through stages during it.
-    # get_deals is already cached so this is a cache-key lookup, not a new call
-    # once the scheduler has warmed it.
+    # 18-month lookback — captures deals created before the period that had
+    # stage movements during it (hs_date_entered_* falls within [start, end]).
     wide_start = end - timedelta(days=548)
     wide_deals = get_deals(wide_start, end, "createdate")
 
@@ -390,14 +388,37 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start_ms = int(start.timestamp() * 1000)
     end_ms   = int(end.timestamp()   * 1000)
 
-    def _entered_in_period(date_str: str) -> bool:
-        """True when a HubSpot ISO date string falls within [start, end]."""
-        if not date_str:
+    def _entered_in_period(date_val: str) -> bool:
+        """True when a HubSpot date value falls within [start_ms, end_ms].
+
+        Handles both epoch-millisecond strings ('1709640000000') and ISO 8601
+        datetime strings.  Python < 3.11 fromisoformat only accepts 6-digit
+        microseconds, so we normalise HubSpot's 3-digit milliseconds by
+        padding to 6 digits before parsing.
+        """
+        if not date_val:
             return False
+        # Try epoch milliseconds (numeric string HubSpot sometimes returns)
         try:
-            ms = int(datetime.fromisoformat(
-                date_str.replace("Z", "+00:00")).timestamp() * 1000)
-            return start_ms <= ms <= end_ms
+            ms = int(date_val)
+            if 946684800000 <= ms <= 4102444800000:   # sanity: year 2000-2100
+                return start_ms <= ms <= end_ms
+        except (ValueError, TypeError):
+            pass
+        # Try ISO 8601 — pad fractional seconds to 6 digits for Python < 3.11
+        try:
+            s = str(date_val).replace("Z", "+00:00")
+            if "." in s:
+                dot = s.index(".")
+                frac_end = dot + 1
+                while frac_end < len(s) and s[frac_end].isdigit():
+                    frac_end += 1
+                frac = s[dot + 1:frac_end].ljust(6, "0")[:6]
+                s = s[:dot + 1] + frac + s[frac_end:]
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return start_ms <= int(dt.timestamp() * 1000) <= end_ms
         except Exception:
             return False
 
