@@ -15,9 +15,21 @@
     /* Remove default details/summary triangle */
     details > summary { list-style: none; }
     details > summary::-webkit-details-marker { display: none; }
+    /* Spinner animation */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-spin { animation: spin 0.75s linear infinite; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
+
+<!-- Page-load overlay: appears immediately on navigation so there's no blank white wait -->
+<div id="page-loader" style="display:none"
+     class="fixed inset-0 z-[999] flex flex-col items-center justify-center gap-3"
+     style="background:rgba(249,250,251,0.85);">
+  <div class="w-10 h-10 rounded-full border-4 border-blue-600 loader-spin"
+       style="border-top-color:transparent;"></div>
+  <p class="text-sm text-gray-500 font-medium tracking-wide">Loading data…</p>
+</div>
 
 <!-- Top nav -->
 <nav class="bg-gray-900 text-white shadow">
@@ -55,16 +67,25 @@
           </details>
         {% endif %}
       {% endfor %}
-      <!-- Cache indicator + manual refresh -->
-      <span class="ml-4 text-xs text-gray-500 whitespace-nowrap">Data: {{ last_refreshed }}</span>
+
+      <!-- Data freshness badge -->
+      <div class="ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-700 bg-gray-800 text-xs text-gray-400 whitespace-nowrap"
+           title="Data is pre-fetched from HubSpot and refreshes automatically every hour">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+        </svg>
+        <span>{{ last_refreshed }}</span>
+      </div>
+
+      <!-- Manual refresh -->
       <form method="POST" action="{{ url_for('refresh_cache') }}" class="ml-1">
         <button type="submit"
                 title="Fetch fresh data from HubSpot now"
                 class="px-2 py-1 rounded text-xs text-gray-400 hover:bg-gray-700 hover:text-white transition">
-          ↻ Refresh
+          ↻
         </button>
       </form>
-      <a href="{{ url_for('logout') }}" class="ml-2 px-3 py-1.5 rounded text-sm text-gray-400 hover:text-white">
+      <a href="{{ url_for('logout') }}" class="ml-1 px-3 py-1.5 rounded text-sm text-gray-400 hover:text-white transition">
         Logout
       </a>
     </div>
@@ -77,7 +98,7 @@
 </main>
 
 <script>
-  // Close other dropdowns when one opens, and close all on outside click
+  // ── Nav dropdowns ────────────────────────────────────────────────────────
   var navDDs = document.querySelectorAll('[data-nav-dd]');
   navDDs.forEach(function(dd) {
     dd.addEventListener('toggle', function() {
@@ -90,6 +111,31 @@
     if (!e.target.closest('[data-nav-dd]')) {
       navDDs.forEach(function(dd) { dd.removeAttribute('open'); });
     }
+  });
+
+  // ── Page-load spinner ────────────────────────────────────────────────────
+  // Show the overlay whenever the user navigates to a new internal page.
+  // The overlay auto-hides when the new page renders (it starts hidden).
+  var loader = document.getElementById('page-loader');
+  document.addEventListener('click', function(e) {
+    // Ignore clicks inside nav dropdowns (just toggling, not navigating)
+    if (e.target.closest('summary')) return;
+    var link = e.target.closest('a[href]');
+    if (link) {
+      var href = link.getAttribute('href');
+      // Only show for internal links (not anchors, not external URLs)
+      if (href && !href.startsWith('#') && !href.startsWith('http') && !href.startsWith('mailto')) {
+        loader.style.display = 'flex';
+      }
+    }
+  });
+  // Also show on form submit (period/source filter pills, refresh button)
+  document.addEventListener('submit', function() {
+    loader.style.display = 'flex';
+  });
+  // Hide on browser back/forward (bfcache restore)
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) loader.style.display = 'none';
   });
 </script>
 </body>
