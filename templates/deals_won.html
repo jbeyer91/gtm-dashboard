@@ -2,9 +2,11 @@
 {% from "macros.html" import period_filter, source_filter, stat_card, fmt_pct, fmt_money %}
 {% block title %} — Deals Won{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-xl font-bold">Deals Won</h1>
-  <span class="text-sm text-gray-400">New Business Pipeline · by Close Date</span>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Deals Won</h1>
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">New Business Pipeline · by Close Date</p>
+  </div>
 </div>
 
 {{ period_filter(period, periods, {"source": source}) }}
@@ -18,9 +20,9 @@
   {{ stat_card("Win Rate", fmt_pct(t.win_rate), t.total_won_n ~ " won / " ~ (t.total_won_n + t.total_lost_n) ~ " closed") }}
 </div>
 
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold" rowspan="2">AE</th>
         {% if source == "All" or source == "Cold outreach" %}
@@ -63,9 +65,9 @@
         <th colspan="7"></th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         {% if source == "All" or source == "Cold outreach" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.cold_amt) }}</td>
@@ -84,7 +86,7 @@
         <td class="px-3 py-3 text-right tabular-nums">{{ row.ref_n }}</td>
         {% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold border-l border-gray-100">{{ fmt_money(row.total_won_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.total_won_n }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.total_won_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.acv) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate >= 25 %}text-green-600{% elif row.win_rate >= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
@@ -92,7 +94,7 @@
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
           {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
         </td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if not row.quota_amt %}text-gray-400
           {% elif row.delta_amt >= 0 %}text-green-600
           {% else %}text-red-500{% endif %}">
@@ -108,10 +110,10 @@
       </tr>
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         {% if source == "All" or source == "Cold outreach" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.cold_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.cold_n }}</td>

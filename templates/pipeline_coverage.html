@@ -2,9 +2,11 @@
 {% from "macros.html" import period_filter, stat_card, fmt_money %}
 {% block title %} — Pipeline Coverage{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-xl font-bold">Pipeline Coverage</h1>
-  <span class="text-sm text-gray-400">New Business Pipeline · Open Deals by Expected Close Date</span>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Pipeline Coverage</h1>
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">New Business Pipeline · Open Deals by Expected Close Date</p>
+  </div>
 </div>
 
 {{ period_filter(period, periods) }}
@@ -19,12 +21,12 @@
 </div>
 
 <!-- Deal count table -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto mb-6">
-  <div class="px-4 py-3 border-b border-gray-100">
-    <h2 class="font-semibold text-sm text-gray-700">Deal Count by Stage</h2>
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-5">
+  <div class="px-5 py-3.5 border-b border-gray-100">
+    <h2 class="font-semibold text-sm text-gray-800">Deal Count by Stage</h2>
   </div>
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Stage 1</th>
@@ -35,23 +37,23 @@
         <th class="px-4 py-3 text-right font-semibold">Total</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s1_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s2_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s3_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s4_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.won_n }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.won_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.s1_n + row.s2_n + row.s3_n + row.s4_n }}</td>
       </tr>
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right">{{ t.s1_n }}</td>
         <td class="px-4 py-3 text-right">{{ t.s2_n }}</td>
         <td class="px-4 py-3 text-right">{{ t.s3_n }}</td>
@@ -64,12 +66,12 @@
 </div>
 
 <!-- Pipeline value table -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-  <div class="px-4 py-3 border-b border-gray-100">
-    <h2 class="font-semibold text-sm text-gray-700">Pipeline Value by Stage</h2>
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <div class="px-5 py-3.5 border-b border-gray-100">
+    <h2 class="font-semibold text-sm text-gray-800">Pipeline Value by Stage</h2>
   </div>
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Stage 1</th>
@@ -80,23 +82,23 @@
         <th class="px-4 py-3 text-right font-semibold">Total Open</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s1_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s2_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s3_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s4_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ fmt_money(row.won_amt) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ fmt_money(row.won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ fmt_money(row.s1_amt + row.s2_amt + row.s3_amt + row.s4_amt) }}</td>
       </tr>
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s1_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s2_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s3_amt) }}</td>

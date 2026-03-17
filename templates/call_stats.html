@@ -2,9 +2,11 @@
 {% from "macros.html" import period_filter, stat_card, fmt_pct, fmt_num %}
 {% block title %} — Call Stats{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-xl font-bold">Call Stats</h1>
-  <span class="text-sm text-gray-400">New Business Pipeline · AE Activity</span>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Call Stats</h1>
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">New Business Pipeline · AE Activity</p>
+  </div>
 </div>
 
 {{ period_filter(period, periods) }}
@@ -20,9 +22,9 @@
 </div>
 
 <!-- Table -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Dials</th>
@@ -36,13 +38,13 @@
         <th class="px-4 py-3 text-right font-semibold">Deals → S2</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.dials) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.avg_dials_per_day }}</td>
-        <td class="px-4 py-3 text-right tabular-nums
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.pct_connect >= 15 %}text-green-600{% elif row.pct_connect >= 10 %}text-yellow-600{% else %}text-red-500{% endif %}">
           {{ fmt_pct(row.pct_connect) }}
         </td>
@@ -50,15 +52,15 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_conversation) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.conversations }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_deals) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium">{{ row.outbound_deals_created }}</td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.outbound_deals_created }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.outbound_deals_to_s2 }}</td>
       </tr>
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(t.dials) }}</td>
         <td class="px-4 py-3 text-right">—</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_connect) }}</td>

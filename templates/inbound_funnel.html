@@ -2,9 +2,11 @@
 {% from "macros.html" import period_filter, stat_card, fmt_pct, fmt_money %}
 {% block title %} — Inbound Lead Conversion Funnel{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-xl font-bold">Inbound Lead Conversion Funnel</h1>
-  <span class="text-sm text-gray-400">Lead → Deal → Won · by Traffic Source</span>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Inbound Lead Conversion Funnel</h1>
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">Lead → Deal → Won · by Traffic Source</p>
+  </div>
 </div>
 
 {{ period_filter(period, periods) }}
@@ -19,12 +21,12 @@
 </div>
 
 <!-- Volume table -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto mb-6">
-  <div class="px-4 py-3 border-b border-gray-100">
-    <h2 class="font-semibold text-sm text-gray-700">Volume Funnel</h2>
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-5">
+  <div class="px-5 py-3.5 border-b border-gray-100">
+    <h2 class="font-semibold text-sm text-gray-800">Volume Funnel</h2>
   </div>
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">Source</th>
         <th class="px-4 py-3 text-right font-semibold">Leads</th>
@@ -38,17 +40,17 @@
         <th class="px-4 py-3 text-right font-semibold">ACV Won</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
       {% if row.leads_created > 0 or row.deals_created > 0 %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.source }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.leads_created }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.leads_disqualified or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.leads_contacted or '—' }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium">{{ row.deals_created }}</td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.deals_created }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.deals_lost or '—' }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.deals_won or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.deals_won or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.pg_amt) if row.pg_amt else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600">{{ fmt_money(row.won_amt) if row.won_amt else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.acv_won) if row.acv_won else '—' }}</td>
@@ -56,10 +58,10 @@
       {% endif %}
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right">{{ t.leads_created }}</td>
         <td class="px-4 py-3 text-right text-red-500">{{ t.leads_disqualified }}</td>
         <td class="px-4 py-3 text-right">{{ t.leads_contacted }}</td>
@@ -75,12 +77,12 @@
 </div>
 
 <!-- Conversion rates table -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-  <div class="px-4 py-3 border-b border-gray-100">
-    <h2 class="font-semibold text-sm text-gray-700">Conversion Rates</h2>
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <div class="px-5 py-3.5 border-b border-gray-100">
+    <h2 class="font-semibold text-sm text-gray-800">Conversion Rates</h2>
   </div>
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">Source</th>
         <th class="px-4 py-3 text-right font-semibold">DQ %</th>
@@ -89,26 +91,26 @@
         <th class="px-4 py-3 text-right font-semibold">Win Rate %</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-50">
+    <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
       {% if row.leads_created > 0 or row.deals_created > 0 %}
-      <tr class="hover:bg-blue-50 transition">
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.source }}</td>
         <td class="px-4 py-3 text-right tabular-nums {% if row.dq_pct > 50 %}text-red-500{% endif %}">
           {{ fmt_pct(row.dq_pct) if row.leads_created else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.follow_up_pct) if row.leads_created else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.deal_creation_pct) if row.leads_created else '—' }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate_pct >= 30 %}text-green-600{% elif row.win_rate_pct >= 15 %}text-yellow-600{% elif row.deals_created > 0 %}text-red-500{% endif %}">
           {{ fmt_pct(row.win_rate_pct) if row.deals_created else '—' }}</td>
       </tr>
       {% endif %}
       {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200">
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
       <tr>
-        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.dq_pct) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.follow_up_pct) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.deal_creation_pct) }}</td>
