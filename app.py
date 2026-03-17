@@ -174,6 +174,21 @@ def inbound_funnel():
     return render_template("inbound_funnel.html", data=data, periods=PERIODS, period=period, nav=NAV, active="inbound_funnel")
 
 
+@app.route("/api/debug/deal-sources")
+@login_required
+def debug_deal_sources():
+    """Show the raw deal_source values coming from HubSpot for this month."""
+    from hubspot import get_date_range, get_deals
+    from collections import Counter
+    start, end = get_date_range("last_90")
+    deals = get_deals(start, end, "createdate")
+    counts = Counter(
+        (d["properties"].get("deal_source") or "").strip() or "(blank)"
+        for d in deals
+    )
+    return jsonify({"total_deals": len(deals), "deal_source_values": dict(counts.most_common())})
+
+
 @app.route("/api/debug/teams")
 @login_required
 def debug_teams():

@@ -100,11 +100,21 @@ def _owner_allowed(oid: str) -> bool:
     return not allowed or oid in allowed
 
 
+# Canonical labels — all comparisons use these exact strings
+_SOURCE_CANONICAL = {
+    "cold outreach": "Cold outreach",
+    "inbound":       "Inbound",
+    "referral":      "Referral",
+    "conference":    "Conference",
+}
+
+
 def _deal_source(deal: dict) -> str:
-    # Prefer the custom 'deal_source' property (Cold outreach / Inbound / Referral / Conference)
+    # Prefer the custom 'deal_source' property; normalise case so that
+    # "Cold Outreach", "cold outreach", "COLD OUTREACH" all resolve correctly.
     custom = (deal.get("properties", {}).get("deal_source") or "").strip()
     if custom:
-        return custom
+        return _SOURCE_CANONICAL.get(custom.lower(), custom)
     # Fall back to hs_analytics_source for deals without deal_source set
     src = (deal.get("properties", {}).get("hs_analytics_source") or "").upper()
     return DEAL_SOURCE_MAP.get(src, "Cold outreach")
