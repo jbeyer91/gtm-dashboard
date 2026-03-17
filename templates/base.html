@@ -33,13 +33,15 @@
         {% elif item.type == "group" %}
           {% set ns = namespace(group_active=false) %}
           {% for sub in item.children %}{% if active == sub.endpoint %}{% set ns.group_active = true %}{% endif %}{% endfor %}
+          {% set panel_id = "ddpanel-" ~ loop.index %}
           <div class="relative" data-dropdown>
-            <button onclick="toggleDropdown(this)"
+            <button onclick="navToggle('{{ panel_id }}')"
                     class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1 transition
                            {% if ns.group_active %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
               {{ item.label }} <span class="text-xs opacity-60">▾</span>
             </button>
-            <div class="hidden absolute top-full left-0 mt-1 z-50" data-dropdown-panel>
+            <div id="{{ panel_id }}" style="display:none"
+                 class="absolute top-full left-0 mt-1 z-50">
               <div class="bg-gray-800 rounded shadow-lg min-w-max">
                 {% for sub in item.children %}
                 <a href="{{ url_for(sub.endpoint) }}"
@@ -75,17 +77,21 @@
 </main>
 
 <script>
-  function toggleDropdown(btn) {
-    const panel = btn.nextElementSibling;
-    const isOpen = !panel.classList.contains('hidden');
-    // Close all open dropdowns first
-    document.querySelectorAll('[data-dropdown-panel]').forEach(p => p.classList.add('hidden'));
-    if (!isOpen) panel.classList.remove('hidden');
+  function navToggle(id) {
+    var panel = document.getElementById(id);
+    var isOpen = panel.style.display === 'block';
+    // Close all dropdowns
+    document.querySelectorAll('[data-dropdown] [id^="ddpanel-"]').forEach(function(p) {
+      p.style.display = 'none';
+    });
+    if (!isOpen) panel.style.display = 'block';
   }
-  // Close dropdowns when clicking anywhere outside
+  // Close on outside click
   document.addEventListener('click', function(e) {
     if (!e.target.closest('[data-dropdown]')) {
-      document.querySelectorAll('[data-dropdown-panel]').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('[id^="ddpanel-"]').forEach(function(p) {
+        p.style.display = 'none';
+      });
     }
   });
 </script>
