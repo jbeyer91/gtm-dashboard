@@ -16,16 +16,23 @@ _last_refreshed: list = [0.0]  # mutable so the decorator closure can update it
 
 
 def ttl_cache(func):
-    """Cache the return value of a function for TTL seconds, keyed on all arguments."""
+    """Cache the return value of a function for TTL seconds, keyed on all arguments.
+
+    Pass _force=True to bypass the TTL check and always fetch fresh data.
+    The _force kwarg is consumed by the wrapper and never passed to the
+    underlying function, so callers don't need to change their signatures.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
+        force = kwargs.pop("_force", False)
         key = (func.__name__,) + args + tuple(sorted(kwargs.items()))
-        entry = _store.get(key)
-        if entry is not None:
-            result, expires_at = entry
-            if time.time() < expires_at:
-                return result
-        # Cache miss — fetch fresh data
+        if not force:
+            entry = _store.get(key)
+            if entry is not None:
+                result, expires_at = entry
+                if time.time() < expires_at:
+                    return result
+        # Cache miss (or forced refresh) — fetch fresh data
         result = func(*args, **kwargs)
         _store[key] = (result, time.time() + TTL)
         _last_refreshed[0] = time.time()

@@ -14,7 +14,6 @@ import os
 import logging
 import threading
 import analytics
-from cache_utils import clear_cache
 
 log = logging.getLogger(__name__)
 
@@ -37,12 +36,16 @@ _timer: threading.Timer = None  # keeps a reference so we can cancel if needed
 
 
 def _sync():
-    """Clear cache then pre-fetch each view's default period."""
+    """Force-refresh each view's default period without clearing the cache first.
+
+    Using _force=True bypasses the TTL check so each entry is always refreshed,
+    but existing cached entries remain readable by users throughout the sync.
+    This means users never land on a cold cache during a background refresh.
+    """
     log.info("Cache sync starting…")
-    clear_cache()
     for fn, period in _VIEWS:
         try:
-            fn(period)
+            fn(period, _force=True)
             log.info("  ✓ %s(%s)", fn.__name__, period)
         except Exception as exc:
             log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)

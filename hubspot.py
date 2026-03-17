@@ -2,6 +2,7 @@ import os
 import requests
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from cache_utils import ttl_cache
 
 HUBSPOT_TOKEN = os.environ.get("HUBSPOT_TOKEN", "")
 BASE_URL = "https://api.hubapi.com"
@@ -119,6 +120,7 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
     return results
 
 
+@ttl_cache
 def get_owners() -> dict:
     resp = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
     resp.raise_for_status()
@@ -262,6 +264,7 @@ def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
     return result
 
 
+@ttl_cache
 def get_deal_contact_windows() -> dict:
     """
     Return {contact_id: [(open_start_ms, open_end_ms_or_None), ...]} for all NB deals.
