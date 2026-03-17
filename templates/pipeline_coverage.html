@@ -1,11 +1,13 @@
 {% extends "base.html" %}
-{% from "macros.html" import stat_card, fmt_money %}
+{% from "macros.html" import period_filter, stat_card, fmt_money %}
 {% block title %} — Pipeline Coverage{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-4">
   <h1 class="text-xl font-bold">Pipeline Coverage</h1>
-  <span class="text-sm text-gray-400">New Business Pipeline · Current Open Deals</span>
+  <span class="text-sm text-gray-400">New Business Pipeline · Open Deals by Expected Close Date</span>
 </div>
+
+{{ period_filter(period, periods) }}
 
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">

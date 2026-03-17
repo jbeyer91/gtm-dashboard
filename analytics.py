@@ -273,9 +273,13 @@ def compute_pipeline_generated(period: str) -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
-def compute_pipeline_coverage() -> dict:
+def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
-    deals = get_all_open_deals()
+    if period:
+        start, end = get_date_range(period)
+        deals = get_all_open_deals(start, end)
+    else:
+        deals = get_all_open_deals()
 
     STAGE_ORDER = [NB_STAGES["stage1"], NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"]]
 
@@ -324,7 +328,7 @@ def compute_pipeline_coverage() -> dict:
     totals = {k: _sum(k) for k in ["s1_n", "s1_amt", "s2_n", "s2_amt", "s3_n", "s3_amt", "s4_n", "s4_amt", "won_n", "won_amt"]}
     totals["ae"] = "TOTAL"
 
-    return {"rows": rows, "totals": totals}
+    return {"rows": rows, "totals": totals, "period": period}
 
 
 def compute_deal_advancement(period: str, source: str = "All") -> dict:

@@ -163,21 +163,21 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
     return _search_all("deals", payload)
 
 
-def get_all_open_deals() -> list:
+def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
+    filters = [
+        {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
+        {"propertyName": "hs_is_closed_won", "operator": "EQ", "value": "false"},
+        {"propertyName": "hs_is_closed_lost", "operator": "EQ", "value": "false"},
+    ]
+    if start and end:
+        filters.append({"propertyName": "closedate", "operator": "GTE", "value": str(int(start.timestamp() * 1000))})
+        filters.append({"propertyName": "closedate", "operator": "LTE", "value": str(int(end.timestamp() * 1000))})
     payload = {
-        "filterGroups": [
-            {
-                "filters": [
-                    {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
-                    {"propertyName": "hs_is_closed_won", "operator": "EQ", "value": "false"},
-                    {"propertyName": "hs_is_closed_lost", "operator": "EQ", "value": "false"},
-                ]
-            }
-        ],
+        "filterGroups": [{"filters": filters}],
         "properties": [
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
-            "hs_analytics_source", "num_notes_and_activities",
+            "deal_source",
         ],
     }
     return _search_all("deals", payload)
