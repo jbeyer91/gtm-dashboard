@@ -28,7 +28,6 @@
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Referral</th>
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-2 text-right font-semibold"># Won</th>
-        <th class="px-4 py-2 text-right font-semibold"># Lost</th>
         <th class="px-4 py-2 text-right font-semibold">ACV</th>
         <th class="px-4 py-2 text-right font-semibold">Win Rate</th>
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200" rowspan="2">Quota $</th>
@@ -42,7 +41,7 @@
         <th class="px-3 py-2 text-right">#</th>
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
-        <th colspan="8"></th>
+        <th colspan="7"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-50">
@@ -57,7 +56,6 @@
         <td class="px-3 py-3 text-right tabular-nums">{{ row.ref_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold border-l border-gray-100">{{ fmt_money(row.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.total_won_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.total_lost_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.acv) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate >= 25 %}text-green-600{% elif row.win_rate >= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
@@ -93,7 +91,6 @@
         <td class="px-3 py-3 text-right">{{ t.ref_n }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.total_won_n }}</td>
-        <td class="px-4 py-3 text-right text-red-500">{{ t.total_lost_n }}</td>
         <td class="px-4 py-3 text-right text-gray-500">{{ fmt_money(t.acv) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.win_rate) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">
