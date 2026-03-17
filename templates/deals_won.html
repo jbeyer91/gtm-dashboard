@@ -31,11 +31,8 @@
         {% if source == "All" or source == "Inbound" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Inbound</th>
         {% endif %}
-        {% if source == "All" or source == "Conference" %}
-        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Conference</th>
-        {% endif %}
-        {% if source == "All" or source == "Referral" %}
-        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Referral</th>
+        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Other</th>
         {% endif %}
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-2 text-right font-semibold"># Won</th>
@@ -54,11 +51,7 @@
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
-        {% if source == "All" or source == "Conference" %}
-        <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
-        <th class="px-3 py-2 text-right">#</th>
-        {% endif %}
-        {% if source == "All" or source == "Referral" %}
+        {% if source == "All" or source == "Conference" or source == "Referral" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
@@ -77,13 +70,11 @@
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.inbound_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Conference" %}
-        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.conf_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums">{{ row.conf_n }}</td>
-        {% endif %}
-        {% if source == "All" or source == "Referral" %}
-        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.ref_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums">{{ row.ref_n }}</td>
+        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% set other_amt = row.conf_amt + row.ref_amt %}
+        {% set other_n   = row.conf_n   + row.ref_n %}
+        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
+        <td class="px-3 py-3 text-right tabular-nums">{{ other_n }}</td>
         {% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold border-l border-gray-100">{{ fmt_money(row.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.total_won_n }}</td>
@@ -122,13 +113,11 @@
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.inbound_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Conference" %}
-        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.conf_amt) }}</td>
-        <td class="px-3 py-3 text-right">{{ t.conf_n }}</td>
-        {% endif %}
-        {% if source == "All" or source == "Referral" %}
-        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.ref_amt) }}</td>
-        <td class="px-3 py-3 text-right">{{ t.ref_n }}</td>
+        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% set other_amt = t.conf_amt + t.ref_amt %}
+        {% set other_n   = t.conf_n   + t.ref_n %}
+        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
+        <td class="px-3 py-3 text-right">{{ other_n }}</td>
         {% endif %}
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.total_won_n }}</td>
