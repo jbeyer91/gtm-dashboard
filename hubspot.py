@@ -240,3 +240,89 @@ def get_contacts_inbound(start: datetime, end: datetime) -> list:
         ],
     }
     return _search_all("contacts", payload)
+
+
+def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
+    """Batch fetch associations. Returns {from_id: [to_id, ...]}."""
+    result = {}
+    for i in range(0, len(from_ids), 100):
+        batch = from_ids[i:i + 100]
+        resp = requests.post(
+            f"{BASE_URL}/crm/v4/associations/{from_type}/{to_type}/batch/read",
+            headers=HEADERS,
+            json={"inputs": [{"id": str(fid)} for fid in batch]},
+        )
+        if not resp.ok:
+            continue
+        for item in resp.json().get("results", []):
+            from_id = str(item.get("from", {}).get("id", ""))
+            to_ids = [str(t["toObjectId"]) for t in item.get("to", [])]
+            if from_id and to_ids:
+                result[from_id] = to_ids
+    return result
+
+
+def get_deal_contact_windows() -> dict:
+    """
+    Return {contact_id: [(open_start_ms, open_end_ms_or_None), ...]} for all NB deals.
+    open_end_ms is None if the deal is still open.
+    Lets us check if a call happened while a deal was active for that contact's company.
+    """
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
+        ]}],
+        "properties": ["createdate", "closedate", "hs_is_closed_won", "hs_is_closed_lost"],
+    }
+    all_deals = _search_all("deals", payload)
+    if not all_deals:
+        return {}
+
+    # Build deal_id → (open_start_ms, open_end_ms)
+    deal_windows = {}
+    for d in all_deals:
+        props = d["properties"]
+        try:
+            open_start = int(datetime.fromisoformat(
+                (props.get("createdate") or "").replace("Z", "+00:00")).timestamp() * 1000)
+        except Exception:
+            continue
+        open_end = None
+        is_closed = props.get("hs_is_closed_won") == "true" or props.get("hs_is_closed_lost") == "true"
+        if is_closed and props.get("closedate"):
+            try:
+                open_end = int(datetime.fromisoformat(
+                    props["closedate"].replace("Z", "+00:00")).timestamp() * 1000)
+            except Exception:
+                pass
+        deal_windows[d["id"]] = (open_start, open_end)
+
+    deal_ids = list(deal_windows.keys())
+
+    # deals → companies → contacts
+    deal_to_companies = _batch_associations("deals", "companies", deal_ids)
+    company_ids = list({cid for cids in deal_to_companies.values() for cid in cids})
+    if not company_ids:
+        return {}
+    company_to_contacts = _batch_associations("companies", "contacts", company_ids)
+
+    # Map company → deal windows
+    company_windows: dict = {}
+    for deal_id, window in deal_windows.items():
+        for cid in deal_to_companies.get(deal_id, []):
+            company_windows.setdefault(cid, []).append(window)
+
+    # Map contact → deal windows (via company)
+    contact_windows: dict = {}
+    for company_id, contacts in company_to_contacts.items():
+        windows = company_windows.get(company_id, [])
+        for contact_id in contacts:
+            contact_windows.setdefault(contact_id, []).extend(windows)
+
+    return contact_windows
+
+
+def get_call_to_contact_map(call_ids: list) -> dict:
+    """Return {call_id: contact_id} for each call."""
+    call_to_contacts = _batch_associations("calls", "contacts", call_ids)
+    return {call_id: contacts[0] for call_id, contacts in call_to_contacts.items() if contacts}

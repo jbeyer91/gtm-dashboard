@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
+    get_deal_contact_windows, get_call_to_contact_map,
 )
 
 SOURCE_MAP = {
@@ -107,6 +108,10 @@ def compute_call_stats(period: str) -> dict:
     calls = get_calls(start, end)
     deals_created = get_deals(start, end, "createdate")
 
+    # Build time-aware exclusion: {contact_id: [(open_start_ms, open_end_ms_or_None), ...]}
+    contact_windows = get_deal_contact_windows()
+    call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
+
     # Map deals to owner
     owner_deals_created = defaultdict(set)
     owner_deals_s2 = defaultdict(set)
@@ -118,7 +123,6 @@ def compute_call_stats(period: str) -> dict:
         src = _deal_source(d)
         if src == "Cold outreach":
             owner_deals_created[oid].add(d["id"])
-            # Count as "to S2" if deal reached Stage 2 or beyond
             if d["properties"].get("hs_date_entered_71300358"):
                 owner_deals_s2[oid].add(d["id"])
 
@@ -130,6 +134,22 @@ def compute_call_stats(period: str) -> dict:
             continue
         if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
             continue
+        # Exclude calls where a deal was open for that contact at the time of the call
+        contact_id = call_to_contact.get(call["id"])
+        if contact_id and contact_id in contact_windows:
+            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+            if ts_raw:
+                try:
+                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+                    skip = False
+                    for (open_start, open_end) in contact_windows[contact_id]:
+                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                except Exception:
+                    pass
         disposition = (call["properties"].get("hs_call_disposition") or "").strip()
         ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
         if ts_raw:
