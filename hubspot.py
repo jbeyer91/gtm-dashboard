@@ -63,6 +63,7 @@ CALL_OUTCOMES = {
 }
 
 
+@ttl_cache
 def get_date_range(period: str):
     now = datetime.now(timezone.utc)
     if period == "this_month":
@@ -137,6 +138,7 @@ def get_owners() -> dict:
     return owners
 
 
+@ttl_cache
 def get_deals(start: datetime, end: datetime, date_field: str = "createdate") -> list:
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
@@ -165,6 +167,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
     return _search_all("deals", payload)
 
 
+@ttl_cache
 def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
     filters = [
         {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
@@ -185,6 +188,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
     return _search_all("deals", payload)
 
 
+@ttl_cache
 def get_calls(start: datetime, end: datetime) -> list:
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
@@ -222,6 +226,7 @@ def get_meetings(start: datetime, end: datetime) -> list:
     return _search_all("meetings", payload)
 
 
+@ttl_cache
 def get_contacts_inbound(start: datetime, end: datetime) -> list:
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
@@ -325,6 +330,7 @@ def get_deal_contact_windows() -> dict:
     return contact_windows
 
 
+@ttl_cache
 def get_call_to_contact_map(call_ids: list) -> dict:
     """Return {call_id: contact_id} for each call."""
     call_to_contacts = _batch_associations("calls", "contacts", call_ids)

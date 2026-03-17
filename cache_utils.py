@@ -15,17 +15,31 @@ _store: dict = {}          # key → (result, expires_at)
 _last_refreshed: list = [0.0]  # mutable so the decorator closure can update it
 
 
+def _to_hashable(v):
+    """Recursively convert unhashable types (list, dict) to hashable equivalents."""
+    if isinstance(v, list):
+        return tuple(_to_hashable(i) for i in v)
+    if isinstance(v, dict):
+        return tuple(sorted((k, _to_hashable(val)) for k, val in v.items()))
+    return v
+
+
 def ttl_cache(func):
     """Cache the return value of a function for TTL seconds, keyed on all arguments.
 
     Pass _force=True to bypass the TTL check and always fetch fresh data.
     The _force kwarg is consumed by the wrapper and never passed to the
     underlying function, so callers don't need to change their signatures.
+
+    List and dict arguments are automatically converted to hashable equivalents
+    so functions like get_call_to_contact_map(list_of_ids) can be cached.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
         force = kwargs.pop("_force", False)
-        key = (func.__name__,) + args + tuple(sorted(kwargs.items()))
+        key = (func.__name__,) + tuple(_to_hashable(a) for a in args) + tuple(
+            (k, _to_hashable(v)) for k, v in sorted(kwargs.items())
+        )
         if not force:
             entry = _store.get(key)
             if entry is not None:
