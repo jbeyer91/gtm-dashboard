@@ -255,7 +255,26 @@ def get_quotas(start: datetime, end: datetime) -> dict:
             amount = float(props.get("hs_target_amount") or 0)
         except (TypeError, ValueError):
             amount = 0.0
-        quotas[owner_id] = quotas.get(owner_id, 0.0) + amount
+        if amount == 0:
+            continue
+
+        # Pro-rate: if a goal spans a longer period than the window (e.g. an
+        # annual goal when viewing a single month), allocate only the fraction
+        # of the goal that falls within [start, end].
+        try:
+            goal_start_str = (props.get("hs_start_datetime") or "").replace("Z", "+00:00")
+            goal_end_str   = (props.get("hs_end_datetime")   or "").replace("Z", "+00:00")
+            goal_start = datetime.fromisoformat(goal_start_str)
+            goal_end   = datetime.fromisoformat(goal_end_str)
+            goal_secs    = max((goal_end - goal_start).total_seconds(), 1)
+            overlap_secs = max(
+                (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
+            )
+            prorated = amount * (overlap_secs / goal_secs)
+        except Exception:
+            prorated = amount   # fallback: use full amount if dates can't be parsed
+
+        quotas[owner_id] = quotas.get(owner_id, 0.0) + prorated
 
     return quotas
 
