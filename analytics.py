@@ -331,12 +331,42 @@ def compute_pipeline_generated(period: str) -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
+def _coverage_end(period: str, start: datetime, end: datetime) -> datetime:
+    """Return the true upper boundary of a period for the open-deals coverage query.
+
+    For current-period views (this_month, this_quarter, ytd), get_date_range
+    returns end=now, which silently drops open deals with expected close dates
+    later in the period (e.g. March 18-31 when today is March 17).
+    This helper extends end to the actual period boundary so the full
+    pipeline is visible. Historical periods already have a correct end date.
+    """
+    if period == "this_month":
+        if start.month == 12:
+            return start.replace(year=start.year + 1, month=1, day=1,
+                                 hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
+        return start.replace(month=start.month + 1, day=1,
+                             hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
+    if period == "this_quarter":
+        q_month = ((start.month - 1) // 3) * 3 + 1
+        next_q_month = q_month + 3
+        if next_q_month > 12:
+            return start.replace(year=start.year + 1, month=next_q_month - 12, day=1,
+                                 hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
+        return start.replace(month=next_q_month, day=1,
+                             hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
+    if period == "ytd":
+        return start.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=0)
+    return end  # historical / next_month periods already have the correct boundary
+
+
 @ttl_cache
 def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
     if period:
         start, end = get_date_range(period)
-        open_deals = get_all_open_deals(start, end)
+        # Use the true period boundary for the open-deals query so deals with
+        # expected close dates later in the period (e.g. March 18-31) are included.
+        open_deals = get_all_open_deals(start, _coverage_end(period, start, end))
         # Won deals are excluded by get_all_open_deals — fetch separately via closedate.
         # get_deals(…, "closedate") is already cached so no extra API call.
         closed_deals = get_deals(start, end, "closedate")

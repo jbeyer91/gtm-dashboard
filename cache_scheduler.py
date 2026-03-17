@@ -22,6 +22,7 @@ import logging
 import threading
 import hubspot
 import analytics
+from analytics import _coverage_end
 
 log = logging.getLogger(__name__)
 
@@ -78,18 +79,27 @@ def _refresh_period_data(period: str):
         log.warning("  ✗ get_date_range(%s): %s", period, exc)
         return
 
-    for fn, extra_kwargs in [
+    # get_all_open_deals uses the extended coverage boundary so deals with
+    # close dates later in the period (e.g. March 18-31) are included.
+    coverage = _coverage_end(period, start, end)
+
+    for fn, kwargs in [
         (hubspot.get_deals,            {"date_field": "createdate"}),
         (hubspot.get_deals,            {"date_field": "closedate"}),
         (hubspot.get_calls,            {}),
-        (hubspot.get_all_open_deals,   {}),
         (hubspot.get_contacts_inbound, {}),
         (hubspot.get_quotas,           {}),
     ]:
         try:
-            fn(start, end, _force=True, **extra_kwargs)
+            fn(start, end, _force=True, **kwargs)
         except Exception as exc:
             log.warning("  ✗ %s(%s, ...): %s", fn.__name__, period, exc)
+
+    # Warm open-deals cache with the extended boundary
+    try:
+        hubspot.get_all_open_deals(start, coverage, _force=True)
+    except Exception as exc:
+        log.warning("  ✗ get_all_open_deals(%s, coverage_end): %s", period, exc)
 
 
 
