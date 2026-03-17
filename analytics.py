@@ -128,6 +128,8 @@ def compute_call_stats(period: str) -> dict:
         oid = call["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
+        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+            continue
         disposition = (call["properties"].get("hs_call_disposition") or "").strip()
         ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
         if ts_raw:
