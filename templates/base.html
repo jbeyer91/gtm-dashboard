@@ -12,6 +12,9 @@
     .metric-warn { color: #d97706; }
     .metric-bad  { color: #dc2626; }
     .btn-active { background-color: #1e40af; color: white; }
+    /* Remove default details/summary triangle */
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
@@ -33,15 +36,12 @@
         {% elif item.type == "group" %}
           {% set ns = namespace(group_active=false) %}
           {% for sub in item.children %}{% if active == sub.endpoint %}{% set ns.group_active = true %}{% endif %}{% endfor %}
-          {% set panel_id = "ddpanel-" ~ loop.index %}
-          <div class="relative" data-dropdown>
-            <button onclick="navToggle('{{ panel_id }}')"
-                    class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1 transition
-                           {% if ns.group_active %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+          <details class="relative" data-nav-dd>
+            <summary class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1 cursor-pointer transition
+                            {% if ns.group_active %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
               {{ item.label }} <span class="text-xs opacity-60">▾</span>
-            </button>
-            <div id="{{ panel_id }}" style="display:none"
-                 class="absolute top-full left-0 mt-1 z-50">
+            </summary>
+            <div class="absolute top-full left-0 mt-1 z-50">
               <div class="bg-gray-800 rounded shadow-lg min-w-max">
                 {% for sub in item.children %}
                 <a href="{{ url_for(sub.endpoint) }}"
@@ -52,7 +52,7 @@
                 {% endfor %}
               </div>
             </div>
-          </div>
+          </details>
         {% endif %}
       {% endfor %}
       <!-- Cache indicator + manual refresh -->
@@ -77,21 +77,18 @@
 </main>
 
 <script>
-  function navToggle(id) {
-    var panel = document.getElementById(id);
-    var isOpen = panel.style.display === 'block';
-    // Close all dropdowns
-    document.querySelectorAll('[data-dropdown] [id^="ddpanel-"]').forEach(function(p) {
-      p.style.display = 'none';
+  // Close other dropdowns when one opens, and close all on outside click
+  var navDDs = document.querySelectorAll('[data-nav-dd]');
+  navDDs.forEach(function(dd) {
+    dd.addEventListener('toggle', function() {
+      if (dd.open) {
+        navDDs.forEach(function(other) { if (other !== dd) other.removeAttribute('open'); });
+      }
     });
-    if (!isOpen) panel.style.display = 'block';
-  }
-  // Close on outside click
+  });
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('[data-dropdown]')) {
-      document.querySelectorAll('[id^="ddpanel-"]').forEach(function(p) {
-        p.style.display = 'none';
-      });
+    if (!e.target.closest('[data-nav-dd]')) {
+      navDDs.forEach(function(dd) { dd.removeAttribute('open'); });
     }
   });
 </script>
