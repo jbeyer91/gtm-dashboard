@@ -258,19 +258,32 @@ def get_quotas(start: datetime, end: datetime) -> dict:
         if amount == 0:
             continue
 
-        # Pro-rate: if a goal spans a longer period than the window (e.g. an
-        # annual goal when viewing a single month), allocate only the fraction
-        # of the goal that falls within [start, end].
+        # Pro-rate only when the goal period is materially longer than the
+        # requested window (e.g. an annual goal viewed in a single month).
+        # When the goal period is roughly the same length as — or shorter
+        # than — the window (e.g. a monthly goal viewed in "This Month"),
+        # use the full goal amount so that mid-month views aren't penalised.
+        #
+        # Threshold: pro-rate only if goal_duration > 2 × window_duration.
+        #   • Annual (~365 d) vs monthly window (~17–31 d) → pro-rate ✓
+        #   • Monthly (~30 d) vs "This Month" window (~17 d) → full amount ✓
+        #   • Quarterly (~90 d) vs monthly window → pro-rate (÷3) ✓
+        #   • Quarterly vs quarterly window → full amount ✓
+        window_secs = max((end - start).total_seconds(), 1)
         try:
             goal_start_str = (props.get("hs_start_datetime") or "").replace("Z", "+00:00")
             goal_end_str   = (props.get("hs_end_datetime")   or "").replace("Z", "+00:00")
             goal_start = datetime.fromisoformat(goal_start_str)
             goal_end   = datetime.fromisoformat(goal_end_str)
             goal_secs    = max((goal_end - goal_start).total_seconds(), 1)
-            overlap_secs = max(
-                (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
-            )
-            prorated = amount * (overlap_secs / goal_secs)
+            if goal_secs > window_secs * 2:
+                # Goal spans much more than the window → allocate the overlap fraction
+                overlap_secs = max(
+                    (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
+                )
+                prorated = amount * (overlap_secs / goal_secs)
+            else:
+                prorated = amount   # goal fits within (or matches) the window
         except Exception:
             prorated = amount   # fallback: use full amount if dates can't be parsed
 
