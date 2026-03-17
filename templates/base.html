@@ -33,13 +33,13 @@
         {% elif item.type == "group" %}
           {% set ns = namespace(group_active=false) %}
           {% for sub in item.children %}{% if active == sub.endpoint %}{% set ns.group_active = true %}{% endif %}{% endfor %}
-          <div class="relative group">
-            <button class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1 transition
+          <div class="relative" data-dropdown>
+            <button onclick="toggleDropdown(this)"
+                    class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1 transition
                            {% if ns.group_active %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
               {{ item.label }} <span class="text-xs opacity-60">▾</span>
             </button>
-            <!-- pt-1 wrapper bridges the gap so hover doesn't break -->
-            <div class="absolute top-full left-0 pt-1 hidden group-hover:block z-50">
+            <div class="hidden absolute top-full left-0 mt-1 z-50" data-dropdown-panel>
               <div class="bg-gray-800 rounded shadow-lg min-w-max">
                 {% for sub in item.children %}
                 <a href="{{ url_for(sub.endpoint) }}"
@@ -74,5 +74,20 @@
   {% block content %}{% endblock %}
 </main>
 
+<script>
+  function toggleDropdown(btn) {
+    const panel = btn.nextElementSibling;
+    const isOpen = !panel.classList.contains('hidden');
+    // Close all open dropdowns first
+    document.querySelectorAll('[data-dropdown-panel]').forEach(p => p.classList.add('hidden'));
+    if (!isOpen) panel.classList.remove('hidden');
+  }
+  // Close dropdowns when clicking anywhere outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('[data-dropdown]')) {
+      document.querySelectorAll('[data-dropdown-panel]').forEach(p => p.classList.add('hidden'));
+    }
+  });
+</script>
 </body>
 </html>
