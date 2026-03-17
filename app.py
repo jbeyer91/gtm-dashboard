@@ -183,6 +183,34 @@ def win_rate_by_source():
     return render_template("win_rate_by_source.html", data=data, periods=PERIODS, period=period, nav=NAV, active="win_rate_by_source")
 
 
+@app.route("/api/debug/teams")
+@login_required
+def debug_teams():
+    """Diagnostic endpoint — shows raw HubSpot team data and resolved owner IDs."""
+    import requests
+    from hubspot import BASE_URL, HEADERS, TEAM_FILTER, get_team_owner_ids
+
+    resp_owners = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
+    resp_teams  = requests.get(f"{BASE_URL}/settings/v3/users/teams", headers=HEADERS)
+
+    user_to_owner = {}
+    if resp_owners.ok:
+        for o in resp_owners.json().get("results", []):
+            uid = o.get("userId")
+            if uid:
+                user_to_owner[str(uid)] = {"owner_id": str(o["id"]), "name": f"{o.get('firstName','')} {o.get('lastName','')}".strip()}
+
+    return jsonify({
+        "team_filter":       list(TEAM_FILTER),
+        "resolved_owner_ids": sorted(get_team_owner_ids()),
+        "owners_api_ok":     resp_owners.ok,
+        "teams_api_ok":      resp_teams.ok,
+        "teams_api_status":  resp_teams.status_code,
+        "teams":             resp_teams.json() if resp_teams.ok else resp_teams.text,
+        "user_to_owner_map": user_to_owner,
+    })
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.
