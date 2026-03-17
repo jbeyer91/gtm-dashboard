@@ -70,6 +70,7 @@ OWNER_EXCLUDE = frozenset({
     "79795769",   # Joe Mathews
     "88798218",   # Jordan Wallach (CEO)
     "371621550",  # Jordan Wallach (duplicate)
+    "403559039",  # Taylor Tempel
 })
 
 
