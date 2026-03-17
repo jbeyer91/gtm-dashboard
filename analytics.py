@@ -5,8 +5,8 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
-    get_quotas, get_contacts_for_coverage, get_overdue_sequence_tasks,
-    _parse_hs_datetime,
+    get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
+    get_overdue_sequence_tasks, _parse_hs_datetime,
 )
 
 SOURCE_MAP = {
@@ -779,14 +779,14 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
 
 @ttl_cache
 def compute_book_coverage() -> dict:
-    """Compute point-in-time book coverage metrics per AE.
+    """Compute point-in-time book coverage metrics per AE at the account (company) level.
 
-    Metrics are calculated against each AE's A+ to C tier contacts:
-      - Total Named Accounts : all contacts owned by the AE
-      - A+ to C Accounts     : contacts with account_tier in {A+, A, B, C}
-      - % activity (30d)     : A-C contacts with any activity in last 30 days
-      - % called (120d)      : A-C contacts called in last 120 days
-      - % in sequence        : A-C contacts currently enrolled in a sequence
+    Metrics are calculated against each AE's A+ to C tier companies:
+      - Total Named Accounts : all companies owned by the AE
+      - A+ to C Accounts     : companies with icp_rank in {A+, A, B, C}
+      - % activity (30d)     : A-C companies with any activity in last 30 days
+      - % contacted (120d)   : A-C companies with notes_last_contacted in last 120 days
+      - % in sequence        : A-C companies with at least one contact in a sequence
       - Overdue tasks        : past-due not-started tasks owned by the AE
     """
     now = datetime.now(timezone.utc)
@@ -794,7 +794,8 @@ def compute_book_coverage() -> dict:
     onetwenty_days_ago = now - timedelta(days=120)
 
     owners = get_owners()
-    contacts = get_contacts_for_coverage()
+    companies = get_companies_for_coverage()
+    seq_company_ids = get_sequence_enrolled_company_ids()
     tasks = get_overdue_sequence_tasks()
 
     AC_TIERS = {"a+", "a", "b", "c"}
@@ -808,8 +809,8 @@ def compute_book_coverage() -> dict:
         "overdue_tasks": 0,
     })
 
-    for contact in contacts:
-        props = contact["properties"]
+    for company in companies:
+        props = company["properties"]
         oid = props.get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
@@ -829,15 +830,15 @@ def compute_book_coverage() -> dict:
                 except Exception:
                     pass
 
-            last_call_raw = props.get("notes_last_called")
-            if last_call_raw:
+            last_contacted_raw = props.get("notes_last_contacted")
+            if last_contacted_raw:
                 try:
-                    if _parse_hs_datetime(last_call_raw) >= onetwenty_days_ago:
+                    if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
                         owner_data[oid]["called_120"] += 1
                 except Exception:
                     pass
 
-            if props.get("hs_sequences_is_enrolled") in (True, "true", "1", 1):
+            if company["id"] in seq_company_ids:
                 owner_data[oid]["in_sequence"] += 1
 
     for task in tasks:

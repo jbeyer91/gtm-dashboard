@@ -548,12 +548,12 @@ def get_deal_contact_windows() -> dict:
 
 
 @ttl_cache
-def get_contacts_for_coverage() -> list:
-    """Fetch all contacts owned by team members for book coverage analysis."""
+def get_companies_for_coverage() -> list:
+    """Fetch all companies owned by team members for book coverage analysis."""
     owner_ids = list(get_team_owner_ids())
     if not owner_ids:
         return []
-    all_contacts = []
+    all_companies = []
     # HubSpot filterGroups are OR-ed; max 5 per request
     for i in range(0, len(owner_ids), 5):
         batch = owner_ids[i:i + 5]
@@ -566,12 +566,50 @@ def get_contacts_for_coverage() -> list:
                 "hubspot_owner_id",
                 "icp_rank",
                 "notes_last_activity_date",
-                "notes_last_called",
-                "hs_sequences_is_enrolled",
+                "notes_last_contacted",
+                "name",
             ],
         }
-        all_contacts.extend(_search_all("contacts", payload))
-    return all_contacts
+        all_companies.extend(_search_all("companies", payload))
+    return all_companies
+
+
+@ttl_cache
+def get_sequence_enrolled_company_ids() -> set:
+    """Return the set of company IDs that have at least one contact in a sequence.
+
+    Strategy: fetch contacts (by team owner) currently enrolled in a sequence,
+    then batch-resolve their associated companies.
+    """
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return set()
+
+    seq_contacts = []
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                    {"propertyName": "hs_sequences_is_enrolled", "operator": "EQ", "value": "true"},
+                ]}
+                for oid in batch
+            ],
+            "properties": ["hubspot_owner_id"],
+        }
+        seq_contacts.extend(_search_all("contacts", payload))
+
+    if not seq_contacts:
+        return set()
+
+    contact_ids = [c["id"] for c in seq_contacts]
+    contact_to_companies = _batch_associations("contacts", "companies", contact_ids)
+
+    company_ids: set = set()
+    for companies in contact_to_companies.values():
+        company_ids.update(companies)
+    return company_ids
 
 
 @ttl_cache

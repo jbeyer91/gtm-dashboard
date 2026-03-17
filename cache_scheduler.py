@@ -64,7 +64,8 @@ def _refresh_base_data():
         hubspot.get_owners,
         hubspot.get_team_owner_ids,
         hubspot.get_deal_contact_windows,
-        hubspot.get_contacts_for_coverage,
+        hubspot.get_companies_for_coverage,
+        hubspot.get_sequence_enrolled_company_ids,
         hubspot.get_overdue_sequence_tasks,
     ):
         try:
