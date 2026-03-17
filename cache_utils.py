@@ -1,22 +1,40 @@
 """
-Simple in-memory TTL cache for HubSpot analytics results.
-No external dependencies — just a plain dict with expiry timestamps.
+Two-layer TTL cache for HubSpot analytics results.
 
-Cache lifetime defaults to 60 minutes (matching the Google Sheets refresh cadence).
-Override by setting CACHE_TTL_SECONDS in the environment.
+Layer 1 — memory : plain dict, fast, reset on process restart.
+Layer 2 — disk   : pickle files in CACHE_DIR, survive OOM crashes and
+                   worker restarts within the same Render deployment.
+
+On startup the module scans the disk cache so a worker that was killed
+by OOM and restarted can serve stale-but-valid data immediately while
+the background scheduler rebuilds fresh data.  Users never experience
+a full cold-cache rebuild after a crash.
+
+No external dependencies — stdlib only (pickle, hashlib, threading).
 """
+
+import gc
+import hashlib
 import os
+import pickle
+import threading
 import time
 from functools import wraps
 
-TTL = int(os.environ.get("CACHE_TTL_SECONDS", 3600))  # default: 1 hour
+TTL       = int(os.environ.get("CACHE_TTL_SECONDS", 3600))   # default: 1 hour
+CACHE_DIR = os.environ.get("CACHE_DIR", "/tmp/gtm_cache")
 
-_store: dict = {}          # key → (result, expires_at)
-_last_refreshed: list = [0.0]  # mutable so the decorator closure can update it
+os.makedirs(CACHE_DIR, exist_ok=True)
 
+_store: dict = {}           # key → (result, expires_at)
+_last_refreshed: list = [0.0]
+_disk_lock = threading.Lock()
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _to_hashable(v):
-    """Recursively convert unhashable types (list, dict) to hashable equivalents."""
+    """Recursively convert unhashable types so they can be part of a cache key."""
     if isinstance(v, list):
         return tuple(_to_hashable(i) for i in v)
     if isinstance(v, dict):
@@ -24,15 +42,74 @@ def _to_hashable(v):
     return v
 
 
+def _key_to_path(key: tuple) -> str:
+    """Stable, filesystem-safe path for a cache key."""
+    digest = hashlib.sha256(repr(key).encode()).hexdigest()[:20]
+    return os.path.join(CACHE_DIR, f"{digest}.pkl")
+
+
+def _read_disk(key: tuple):
+    """Return (result, expires_at) from disk, or None on miss / any error."""
+    path = _key_to_path(key)
+    try:
+        with _disk_lock:
+            if not os.path.exists(path):
+                return None
+            with open(path, "rb") as fh:
+                return pickle.load(fh)          # (result, expires_at)
+    except Exception:
+        return None
+
+
+def _write_disk(key: tuple, result, expires_at: float) -> None:
+    """Atomically write (result, expires_at) to disk. Failures are non-fatal."""
+    path = _key_to_path(key)
+    tmp  = path + ".tmp"
+    try:
+        with _disk_lock:
+            with open(tmp, "wb") as fh:
+                pickle.dump((result, expires_at), fh,
+                            protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(tmp, path)           # atomic rename → no partial files
+    except Exception:
+        pass
+
+
+def _restore_last_refreshed() -> None:
+    """Infer last_refreshed from the newest valid disk cache file.
+
+    After an OOM crash the nav badge shows e.g. '45m ago' instead of
+    'not yet loaded', so leadership doesn't see a blank / broken indicator.
+    """
+    try:
+        pkls = [
+            os.path.join(CACHE_DIR, f)
+            for f in os.listdir(CACHE_DIR)
+            if f.endswith(".pkl")
+        ]
+        if not pkls:
+            return
+        newest_mtime = max(os.path.getmtime(p) for p in pkls)
+        if time.time() - newest_mtime < TTL:        # only if still within TTL
+            _last_refreshed[0] = newest_mtime
+    except Exception:
+        pass
+
+
+# Run once at import time
+_restore_last_refreshed()
+
+
+# ── Public decorator ──────────────────────────────────────────────────────────
+
 def ttl_cache(func):
-    """Cache the return value of a function for TTL seconds, keyed on all arguments.
+    """Cache the return value of *func* for TTL seconds, keyed on all arguments.
 
-    Pass _force=True to bypass the TTL check and always fetch fresh data.
-    The _force kwarg is consumed by the wrapper and never passed to the
-    underlying function, so callers don't need to change their signatures.
+    Pass ``_force=True`` to bypass TTL and always fetch fresh data.
+    The ``_force`` kwarg is consumed here and never forwarded to *func*.
 
-    List and dict arguments are automatically converted to hashable equivalents
-    so functions like get_call_to_contact_map(list_of_ids) can be cached.
+    Read path  : memory → disk → live fetch
+    Write path : memory + disk (every time fresh data is fetched)
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -40,30 +117,58 @@ def ttl_cache(func):
         key = (func.__name__,) + tuple(_to_hashable(a) for a in args) + tuple(
             (k, _to_hashable(v)) for k, v in sorted(kwargs.items())
         )
+        now = time.time()
+
         if not force:
+            # 1. Memory hit (fastest path)
             entry = _store.get(key)
             if entry is not None:
                 result, expires_at = entry
-                if time.time() < expires_at:
+                if now < expires_at:
                     return result
-        # Cache miss (or forced refresh) — fetch fresh data
-        result = func(*args, **kwargs)
-        _store[key] = (result, time.time() + TTL)
-        _last_refreshed[0] = time.time()
+
+            # 2. Disk hit — promote to memory so subsequent requests are instant
+            disk_entry = _read_disk(key)
+            if disk_entry is not None:
+                result, expires_at = disk_entry
+                if now < expires_at:
+                    _store[key] = (result, expires_at)
+                    # Restore last_refreshed if this is the first hit after restart
+                    if not _last_refreshed[0]:
+                        _last_refreshed[0] = expires_at - TTL
+                    return result
+
+        # 3. Cache miss (or _force=True) — call the real function
+        result     = func(*args, **kwargs)
+        expires_at = now + TTL
+        _store[key] = (result, expires_at)
+        _write_disk(key, result, expires_at)
+        _last_refreshed[0] = now
         return result
+
     return wrapper
 
 
+# ── Cache management ──────────────────────────────────────────────────────────
+
 def clear_cache() -> None:
-    """Invalidate all cached results so the next request fetches fresh data."""
+    """Invalidate all cached results (memory and disk)."""
     _store.clear()
-    # Keep _last_refreshed[0] so the template still shows the old timestamp
-    # until new data is actually loaded.
     _last_refreshed[0] = 0.0
+    try:
+        with _disk_lock:
+            for fname in os.listdir(CACHE_DIR):
+                if fname.endswith(".pkl"):
+                    try:
+                        os.remove(os.path.join(CACHE_DIR, fname))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
 
 def last_refreshed_str() -> str:
-    """Return a human-friendly string describing when data was last fetched."""
+    """Human-friendly string for when data was last fetched."""
     ts = _last_refreshed[0]
     if not ts:
         return "not yet loaded"
@@ -73,10 +178,10 @@ def last_refreshed_str() -> str:
     if ago < 3600:
         return f"{ago // 60}m ago"
     hours = ago // 3600
-    mins = (ago % 3600) // 60
+    mins  = (ago % 3600) // 60
     return f"{hours}h {mins}m ago" if mins else f"{hours}h ago"
 
 
 def last_refreshed_ts() -> float:
-    """Return the raw Unix timestamp of the last cache population (0 if never)."""
+    """Raw Unix timestamp of the last cache population (0 if never)."""
     return _last_refreshed[0]
