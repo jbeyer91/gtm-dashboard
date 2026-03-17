@@ -508,6 +508,9 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         elif src == "Inbound":
             owner_won[oid]["inbound_amt"] += amount
             owner_won[oid]["inbound_n"] += 1
+        elif src == "Conference":
+            owner_won[oid]["conf_amt"] += amount
+            owner_won[oid]["conf_n"] += 1
         elif src == "Referral":
             owner_won[oid]["ref_amt"] += amount
             owner_won[oid]["ref_n"] += 1

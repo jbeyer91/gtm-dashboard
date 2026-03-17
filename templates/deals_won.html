@@ -23,9 +23,18 @@
     <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
       <tr>
         <th class="px-4 py-3 text-left font-semibold" rowspan="2">AE</th>
+        {% if source == "All" or source == "Cold outreach" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Cold Outreach</th>
+        {% endif %}
+        {% if source == "All" or source == "Inbound" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Inbound</th>
+        {% endif %}
+        {% if source == "All" or source == "Conference" %}
+        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Conference</th>
+        {% endif %}
+        {% if source == "All" or source == "Referral" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Referral</th>
+        {% endif %}
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-2 text-right font-semibold"># Won</th>
         <th class="px-4 py-2 text-right font-semibold">ACV</th>
@@ -35,12 +44,22 @@
         <th class="px-4 py-2 text-right font-semibold" rowspan="2">Attain %</th>
       </tr>
       <tr class="text-xs">
+        {% if source == "All" or source == "Cold outreach" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
+        {% endif %}
+        {% if source == "All" or source == "Inbound" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
+        {% endif %}
+        {% if source == "All" or source == "Conference" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
+        {% endif %}
+        {% if source == "All" or source == "Referral" %}
+        <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
+        <th class="px-3 py-2 text-right">#</th>
+        {% endif %}
         <th colspan="7"></th>
       </tr>
     </thead>
@@ -48,12 +67,22 @@
       {% for row in data.rows %}
       <tr class="hover:bg-blue-50 transition">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
+        {% if source == "All" or source == "Cold outreach" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.cold_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.cold_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Inbound" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.inbound_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Conference" %}
+        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.conf_amt) }}</td>
+        <td class="px-3 py-3 text-right tabular-nums">{{ row.conf_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Referral" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.ref_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.ref_n }}</td>
+        {% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold border-l border-gray-100">{{ fmt_money(row.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.total_won_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.acv) }}</td>
@@ -83,12 +112,22 @@
       {% set t = data.totals %}
       <tr>
         <td class="px-4 py-3">TOTAL</td>
+        {% if source == "All" or source == "Cold outreach" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.cold_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.cold_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Inbound" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.inbound_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Conference" %}
+        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.conf_amt) }}</td>
+        <td class="px-3 py-3 text-right">{{ t.conf_n }}</td>
+        {% endif %}
+        {% if source == "All" or source == "Referral" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.ref_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.ref_n }}</td>
+        {% endif %}
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.total_won_n }}</td>
         <td class="px-4 py-3 text-right text-gray-500">{{ fmt_money(t.acv) }}</td>
