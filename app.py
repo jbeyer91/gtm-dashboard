@@ -178,5 +178,13 @@ def win_rate_by_source():
     return render_template("win_rate_by_source.html", data=data, periods=PERIODS, period=period, nav=NAV, active="win_rate_by_source")
 
 
+# ── Background cache scheduler ───────────────────────────────────────────────
+# Guard against Flask's dev-reloader starting the thread twice.
+# In production (Gunicorn) this block always runs once per worker.
+import cache_scheduler
+if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    cache_scheduler.start(initial_delay_s=0)  # warm cache immediately on boot
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
