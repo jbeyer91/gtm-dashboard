@@ -816,7 +816,7 @@ def compute_book_coverage() -> dict:
 
         owner_data[oid]["total"] += 1
 
-        tier = (props.get("account_tier") or "").strip().lower()
+        tier = (props.get("icp_rank") or "").strip().lower()
         is_ac = tier in AC_TIERS
         if is_ac:
             owner_data[oid]["ac_accounts"] += 1

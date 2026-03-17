@@ -564,7 +564,7 @@ def get_contacts_for_coverage() -> list:
             ],
             "properties": [
                 "hubspot_owner_id",
-                "account_tier",
+                "icp_rank",
                 "notes_last_activity_date",
                 "notes_last_called",
                 "hs_sequences_is_enrolled",
