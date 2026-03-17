@@ -70,10 +70,12 @@ TEAM_FILTER = ("Veterans", "Rising")
 def get_team_owner_ids() -> frozenset:
     """Return CRM owner IDs for all members of the TEAM_FILTER teams.
 
-    Maps HubSpot userId (login account) → ownerId (CRM object) via the
-    owners endpoint, then cross-references the teams endpoint.
-    Falls back to an empty frozenset (= no restriction) if either API call
-    fails so the dashboard degrades gracefully rather than going blank.
+    Handles HubSpot's team hierarchy:
+    - Matches teams by name (TEAM_FILTER) at any level of the hierarchy
+    - Collects userIds AND secondaryUserIds from matching teams
+      (sub-teams often store inherited members in secondaryUserIds)
+    - Falls back to an empty frozenset (= no restriction) if either API
+      call fails so the dashboard degrades gracefully rather than going blank.
     """
     resp_owners = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
     if not resp_owners.ok:
@@ -88,13 +90,29 @@ def get_team_owner_ids() -> frozenset:
     if not resp_teams.ok:
         return frozenset()
 
-    allowed: set = set()
-    for team in resp_teams.json().get("results", []):
+    all_teams = resp_teams.json().get("results", [])
+
+    # Collect IDs of teams whose name matches TEAM_FILTER
+    matching_team_ids: set = set()
+    for team in all_teams:
         if team.get("name") in TEAM_FILTER:
-            for user_id in team.get("userIds", []):
-                owner_id = user_to_owner.get(str(user_id))
-                if owner_id:
-                    allowed.add(owner_id)
+            matching_team_ids.add(team.get("id"))
+
+    allowed: set = set()
+    for team in all_teams:
+        if team.get("id") not in matching_team_ids:
+            continue
+        # primaryUserIds / userIds — direct members
+        for uid in team.get("userIds", []):
+            owner_id = user_to_owner.get(str(uid))
+            if owner_id:
+                allowed.add(owner_id)
+        # secondaryUserIds — members inherited through sub-team hierarchy
+        for uid in team.get("secondaryUserIds", []):
+            owner_id = user_to_owner.get(str(uid))
+            if owner_id:
+                allowed.add(owner_id)
+
     return frozenset(allowed)
 
 

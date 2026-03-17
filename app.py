@@ -200,14 +200,28 @@ def debug_teams():
             if uid:
                 user_to_owner[str(uid)] = {"owner_id": str(o["id"]), "name": f"{o.get('firstName','')} {o.get('lastName','')}".strip()}
 
+    # Summarise teams in a readable way
+    teams_summary = []
+    if resp_teams.ok:
+        for t in resp_teams.json().get("results", []):
+            teams_summary.append({
+                "id":                t.get("id"),
+                "name":              t.get("name"),
+                "parentTeamId":      t.get("parentTeamId"),
+                "userIds":           t.get("userIds", []),
+                "secondaryUserIds":  t.get("secondaryUserIds", []),
+                "name_in_filter":    t.get("name") in TEAM_FILTER,
+            })
+
     return jsonify({
-        "team_filter":       list(TEAM_FILTER),
+        "team_filter":        list(TEAM_FILTER),
         "resolved_owner_ids": sorted(get_team_owner_ids()),
-        "owners_api_ok":     resp_owners.ok,
-        "teams_api_ok":      resp_teams.ok,
-        "teams_api_status":  resp_teams.status_code,
-        "teams":             resp_teams.json() if resp_teams.ok else resp_teams.text,
-        "user_to_owner_map": user_to_owner,
+        "resolved_count":     len(get_team_owner_ids()),
+        "owners_api_ok":      resp_owners.ok,
+        "teams_api_ok":       resp_teams.ok,
+        "teams_api_status":   resp_teams.status_code,
+        "teams_summary":      teams_summary,
+        "user_to_owner_map":  user_to_owner,
     })
 
 
