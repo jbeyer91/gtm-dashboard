@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
@@ -373,95 +373,60 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
 
-    # "Created" count — deals whose createdate falls in the period.
-    period_deals = get_deals(start, end, "createdate")
-
-    # 18-month lookback — captures deals created before the period that had
-    # stage movements during it (hs_date_entered_* falls within [start, end]).
-    wide_start = end - timedelta(days=548)
-    wide_deals = get_deals(wide_start, end, "createdate")
-
+    # Cohort view: all deals created in the period, showing their CURRENT stage.
+    # Uses dealstage (always populated) so this works on any HubSpot plan —
+    # no dependency on hs_date_entered_* which requires Professional/Enterprise.
+    # For meaningful advancement numbers select a period ≥ 90 days so deals
+    # have had time to progress beyond Stage 1.
+    deals = get_deals(start, end, "createdate")
     if source != "All":
-        period_deals = [d for d in period_deals if _deal_source(d) == source]
-        wide_deals   = [d for d in wide_deals   if _deal_source(d) == source]
+        deals = [d for d in deals if _deal_source(d) == source]
 
-    start_ms = int(start.timestamp() * 1000)
-    end_ms   = int(end.timestamp()   * 1000)
+    _s2   = NB_STAGES["stage2"]
+    _s3   = NB_STAGES["stage3"]
+    _s4   = NB_STAGES["stage4"]
+    _won  = NB_STAGES["won"]
+    _lost = NB_STAGES["lost"]
 
-    def _entered_in_period(date_val: str) -> bool:
-        """True when a HubSpot date value falls within [start_ms, end_ms].
+    owner_data = defaultdict(lambda: {
+        "created": 0,
+        "to_s2": 0, "to_s3": 0, "to_s4": 0, "won": 0, "lost": 0,
+    })
 
-        Handles both epoch-millisecond strings ('1709640000000') and ISO 8601
-        datetime strings.  Python < 3.11 fromisoformat only accepts 6-digit
-        microseconds, so we normalise HubSpot's 3-digit milliseconds by
-        padding to 6 digits before parsing.
-        """
-        if not date_val:
-            return False
-        # Try epoch milliseconds (numeric string HubSpot sometimes returns)
-        try:
-            ms = int(date_val)
-            if 946684800000 <= ms <= 4102444800000:   # sanity: year 2000-2100
-                return start_ms <= ms <= end_ms
-        except (ValueError, TypeError):
-            pass
-        # Try ISO 8601 — pad fractional seconds to 6 digits for Python < 3.11
-        try:
-            s = str(date_val).replace("Z", "+00:00")
-            if "." in s:
-                dot = s.index(".")
-                frac_end = dot + 1
-                while frac_end < len(s) and s[frac_end].isdigit():
-                    frac_end += 1
-                frac = s[dot + 1:frac_end].ljust(6, "0")[:6]
-                s = s[:dot + 1] + frac + s[frac_end:]
-            dt = datetime.fromisoformat(s)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return start_ms <= int(dt.timestamp() * 1000) <= end_ms
-        except Exception:
-            return False
-
-    owner_created = defaultdict(int)
-    owner_adv = defaultdict(lambda: {"to_s2": 0, "to_s3": 0, "to_s4": 0, "won": 0, "lost": 0})
-
-    for d in period_deals:
-        oid = d["properties"].get("hubspot_owner_id", "")
-        if oid:
-            owner_created[oid] += 1
-
-    for d in wide_deals:
-        oid = d["properties"].get("hubspot_owner_id", "")
+    for d in deals:
+        oid   = d["properties"].get("hubspot_owner_id", "")
+        stage = d["properties"].get("dealstage", "")
         if not oid:
             continue
-        props = d["properties"]
-        if _entered_in_period(props.get("hs_date_entered_71300358")):
-            owner_adv[oid]["to_s2"] += 1
-        if _entered_in_period(props.get("hs_date_entered_1294419353")):
-            owner_adv[oid]["to_s3"] += 1
-        if _entered_in_period(props.get("hs_date_entered_71300359")):
-            owner_adv[oid]["to_s4"] += 1
-        if _entered_in_period(props.get("hs_date_entered_71300362")):
-            owner_adv[oid]["won"] += 1
-        if _entered_in_period(props.get("hs_date_entered_71300363")):
-            owner_adv[oid]["lost"] += 1
+        owner_data[oid]["created"] += 1
+        # A deal at stage X has progressed through all earlier stages.
+        # Won deals count for every stage column; lost deals only count as lost
+        # (we don't know which stage they were lost from).
+        if stage in (_s2, _s3, _s4, _won):
+            owner_data[oid]["to_s2"] += 1
+        if stage in (_s3, _s4, _won):
+            owner_data[oid]["to_s3"] += 1
+        if stage in (_s4, _won):
+            owner_data[oid]["to_s4"] += 1
+        if stage == _won:
+            owner_data[oid]["won"] += 1
+        if stage == _lost:
+            owner_data[oid]["lost"] += 1
 
     rows = []
-    active = set(owner_created.keys()) | set(owner_adv.keys())
-    for oid in active:
+    for oid, data in owner_data.items():
         owner = owners.get(oid)
-        if not owner:
+        if not owner or data["created"] == 0:
             continue
-        adv = owner_adv[oid]
         rows.append({
             "ae": owner["last_name"] or owner["name"],
             "owner_id": oid,
-            "created": owner_created.get(oid, 0),
-            "to_s2": adv["to_s2"],
-            "to_s3": adv["to_s3"],
-            "to_s4": adv["to_s4"],
-            "won":   adv["won"],
-            "lost":  adv["lost"],
+            "created": data["created"],
+            "to_s2":   data["to_s2"],
+            "to_s3":   data["to_s3"],
+            "to_s4":   data["to_s4"],
+            "won":     data["won"],
+            "lost":    data["lost"],
         })
 
     rows.sort(key=lambda r: r["created"], reverse=True)
