@@ -9,6 +9,7 @@ from flask import (
     session, jsonify, abort
 )
 import analytics
+from cache_utils import clear_cache, last_refreshed_str
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -40,6 +41,12 @@ NAV = [
 ]
 
 
+@app.context_processor
+def inject_cache_info():
+    """Make last_refreshed available in every template automatically."""
+    return {"last_refreshed": last_refreshed_str()}
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -65,6 +72,14 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/refresh-cache", methods=["POST"])
+@login_required
+def refresh_cache():
+    """Bust the server-side cache so the next page load fetches fresh HubSpot data."""
+    clear_cache()
+    return redirect(request.referrer or url_for("index"))
 
 
 @app.route("/")

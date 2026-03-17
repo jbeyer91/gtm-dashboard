@@ -30,7 +30,16 @@
         {{ label }}
       </a>
       {% endfor %}
-      <a href="{{ url_for('logout') }}" class="ml-4 px-3 py-1.5 rounded text-sm text-gray-400 hover:text-white">
+      <!-- Cache indicator + manual refresh -->
+      <span class="ml-4 text-xs text-gray-500 whitespace-nowrap">Data: {{ last_refreshed }}</span>
+      <form method="POST" action="{{ url_for('refresh_cache') }}" class="ml-1">
+        <button type="submit"
+                title="Fetch fresh data from HubSpot now"
+                class="px-2 py-1 rounded text-xs text-gray-400 hover:bg-gray-700 hover:text-white transition">
+          ↻ Refresh
+        </button>
+      </form>
+      <a href="{{ url_for('logout') }}" class="ml-2 px-3 py-1.5 rounded text-sm text-gray-400 hover:text-white">
         Logout
       </a>
     </div>

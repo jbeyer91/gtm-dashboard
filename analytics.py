@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timezone
+from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
@@ -102,6 +103,7 @@ def _deal_source(deal: dict) -> str:
     return DEAL_SOURCE_MAP.get(src, "Cold outreach")
 
 
+@ttl_cache
 def compute_call_stats(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -213,6 +215,7 @@ def compute_call_stats(period: str) -> dict:
     return {"rows": rows, "totals": totals, "period": period, "start": start.isoformat(), "end": end.isoformat()}
 
 
+@ttl_cache
 def compute_pipeline_generated(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -295,6 +298,7 @@ def compute_pipeline_generated(period: str) -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
+@ttl_cache
 def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
     if period:
@@ -353,6 +357,7 @@ def compute_pipeline_coverage(period: str = None) -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
+@ttl_cache
 def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -424,6 +429,7 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     return {"rows": rows, "totals": totals, "period": period, "source": source}
 
 
+@ttl_cache
 def compute_deals_won(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -513,6 +519,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
     return {"rows": rows, "totals": totals, "period": period, "source": source}
 
 
+@ttl_cache
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -554,6 +561,7 @@ def compute_deals_lost(period: str) -> dict:
     return {"rows": rows, "totals": totals, "period": period, "reasons": REASONS}
 
 
+@ttl_cache
 def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     start, end = get_date_range(period)
 
@@ -663,6 +671,7 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
+@ttl_cache
 def compute_win_rate_by_source(period: str) -> dict:
     start, end = get_date_range(period)
 
