@@ -20,7 +20,6 @@ PERIODS = [
     ("this_month", "This Month"),
     ("last_month", "Last Month"),
     ("last_30", "Last 30 Days"),
-    ("last_60", "Last 60 Days"),
     ("last_90", "Last 90 Days"),
     ("this_quarter", "This Quarter"),
     ("last_quarter", "Last Quarter"),
