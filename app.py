@@ -35,13 +35,17 @@ COVERAGE_PERIODS = [
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
-    ("call_stats", "Call Stats"),
-    ("pipeline_generated", "Pipeline Generated"),
-    ("pipeline_coverage", "Pipeline Coverage"),
-    ("deal_advancement", "Deal Advancement"),
-    ("deals_won", "Deals Won"),
-    ("deals_lost", "Deals Lost"),
-    ("inbound_funnel", "Inbound Funnel"),
+    {"type": "link",  "endpoint": "call_stats",       "label": "Call Stats"},
+    {"type": "group", "label": "Pipeline", "items": [
+        {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
+        {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
+    ]},
+    {"type": "group", "label": "Deals", "items": [
+        {"endpoint": "deals_won",       "label": "Won"},
+        {"endpoint": "deals_lost",      "label": "Lost"},
+        {"endpoint": "deal_advancement","label": "Stage Advancement"},
+    ]},
+    {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
 ]
 
 
