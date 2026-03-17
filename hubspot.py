@@ -216,13 +216,15 @@ def get_quotas(start: datetime, end: datetime) -> dict:
         v["user_id"]: v["id"] for v in owners.values() if v.get("user_id")
     }
 
-    start_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_iso   = end.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # HubSpot search API requires millisecond epoch timestamps for datetime
+    # filters — ISO strings are silently ignored and return all records.
+    start_ts = str(int(start.timestamp() * 1000))
+    end_ts   = str(int(end.timestamp() * 1000))
 
     payload = {
         "filterGroups": [{"filters": [
-            {"propertyName": "hs_end_datetime",   "operator": "GTE", "value": start_iso},
-            {"propertyName": "hs_start_datetime", "operator": "LTE", "value": end_iso},
+            {"propertyName": "hs_end_datetime",   "operator": "GTE", "value": start_ts},
+            {"propertyName": "hs_start_datetime", "operator": "LTE", "value": end_ts},
         ]}],
         "properties": [
             "hs_goal_name", "hs_target_amount",
