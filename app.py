@@ -231,7 +231,7 @@ def debug_quotas():
     datetime field formats and amounts before any pro-rating is applied."""
     import requests
     from datetime import timezone
-    from hubspot import BASE_URL, HEADERS, get_owners, get_date_range
+    from hubspot import BASE_URL, HEADERS, get_owners, get_date_range, _parse_hs_datetime
 
     period = request.args.get("period", "this_month")
     start, end = get_date_range(period)
@@ -275,16 +275,14 @@ def debug_quotas():
         # Attempt to parse and show pro-rate calculation
         calc = "parse_error"
         try:
-            gs = start_raw.replace("Z", "+00:00") if start_raw else ""
-            ge = end_raw.replace("Z", "+00:00") if end_raw else ""
-            goal_start_dt = __import__("datetime").datetime.fromisoformat(gs)
-            goal_end_dt   = __import__("datetime").datetime.fromisoformat(ge)
+            goal_start_dt = _parse_hs_datetime(start_raw)
+            goal_end_dt   = _parse_hs_datetime(end_raw)
             goal_secs = max((goal_end_dt - goal_start_dt).total_seconds(), 1)
             overlap_secs = max((min(end, goal_end_dt) - max(start, goal_start_dt)).total_seconds(), 0)
             amount = float(amount_raw or 0)
             if goal_secs > window_secs * 2:
                 prorated = amount * (overlap_secs / goal_secs)
-                calc = f"PRO-RATED: {amount} × ({overlap_secs:.0f}s / {goal_secs:.0f}s) = {prorated:.2f}"
+                calc = f"PRO-RATED: {amount} × ({overlap_secs/86400:.1f}d / {goal_secs/86400:.1f}d) = {prorated:.2f}"
             else:
                 calc = f"FULL: {amount} (goal {goal_secs/86400:.1f}d ≤ 2× window {window_secs/86400:.1f}d)"
         except Exception as ex:

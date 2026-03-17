@@ -1,8 +1,30 @@
+import logging
 import os
 import requests
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from cache_utils import ttl_cache
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_hs_datetime(raw: str) -> datetime:
+    """Parse a HubSpot datetime property value into an aware UTC datetime.
+
+    HubSpot CRM objects v3 may return datetime properties as either:
+      - ISO 8601 string:        "2026-01-01T00:00:00.000Z"
+      - Millisecond epoch str:  "1735689600000"
+
+    Raises ValueError if the string can't be parsed in either format.
+    """
+    s = (raw or "").strip()
+    if not s:
+        raise ValueError("empty datetime string")
+    # Millisecond epoch: all digits, length 10–14
+    if s.lstrip("-").isdigit() and 10 <= len(s) <= 14:
+        return datetime.fromtimestamp(int(s) / 1000, tz=timezone.utc)
+    # ISO 8601 — replace trailing Z with explicit UTC offset
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 HUBSPOT_TOKEN = os.environ.get("HUBSPOT_TOKEN", "")
 BASE_URL = "https://api.hubapi.com"
@@ -270,21 +292,33 @@ def get_quotas(start: datetime, end: datetime) -> dict:
         #   • Quarterly (~90 d) vs monthly window → pro-rate (÷3) ✓
         #   • Quarterly vs quarterly window → full amount ✓
         window_secs = max((end - start).total_seconds(), 1)
+        start_raw = props.get("hs_start_datetime")
+        end_raw   = props.get("hs_end_datetime")
         try:
-            goal_start_str = (props.get("hs_start_datetime") or "").replace("Z", "+00:00")
-            goal_end_str   = (props.get("hs_end_datetime")   or "").replace("Z", "+00:00")
-            goal_start = datetime.fromisoformat(goal_start_str)
-            goal_end   = datetime.fromisoformat(goal_end_str)
-            goal_secs    = max((goal_end - goal_start).total_seconds(), 1)
+            goal_start = _parse_hs_datetime(start_raw)
+            goal_end   = _parse_hs_datetime(end_raw)
+            goal_secs  = max((goal_end - goal_start).total_seconds(), 1)
+            logger.info(
+                "quota goal owner=%s amount=%.0f start_raw=%r end_raw=%r "
+                "goal_days=%.1f window_days=%.1f",
+                owner_id, amount, start_raw, end_raw,
+                goal_secs / 86400, window_secs / 86400,
+            )
             if goal_secs > window_secs * 2:
                 # Goal spans much more than the window → allocate the overlap fraction
                 overlap_secs = max(
                     (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
                 )
                 prorated = amount * (overlap_secs / goal_secs)
+                logger.info("  → pro-rated to %.2f (overlap %.1f d)", prorated, overlap_secs / 86400)
             else:
                 prorated = amount   # goal fits within (or matches) the window
-        except Exception:
+                logger.info("  → full amount %.2f (goal ≤ 2× window)", prorated)
+        except Exception as exc:
+            logger.warning(
+                "quota parse error owner=%s start_raw=%r end_raw=%r: %s — using full amount",
+                owner_id, start_raw, end_raw, exc,
+            )
             prorated = amount   # fallback: use full amount if dates can't be parsed
 
         quotas[owner_id] = quotas.get(owner_id, 0.0) + prorated
