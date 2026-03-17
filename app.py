@@ -45,6 +45,7 @@ NAV = [
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
     ]},
     {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
+    {"type": "link",  "endpoint": "book_coverage",     "label": "Book Coverage"},
 ]
 
 
@@ -172,6 +173,16 @@ def inbound_funnel():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="inbound_funnel")
     return render_template("inbound_funnel.html", data=data, periods=PERIODS, period=period, nav=NAV, active="inbound_funnel")
+
+
+@app.route("/book-coverage")
+@login_required
+def book_coverage():
+    try:
+        data = analytics.compute_book_coverage()
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="book_coverage")
+    return render_template("book_coverage.html", data=data, nav=NAV, active="book_coverage")
 
 
 @app.route("/api/debug/deal-sources")

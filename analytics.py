@@ -5,7 +5,8 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
-    get_quotas,
+    get_quotas, get_contacts_for_coverage, get_overdue_sequence_tasks,
+    _parse_hs_datetime,
 )
 
 SOURCE_MAP = {
@@ -774,6 +775,116 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     }
 
     return {"rows": rows, "totals": totals, "period": period}
+
+
+@ttl_cache
+def compute_book_coverage() -> dict:
+    """Compute point-in-time book coverage metrics per AE.
+
+    Metrics are calculated against each AE's A+ to C tier contacts:
+      - Total Named Accounts : all contacts owned by the AE
+      - A+ to C Accounts     : contacts with account_tier in {A+, A, B, C}
+      - % activity (30d)     : A-C contacts with any activity in last 30 days
+      - % called (120d)      : A-C contacts called in last 120 days
+      - % in sequence        : A-C contacts currently enrolled in a sequence
+      - Overdue tasks        : past-due not-started tasks owned by the AE
+    """
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = now - timedelta(days=30)
+    onetwenty_days_ago = now - timedelta(days=120)
+
+    owners = get_owners()
+    contacts = get_contacts_for_coverage()
+    tasks = get_overdue_sequence_tasks()
+
+    AC_TIERS = {"a+", "a", "b", "c"}
+
+    owner_data = defaultdict(lambda: {
+        "total": 0,
+        "ac_accounts": 0,
+        "active_30": 0,
+        "called_120": 0,
+        "in_sequence": 0,
+        "overdue_tasks": 0,
+    })
+
+    for contact in contacts:
+        props = contact["properties"]
+        oid = props.get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+
+        owner_data[oid]["total"] += 1
+
+        tier = (props.get("account_tier") or "").strip().lower()
+        is_ac = tier in AC_TIERS
+        if is_ac:
+            owner_data[oid]["ac_accounts"] += 1
+
+            last_act_raw = props.get("notes_last_activity_date")
+            if last_act_raw:
+                try:
+                    if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
+                        owner_data[oid]["active_30"] += 1
+                except Exception:
+                    pass
+
+            last_call_raw = props.get("notes_last_called")
+            if last_call_raw:
+                try:
+                    if _parse_hs_datetime(last_call_raw) >= onetwenty_days_ago:
+                        owner_data[oid]["called_120"] += 1
+                except Exception:
+                    pass
+
+            if props.get("hs_sequences_is_enrolled") in (True, "true", "1", 1):
+                owner_data[oid]["in_sequence"] += 1
+
+    for task in tasks:
+        oid = task["properties"].get("hubspot_owner_id", "")
+        if oid and _owner_allowed(oid):
+            owner_data[oid]["overdue_tasks"] += 1
+
+    rows = []
+    for oid, data in owner_data.items():
+        owner = owners.get(oid)
+        if not owner:
+            continue
+        ac = data["ac_accounts"]
+        rows.append({
+            "ae": owner["last_name"] or owner["name"],
+            "owner_id": oid,
+            "total_accounts": data["total"],
+            "ac_accounts": ac,
+            "active_30": data["active_30"],
+            "called_120": data["called_120"],
+            "in_sequence": data["in_sequence"],
+            "pct_active_30": _pct(data["active_30"], ac),
+            "pct_called_120": _pct(data["called_120"], ac),
+            "pct_in_sequence": _pct(data["in_sequence"], ac),
+            "overdue_tasks": data["overdue_tasks"],
+        })
+
+    rows.sort(key=lambda r: r["ae"])
+
+    def _sum(key):
+        return sum(r[key] for r in rows)
+
+    total_ac = _sum("ac_accounts")
+    totals = {
+        "ae": "TOTAL",
+        "total_accounts": _sum("total_accounts"),
+        "ac_accounts": total_ac,
+        "active_30": _sum("active_30"),
+        "called_120": _sum("called_120"),
+        "in_sequence": _sum("in_sequence"),
+        "pct_active_30": _pct(_sum("active_30"), total_ac),
+        "pct_called_120": _pct(_sum("called_120"), total_ac),
+        "pct_in_sequence": _pct(_sum("in_sequence"), total_ac),
+        "overdue_tasks": _sum("overdue_tasks"),
+    }
+
+    return {"rows": rows, "totals": totals}
 
 
 @ttl_cache

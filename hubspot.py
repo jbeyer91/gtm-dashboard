@@ -547,6 +547,58 @@ def get_deal_contact_windows() -> dict:
     return contact_windows
 
 
+@ttl_cache
+def get_contacts_for_coverage() -> list:
+    """Fetch all contacts owned by team members for book coverage analysis."""
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return []
+    all_contacts = []
+    # HubSpot filterGroups are OR-ed; max 5 per request
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [{"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid}]}
+                for oid in batch
+            ],
+            "properties": [
+                "hubspot_owner_id",
+                "account_tier",
+                "notes_last_activity_date",
+                "notes_last_called",
+                "hs_sequences_is_enrolled",
+            ],
+        }
+        all_contacts.extend(_search_all("contacts", payload))
+    return all_contacts
+
+
+@ttl_cache
+def get_overdue_sequence_tasks() -> list:
+    """Fetch overdue (past-due, not-started) tasks for team members."""
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return []
+    now_ts = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+    all_tasks = []
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                    {"propertyName": "hs_task_status", "operator": "EQ", "value": "NOT_STARTED"},
+                    {"propertyName": "hs_timestamp", "operator": "LTE", "value": now_ts},
+                ]}
+                for oid in batch
+            ],
+            "properties": ["hubspot_owner_id", "hs_task_type", "hs_task_status", "hs_timestamp"],
+        }
+        all_tasks.extend(_search_all("tasks", payload))
+    return all_tasks
+
+
 def get_call_to_contact_map(call_ids: list) -> dict:
     """Return {call_id: contact_id} for each call.
 
