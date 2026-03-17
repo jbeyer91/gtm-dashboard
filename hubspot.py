@@ -192,8 +192,70 @@ def get_owners() -> dict:
             "last_name": o.get("lastName", ""),
             "first_name": o.get("firstName", ""),
             "email": o.get("email", ""),
+            "user_id": str(o.get("userId", "")),  # portal user ID — needed to resolve goal assignees
         }
     return owners
+
+
+@ttl_cache
+def get_quotas(start: datetime, end: datetime) -> dict:
+    """Return {owner_id: total_quota_amount} for goals overlapping [start, end].
+
+    HubSpot goal targets are assigned by portal user ID (hs_assignee_user_id),
+    not the CRM owner ID used on deals. We resolve the mapping via the userId
+    field captured in get_owners().
+
+    Amounts are summed when multiple goal periods overlap the window (e.g.
+    three monthly quotas inside a quarterly reporting range).
+
+    Returns {} gracefully if the crm.objects.goals.read scope is not enabled
+    (HTTP 403) so the dashboard degrades to showing "—" instead of crashing.
+    """
+    owners = get_owners()
+    user_id_to_owner_id = {
+        v["user_id"]: v["id"] for v in owners.values() if v.get("user_id")
+    }
+
+    start_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso   = end.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "hs_end_datetime",   "operator": "GTE", "value": start_iso},
+            {"propertyName": "hs_start_datetime", "operator": "LTE", "value": end_iso},
+        ]}],
+        "properties": [
+            "hs_goal_name", "hs_target_amount",
+            "hs_start_datetime", "hs_end_datetime", "hs_assignee_user_id",
+        ],
+        "limit": 200,
+    }
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/crm/v3/objects/goal_targets/search",
+            headers=HEADERS,
+            json=payload,
+        )
+        if resp.status_code == 403:
+            return {}   # scope not enabled — degrade gracefully
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError:
+        return {}
+
+    quotas: dict = {}
+    for goal in resp.json().get("results", []):
+        props    = goal.get("properties", {})
+        user_id  = str(props.get("hs_assignee_user_id") or "")
+        owner_id = user_id_to_owner_id.get(user_id)
+        if not owner_id:
+            continue
+        try:
+            amount = float(props.get("hs_target_amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        quotas[owner_id] = quotas.get(owner_id, 0.0) + amount
+
+    return quotas
 
 
 @ttl_cache

@@ -31,6 +31,9 @@
         <th class="px-4 py-2 text-right font-semibold"># Lost</th>
         <th class="px-4 py-2 text-right font-semibold">ACV</th>
         <th class="px-4 py-2 text-right font-semibold">Win Rate</th>
+        <th class="px-4 py-2 text-right font-semibold border-l border-gray-200" rowspan="2">Quota $</th>
+        <th class="px-4 py-2 text-right font-semibold" rowspan="2">Delta $</th>
+        <th class="px-4 py-2 text-right font-semibold" rowspan="2">Attain %</th>
       </tr>
       <tr class="text-xs">
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
@@ -39,7 +42,7 @@
         <th class="px-3 py-2 text-right">#</th>
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
-        <th colspan="5"></th>
+        <th colspan="8"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-50">
@@ -59,6 +62,22 @@
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate >= 25 %}text-green-600{% elif row.win_rate >= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
           {{ fmt_pct(row.win_rate) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
+          {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-medium
+          {% if not row.quota_amt %}text-gray-400
+          {% elif row.delta_amt >= 0 %}text-green-600
+          {% else %}text-red-500{% endif %}">
+          {% if row.quota_amt %}{{ fmt_money(row.delta_amt) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
+          {% if row.attain_pct is none %}text-gray-400
+          {% elif row.attain_pct >= 100 %}text-green-600
+          {% elif row.attain_pct >= 75 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -77,6 +96,22 @@
         <td class="px-4 py-3 text-right text-red-500">{{ t.total_lost_n }}</td>
         <td class="px-4 py-3 text-right text-gray-500">{{ fmt_money(t.acv) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.win_rate) }}</td>
+        <td class="px-4 py-3 text-right border-l border-gray-100">
+          {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right
+          {% if not t.quota_amt %}text-gray-400
+          {% elif t.delta_amt >= 0 %}text-green-600
+          {% else %}text-red-500{% endif %}">
+          {% if t.quota_amt %}{{ fmt_money(t.delta_amt) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right
+          {% if t.attain_pct is none %}text-gray-400
+          {% elif t.attain_pct >= 100 %}text-green-600
+          {% elif t.attain_pct >= 75 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {% if t.attain_pct is not none %}{{ fmt_pct(t.attain_pct) }}{% else %}—{% endif %}
+        </td>
       </tr>
     </tfoot>
   </table>

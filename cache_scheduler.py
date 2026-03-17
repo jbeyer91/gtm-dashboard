@@ -85,6 +85,7 @@ def _refresh_period_data(period: str):
         (hubspot.get_calls,            {}),
         (hubspot.get_all_open_deals,   {}),
         (hubspot.get_contacts_inbound, {}),
+        (hubspot.get_quotas,           {}),
     ]:
         try:
             fn(start, end, _force=True, **extra_kwargs)

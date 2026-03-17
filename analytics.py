@@ -5,6 +5,7 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
+    get_quotas,
 )
 
 SOURCE_MAP = {
@@ -476,6 +477,7 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
 def compute_deals_won(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
+    quotas = get_quotas(start, end)  # {owner_id: quota_amount} — {} if scope missing
 
     won_deals = get_deals(start, end, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
@@ -524,6 +526,8 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         won_n = owner_won[oid]["total_n"]
         lost_n = owner_lost[oid]
         total = won_n + lost_n
+        quota_amt = quotas.get(oid, 0.0)
+        total_won = owner_won[oid]["total_amt"]
         rows.append({
             "ae": owner["last_name"] or owner["name"],
             "owner_id": oid,
@@ -535,11 +539,14 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
             "conf_n": owner_won[oid]["conf_n"],
             "ref_amt": owner_won[oid]["ref_amt"],
             "ref_n": owner_won[oid]["ref_n"],
-            "total_won_amt": owner_won[oid]["total_amt"],
+            "total_won_amt": total_won,
             "total_won_n": won_n,
             "total_lost_n": lost_n,
-            "acv": owner_won[oid]["total_amt"] / won_n if won_n else 0,
+            "acv": total_won / won_n if won_n else 0,
             "win_rate": _pct(won_n, total),
+            "quota_amt":  quota_amt,
+            "delta_amt":  total_won - quota_amt,
+            "attain_pct": round(total_won / quota_amt * 100, 1) if quota_amt else None,
         })
 
     rows.sort(key=lambda r: r["total_won_amt"], reverse=True)
@@ -549,16 +556,21 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
     tw = _sum("total_won_n")
     tl = _sum("total_lost_n")
+    total_won_rev = _sum("total_won_amt")
+    total_quota   = _sum("quota_amt")
     totals = {
         "ae": "TOTAL",
         "cold_amt": _sum("cold_amt"), "cold_n": _sum("cold_n"),
         "inbound_amt": _sum("inbound_amt"), "inbound_n": _sum("inbound_n"),
         "conf_amt": _sum("conf_amt"), "conf_n": _sum("conf_n"),
         "ref_amt": _sum("ref_amt"), "ref_n": _sum("ref_n"),
-        "total_won_amt": _sum("total_won_amt"),
+        "total_won_amt": total_won_rev,
         "total_won_n": tw, "total_lost_n": tl,
-        "acv": _sum("total_won_amt") / tw if tw else 0,
+        "acv": total_won_rev / tw if tw else 0,
         "win_rate": _pct(tw, tw + tl),
+        "quota_amt":  total_quota,
+        "delta_amt":  total_won_rev - total_quota,
+        "attain_pct": round(total_won_rev / total_quota * 100, 1) if total_quota else None,
     }
 
     return {"rows": rows, "totals": totals, "period": period, "source": source}
