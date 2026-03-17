@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, source_filter, stat_card, fmt_pct %}
+{% from "macros.html" import period_filter, source_filter, stat_card %}
 {% block title %} — Deal Advancement{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-xl font-bold">Deal Advancement</h1>
-  <span class="text-sm text-gray-400">% of Deals Advancing Through Stages · by Create Date</span>
+  <span class="text-sm text-gray-400">Deals Entering Each Stage · by Stage Entry Date</span>
 </div>
 
 {{ period_filter(period, periods, {"source": source}) }}
@@ -13,11 +13,11 @@
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
   {{ stat_card("Deals Created", t.created) }}
-  {{ stat_card("→ Stage 2", fmt_pct(t.pct_s2)) }}
-  {{ stat_card("→ Stage 3", fmt_pct(t.pct_s3)) }}
-  {{ stat_card("→ Stage 4", fmt_pct(t.pct_s4)) }}
-  {{ stat_card("→ Closed Won", fmt_pct(t.pct_won)) }}
-  {{ stat_card("→ Closed Lost", fmt_pct(t.pct_lost)) }}
+  {{ stat_card("→ Stage 2", t.to_s2) }}
+  {{ stat_card("→ Stage 3", t.to_s3) }}
+  {{ stat_card("→ Stage 4", t.to_s4) }}
+  {{ stat_card("Closed Won", t.won) }}
+  {{ stat_card("Closed Lost", t.lost) }}
 </div>
 
 <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -27,15 +27,10 @@
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold"># Created</th>
         <th class="px-4 py-3 text-right font-semibold">→ S2</th>
-        <th class="px-4 py-3 text-right font-semibold">% → S2</th>
         <th class="px-4 py-3 text-right font-semibold">→ S3</th>
-        <th class="px-4 py-3 text-right font-semibold">% → S3</th>
         <th class="px-4 py-3 text-right font-semibold">→ S4</th>
-        <th class="px-4 py-3 text-right font-semibold">% → S4</th>
         <th class="px-4 py-3 text-right font-semibold">Won</th>
-        <th class="px-4 py-3 text-right font-semibold">Win %</th>
         <th class="px-4 py-3 text-right font-semibold">Lost</th>
-        <th class="px-4 py-3 text-right font-semibold">Lost %</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-50">
@@ -44,17 +39,10 @@
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.created }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.to_s2 }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_s2) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.to_s3 }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_s3) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.to_s4 }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_s4) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ row.won }}</td>
-        <td class="px-4 py-3 text-right tabular-nums
-          {% if row.pct_won >= 20 %}text-green-600{% elif row.pct_won >= 10 %}text-yellow-600{% else %}text-red-500{% endif %}">
-          {{ fmt_pct(row.pct_won) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.lost }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ fmt_pct(row.pct_lost) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -64,15 +52,10 @@
         <td class="px-4 py-3">TOTAL</td>
         <td class="px-4 py-3 text-right">{{ t.created }}</td>
         <td class="px-4 py-3 text-right">{{ t.to_s2 }}</td>
-        <td class="px-4 py-3 text-right">{{ fmt_pct(t.pct_s2) }}</td>
         <td class="px-4 py-3 text-right">{{ t.to_s3 }}</td>
-        <td class="px-4 py-3 text-right">{{ fmt_pct(t.pct_s3) }}</td>
         <td class="px-4 py-3 text-right">{{ t.to_s4 }}</td>
-        <td class="px-4 py-3 text-right">{{ fmt_pct(t.pct_s4) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.won }}</td>
-        <td class="px-4 py-3 text-right">{{ fmt_pct(t.pct_won) }}</td>
         <td class="px-4 py-3 text-right text-red-500">{{ t.lost }}</td>
-        <td class="px-4 py-3 text-right text-red-500">{{ fmt_pct(t.pct_lost) }}</td>
       </tr>
     </tfoot>
   </table>

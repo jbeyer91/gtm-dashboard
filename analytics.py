@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
@@ -373,53 +373,74 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
 
-    all_deals = get_deals(start, end, "createdate")
+    # "Created" count: deals created within the selected period.
+    period_deals = get_deals(start, end, "createdate")
+
+    # Advancement counts: use an 18-month lookback so we capture deals
+    # created before the period that moved through stages during it.
+    # get_deals is already cached so this is a cache-key lookup, not a new call
+    # once the scheduler has warmed it.
+    wide_start = end - timedelta(days=548)
+    wide_deals = get_deals(wide_start, end, "createdate")
+
     if source != "All":
-        all_deals = [d for d in all_deals if _deal_source(d) == source]
+        period_deals = [d for d in period_deals if _deal_source(d) == source]
+        wide_deals   = [d for d in wide_deals   if _deal_source(d) == source]
 
-    owner_data = defaultdict(lambda: {
-        "created": 0,
-        "to_s2": 0, "to_s3": 0, "to_s4": 0, "won": 0, "lost": 0,
-    })
+    start_ms = int(start.timestamp() * 1000)
+    end_ms   = int(end.timestamp()   * 1000)
 
-    deals_list = all_deals
-    for d in deals_list:
+    def _entered_in_period(date_str: str) -> bool:
+        """True when a HubSpot ISO date string falls within [start, end]."""
+        if not date_str:
+            return False
+        try:
+            ms = int(datetime.fromisoformat(
+                date_str.replace("Z", "+00:00")).timestamp() * 1000)
+            return start_ms <= ms <= end_ms
+        except Exception:
+            return False
+
+    owner_created = defaultdict(int)
+    owner_adv = defaultdict(lambda: {"to_s2": 0, "to_s3": 0, "to_s4": 0, "won": 0, "lost": 0})
+
+    for d in period_deals:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if oid:
+            owner_created[oid] += 1
+
+    for d in wide_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
         props = d["properties"]
-        owner_data[oid]["created"] += 1
-        if props.get("hs_date_entered_71300358"):
-            owner_data[oid]["to_s2"] += 1
-        if props.get("hs_date_entered_1294419353"):
-            owner_data[oid]["to_s3"] += 1
-        if props.get("hs_date_entered_71300359"):
-            owner_data[oid]["to_s4"] += 1
-        if props.get("hs_is_closed_won") == "true":
-            owner_data[oid]["won"] += 1
-        if props.get("hs_is_closed_lost") == "true":
-            owner_data[oid]["lost"] += 1
+        if _entered_in_period(props.get("hs_date_entered_71300358")):
+            owner_adv[oid]["to_s2"] += 1
+        if _entered_in_period(props.get("hs_date_entered_1294419353")):
+            owner_adv[oid]["to_s3"] += 1
+        if _entered_in_period(props.get("hs_date_entered_71300359")):
+            owner_adv[oid]["to_s4"] += 1
+        if _entered_in_period(props.get("hs_date_entered_71300362")):
+            owner_adv[oid]["won"] += 1
+        if _entered_in_period(props.get("hs_date_entered_71300363")):
+            owner_adv[oid]["lost"] += 1
 
     rows = []
-    for oid, data in owner_data.items():
+    active = set(owner_created.keys()) | set(owner_adv.keys())
+    for oid in active:
         owner = owners.get(oid)
-        if not owner or data["created"] == 0:
+        if not owner:
             continue
-        n = data["created"]
+        adv = owner_adv[oid]
         rows.append({
             "ae": owner["last_name"] or owner["name"],
             "owner_id": oid,
-            "created": n,
-            "to_s2": data["to_s2"],
-            "pct_s2": _pct(data["to_s2"], n),
-            "to_s3": data["to_s3"],
-            "pct_s3": _pct(data["to_s3"], n),
-            "to_s4": data["to_s4"],
-            "pct_s4": _pct(data["to_s4"], n),
-            "won": data["won"],
-            "pct_won": _pct(data["won"], n),
-            "lost": data["lost"],
-            "pct_lost": _pct(data["lost"], n),
+            "created": owner_created.get(oid, 0),
+            "to_s2": adv["to_s2"],
+            "to_s3": adv["to_s3"],
+            "to_s4": adv["to_s4"],
+            "won":   adv["won"],
+            "lost":  adv["lost"],
         })
 
     rows.sort(key=lambda r: r["created"], reverse=True)
@@ -427,14 +448,14 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
     def _sum(key):
         return sum(r[key] for r in rows)
 
-    tot = _sum("created")
     totals = {
-        "ae": "TOTAL", "created": tot,
-        "to_s2": _sum("to_s2"), "pct_s2": _pct(_sum("to_s2"), tot),
-        "to_s3": _sum("to_s3"), "pct_s3": _pct(_sum("to_s3"), tot),
-        "to_s4": _sum("to_s4"), "pct_s4": _pct(_sum("to_s4"), tot),
-        "won": _sum("won"), "pct_won": _pct(_sum("won"), tot),
-        "lost": _sum("lost"), "pct_lost": _pct(_sum("lost"), tot),
+        "ae": "TOTAL",
+        "created": _sum("created"),
+        "to_s2":   _sum("to_s2"),
+        "to_s3":   _sum("to_s3"),
+        "to_s4":   _sum("to_s4"),
+        "won":     _sum("won"),
+        "lost":    _sum("lost"),
     }
 
     return {"rows": rows, "totals": totals, "period": period, "source": source}

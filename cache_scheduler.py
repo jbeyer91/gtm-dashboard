@@ -19,6 +19,7 @@ silently swallowed — the next scheduled sync will try again.
 import os
 import logging
 import threading
+from datetime import timedelta
 import hubspot
 import analytics
 
@@ -87,6 +88,14 @@ def _refresh_period_data(period: str):
             fn(start, end, _force=True, **extra_kwargs)
         except Exception as exc:
             log.warning("  ✗ %s(%s, ...): %s", fn.__name__, period, exc)
+
+    # Wide 18-month window used by compute_deal_advancement to capture
+    # stage movements from deals created before the selected period.
+    try:
+        wide_start = end - timedelta(days=548)
+        hubspot.get_deals(wide_start, end, _force=True)
+    except Exception as exc:
+        log.warning("  ✗ get_deals_wide(%s, ...): %s", period, exc)
 
 
 def _sync():
