@@ -269,6 +269,15 @@ def get_quotas(start: datetime, end: datetime) -> dict:
     quotas: dict = {}
     for goal in resp.json().get("results", []):
         props    = goal.get("properties", {})
+
+        # Only include revenue quota goals — skip pipeline, dial, and other
+        # goal types HubSpot also returns (e.g. "Pipeline Generated Goal - 2026",
+        # "Dials - 2026"). Without this filter all goal types get summed together,
+        # inflating the displayed quota (e.g. $55K quota + $278K pipeline = $333K).
+        goal_name = (props.get("hs_goal_name") or "").lower()
+        if "quota" not in goal_name:
+            continue
+
         user_id  = str(props.get("hs_assignee_user_id") or "")
         owner_id = user_id_to_owner_id.get(user_id)
         if not owner_id:
