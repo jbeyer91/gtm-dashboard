@@ -268,12 +268,15 @@ def compute_pipeline_generated(period: str) -> dict:
         if src == "Cold outreach":
             owner_data[oid]["cold_outreach_amt"] += amount
             owner_data[oid]["cold_outreach_n"] += 1
+        elif src == "Inbound" or raw_src in ("PAID_SEARCH", "ORGANIC_SEARCH", "SOCIAL_MEDIA", "PAID_SOCIAL", "DIRECT_TRAFFIC", "EMAIL_MARKETING", "OFFLINE"):
+            owner_data[oid]["inbound_amt"] += amount
+            owner_data[oid]["inbound_n"] += 1
         elif src == "Referral" or raw_src == "REFERRALS":
             owner_data[oid]["referral_amt"] += amount
             owner_data[oid]["referral_n"] += 1
-        elif raw_src in ("PAID_SEARCH", "ORGANIC_SEARCH", "SOCIAL_MEDIA", "PAID_SOCIAL", "DIRECT_TRAFFIC", "EMAIL_MARKETING", "OFFLINE"):
-            owner_data[oid]["inbound_amt"] += amount
-            owner_data[oid]["inbound_n"] += 1
+        elif src == "Conference":
+            owner_data[oid]["conference_amt"] += amount
+            owner_data[oid]["conference_n"] += 1
         else:
             owner_data[oid]["cold_outreach_amt"] += amount
             owner_data[oid]["cold_outreach_n"] += 1
