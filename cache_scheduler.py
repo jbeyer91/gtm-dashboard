@@ -57,7 +57,7 @@ _timer: threading.Timer = None
 
 def _refresh_base_data():
     """Force-refresh HubSpot API calls that don't depend on period."""
-    for fn in (hubspot.get_owners, hubspot.get_deal_contact_windows):
+    for fn in (hubspot.get_owners, hubspot.get_team_owner_ids, hubspot.get_deal_contact_windows):
         try:
             fn(_force=True)
         except Exception as exc:

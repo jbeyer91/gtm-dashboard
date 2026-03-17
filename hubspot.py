@@ -62,6 +62,41 @@ CALL_OUTCOMES = {
     "CONVERSATION": ["Connected"],
 }
 
+# Only show data for owners on these HubSpot teams.
+TEAM_FILTER = ("Veterans", "Rising")
+
+
+@ttl_cache
+def get_team_owner_ids() -> frozenset:
+    """Return CRM owner IDs for all members of the TEAM_FILTER teams.
+
+    Maps HubSpot userId (login account) → ownerId (CRM object) via the
+    owners endpoint, then cross-references the teams endpoint.
+    Falls back to an empty frozenset (= no restriction) if either API call
+    fails so the dashboard degrades gracefully rather than going blank.
+    """
+    resp_owners = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
+    if not resp_owners.ok:
+        return frozenset()
+    user_to_owner: dict = {}
+    for o in resp_owners.json().get("results", []):
+        uid = o.get("userId")
+        if uid:
+            user_to_owner[str(uid)] = str(o["id"])
+
+    resp_teams = requests.get(f"{BASE_URL}/settings/v3/users/teams", headers=HEADERS)
+    if not resp_teams.ok:
+        return frozenset()
+
+    allowed: set = set()
+    for team in resp_teams.json().get("results", []):
+        if team.get("name") in TEAM_FILTER:
+            for user_id in team.get("userIds", []):
+                owner_id = user_to_owner.get(str(user_id))
+                if owner_id:
+                    allowed.add(owner_id)
+    return frozenset(allowed)
+
 
 @ttl_cache
 def get_date_range(period: str):

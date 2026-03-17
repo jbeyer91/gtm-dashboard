@@ -4,7 +4,7 @@ from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
-    get_deal_contact_windows, get_call_to_contact_map,
+    get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
 )
 
 SOURCE_MAP = {
@@ -93,6 +93,12 @@ def _parse_amount(val):
         return 0.0
 
 
+def _owner_allowed(oid: str) -> bool:
+    """Return True if this owner is on a TEAM_FILTER team (or if no teams are configured)."""
+    allowed = get_team_owner_ids()
+    return not allowed or oid in allowed
+
+
 def _deal_source(deal: dict) -> str:
     # Prefer the custom 'deal_source' property (Cold outreach / Inbound / Referral / Conference)
     custom = (deal.get("properties", {}).get("deal_source") or "").strip()
@@ -122,6 +128,8 @@ def compute_call_stats(period: str) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
+        if not _owner_allowed(oid):
+            continue
         src = _deal_source(d)
         if src == "Cold outreach":
             owner_deals_created[oid].add(d["id"])
@@ -133,6 +141,8 @@ def compute_call_stats(period: str) -> dict:
     for call in calls:
         oid = call["properties"].get("hubspot_owner_id", "")
         if not oid:
+            continue
+        if not _owner_allowed(oid):
             continue
         if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
             continue
@@ -232,6 +242,8 @@ def compute_pipeline_generated(period: str) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
+        if not _owner_allowed(oid):
+            continue
         amount = _parse_amount(d["properties"].get("amount"))
         src = _deal_source(d)
         raw_src = (d["properties"].get("hs_analytics_source") or "").upper()
@@ -322,6 +334,8 @@ def compute_pipeline_coverage(period: str = None) -> dict:
         amount = _parse_amount(d["properties"].get("amount"))
         if not oid:
             continue
+        if not _owner_allowed(oid):
+            continue
         if stage in owner_data[oid]:
             owner_data[oid][stage]["n"] += 1
             owner_data[oid][stage]["amt"] += amount
@@ -332,6 +346,8 @@ def compute_pipeline_coverage(period: str = None) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         amount = _parse_amount(d["properties"].get("amount"))
         if not oid:
+            continue
+        if not _owner_allowed(oid):
             continue
         owner_won[oid]["n"] += 1
         owner_won[oid]["amt"] += amount
@@ -397,6 +413,8 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
         oid   = d["properties"].get("hubspot_owner_id", "")
         stage = d["properties"].get("dealstage", "")
         if not oid:
+            continue
+        if not _owner_allowed(oid):
             continue
         owner_data[oid]["created"] += 1
         # A deal at stage X has progressed through all earlier stages.
@@ -469,6 +487,8 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
+        if not _owner_allowed(oid):
+            continue
         amount = _parse_amount(d["properties"].get("amount"))
         src = _deal_source(d)
         owner_won[oid]["total_amt"] += amount
@@ -485,7 +505,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
     for d in lost_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
-        if oid:
+        if oid and _owner_allowed(oid):
             owner_lost[oid] += 1
 
     all_owners = set(owner_won.keys()) | set(owner_lost.keys())
@@ -552,6 +572,8 @@ def compute_deals_lost(period: str) -> dict:
     for d in lost_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
+            continue
+        if not _owner_allowed(oid):
             continue
         reason = d["properties"].get("hs_closed_lost_reason") or "Other"
         # normalize
@@ -702,6 +724,9 @@ def compute_win_rate_by_source(period: str) -> dict:
     src_data = defaultdict(lambda: {"n": 0, "won": 0, "revenue": 0.0})
 
     for d in closed:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not _owner_allowed(oid):
+            continue
         src = _deal_source(d)
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["n"] += 1
