@@ -65,6 +65,13 @@ CALL_OUTCOMES = {
 # Only show data for owners on these HubSpot teams.
 TEAM_FILTER = ("Veterans", "Rising")
 
+# Manager / non-AE owner IDs to exclude even if they appear on a filtered team.
+OWNER_EXCLUDE = frozenset({
+    "79795769",   # Joe Mathews
+    "88798218",   # Jordan Wallach (CEO)
+    "371621550",  # Jordan Wallach (duplicate)
+})
+
 
 @ttl_cache
 def get_team_owner_ids() -> frozenset:
@@ -91,6 +98,8 @@ def get_team_owner_ids() -> frozenset:
     allowed: set = set()
     for o in resp.json().get("results", []):
         owner_id = str(o["id"])
+        if owner_id in OWNER_EXCLUDE:
+            continue
         for team in o.get("teams", []):
             if team.get("name") in TEAM_FILTER:
                 allowed.add(owner_id)
