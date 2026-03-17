@@ -25,7 +25,7 @@
     <div class="flex items-center gap-2">
       <span class="font-bold text-lg tracking-tight">Belfry GTM</span>
     </div>
-    <div class="flex items-center gap-1 overflow-x-auto">
+    <div class="flex items-center gap-1">
       {% for item in nav %}
         {% if item.type == "link" %}
         <a href="{{ url_for(item.endpoint) }}"
