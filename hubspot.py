@@ -568,6 +568,10 @@ def get_companies_for_coverage() -> list:
                 "notes_last_activity_date",
                 "notes_last_contacted",
                 "name",
+                "in_active_sequence",
+                "sales_activity_in_last_30_days",
+                "called_within_120_days",
+                "num_of_overdue_tasks",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
