@@ -92,6 +92,11 @@ def _parse_amount(val):
 
 
 def _deal_source(deal: dict) -> str:
+    # Prefer the custom 'deal_source' property (Cold outreach / Inbound / Referral / Conference)
+    custom = (deal.get("properties", {}).get("deal_source") or "").strip()
+    if custom:
+        return custom
+    # Fall back to hs_analytics_source for deals without deal_source set
     src = (deal.get("properties", {}).get("hs_analytics_source") or "").upper()
     return DEAL_SOURCE_MAP.get(src, "Cold outreach")
 
