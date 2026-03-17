@@ -303,16 +303,20 @@ def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
     if period:
         start, end = get_date_range(period)
-        deals = get_all_open_deals(start, end)
+        open_deals = get_all_open_deals(start, end)
+        # Won deals are excluded by get_all_open_deals — fetch separately via closedate.
+        # get_deals(…, "closedate") is already cached so no extra API call.
+        closed_deals = get_deals(start, end, "closedate")
     else:
-        deals = get_all_open_deals()
+        open_deals = get_all_open_deals()
+        closed_deals = []
 
     STAGE_ORDER = [NB_STAGES["stage1"], NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"]]
 
     owner_data = defaultdict(lambda: {s: {"n": 0, "amt": 0.0} for s in STAGE_ORDER})
     owner_won = defaultdict(lambda: {"n": 0, "amt": 0.0})
 
-    for d in deals:
+    for d in open_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         stage = d["properties"].get("dealstage", "")
         amount = _parse_amount(d["properties"].get("amount"))
@@ -321,9 +325,16 @@ def compute_pipeline_coverage(period: str = None) -> dict:
         if stage in owner_data[oid]:
             owner_data[oid][stage]["n"] += 1
             owner_data[oid][stage]["amt"] += amount
-        elif stage == NB_STAGES["won"]:
-            owner_won[oid]["n"] += 1
-            owner_won[oid]["amt"] += amount
+
+    for d in closed_deals:
+        if d["properties"].get("hs_is_closed_won") != "true":
+            continue
+        oid = d["properties"].get("hubspot_owner_id", "")
+        amount = _parse_amount(d["properties"].get("amount"))
+        if not oid:
+            continue
+        owner_won[oid]["n"] += 1
+        owner_won[oid]["amt"] += amount
 
     rows = []
     active = set(owner_data.keys()) | set(owner_won.keys())
