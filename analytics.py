@@ -133,7 +133,9 @@ def compute_call_stats(period: str) -> dict:
         src = _deal_source(d)
         if src == "Cold outreach":
             owner_deals_created[oid].add(d["id"])
-            if d["properties"].get("hs_date_entered_71300358"):
+            # Use current dealstage as proxy for advancement (hs_date_entered_* is null on this plan)
+            stage = d["properties"].get("dealstage", "")
+            if stage in (NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"], NB_STAGES["won"]):
                 owner_deals_s2[oid].add(d["id"])
 
     # Count calls per owner
@@ -202,7 +204,7 @@ def compute_call_stats(period: str) -> dict:
             "connects": connects,
             "pct_conversation": _pct(convos, connects),
             "conversations": convos,
-            "pct_deals": _pct(deals_out, convos) if convos else 0.0,
+            "pct_deals": _pct(deals_out, dials),  # dial-to-deal rate (never exceeds 100%)
             "outbound_deals_created": deals_out,
             "outbound_deals_to_s2": deals_s2,
         })
@@ -217,7 +219,7 @@ def compute_call_stats(period: str) -> dict:
         "connects": sum(r["connects"] for r in rows),
         "pct_conversation": _pct(sum(r["conversations"] for r in rows), sum(r["connects"] for r in rows)),
         "conversations": sum(r["conversations"] for r in rows),
-        "pct_deals": _pct(sum(r["outbound_deals_created"] for r in rows), sum(r["conversations"] for r in rows)),
+        "pct_deals": _pct(sum(r["outbound_deals_created"] for r in rows), sum(r["dials"] for r in rows)),
         "outbound_deals_created": sum(r["outbound_deals_created"] for r in rows),
         "outbound_deals_to_s2": sum(r["outbound_deals_to_s2"] for r in rows),
     }
