@@ -140,7 +140,9 @@ def compute_call_stats(period: str) -> dict:
         owner_calls[oid]["dials"] += 1
         if disposition in CALL_CONNECTED_GUIDS:
             owner_calls[oid]["connects"] += 1
-        if disposition in CALL_CONVERSATION_GUIDS:
+        # Conversation = call duration >= 60 seconds (duration stored in ms)
+        duration_ms = int(call["properties"].get("hs_call_duration") or 0)
+        if duration_ms >= 60000:
             owner_calls[oid]["conversations"] += 1
 
     rows = []
