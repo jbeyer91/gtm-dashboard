@@ -27,6 +27,11 @@ PERIODS = [
     ("ytd", "Year to Date"),
 ]
 
+COVERAGE_PERIODS = [
+    ("this_month", "This Month"),
+    ("next_month", "Next Month"),
+]
+
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
@@ -118,7 +123,7 @@ def pipeline_coverage():
         data = analytics.compute_pipeline_coverage(period)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_coverage")
-    return render_template("pipeline_coverage.html", data=data, periods=PERIODS, period=period, nav=NAV, active="pipeline_coverage")
+    return render_template("pipeline_coverage.html", data=data, periods=COVERAGE_PERIODS, period=period, nav=NAV, active="pipeline_coverage")
 
 
 @app.route("/deal-advancement")

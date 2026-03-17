@@ -93,6 +93,18 @@ def get_date_range(period: str):
     elif period == "ytd":
         start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         return start, now
+    elif period == "next_month":
+        # First day of next month
+        if now.month == 12:
+            start = now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Last moment of next month (one second before the month after)
+        if start.month == 12:
+            end = start.replace(year=start.year + 1, month=1) - timedelta(seconds=1)
+        else:
+            end = start.replace(month=start.month + 1) - timedelta(seconds=1)
+        return start, end
     else:
         return now - timedelta(days=30), now
 

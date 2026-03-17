@@ -37,6 +37,7 @@ ALL_PERIODS = [
     "this_quarter",
     "last_quarter",
     "ytd",
+    "next_month",
 ]
 
 # All compute views to warm — most-visited first
