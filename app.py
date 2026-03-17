@@ -224,6 +224,92 @@ def debug_teams():
     })
 
 
+@app.route("/api/debug/quotas")
+@login_required
+def debug_quotas():
+    """Show the raw goal_target records returned by HubSpot so we can inspect
+    datetime field formats and amounts before any pro-rating is applied."""
+    import requests
+    from datetime import timezone
+    from hubspot import BASE_URL, HEADERS, get_owners, get_date_range
+
+    period = request.args.get("period", "this_month")
+    start, end = get_date_range(period)
+
+    start_ts = str(int(start.timestamp() * 1000))
+    end_ts   = str(int(end.timestamp() * 1000))
+
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "hs_end_datetime",   "operator": "GTE", "value": start_ts},
+            {"propertyName": "hs_start_datetime", "operator": "LTE", "value": end_ts},
+        ]}],
+        "properties": [
+            "hs_goal_name", "hs_target_amount",
+            "hs_start_datetime", "hs_end_datetime", "hs_assignee_user_id",
+        ],
+        "limit": 200,
+    }
+
+    resp = requests.post(
+        f"{BASE_URL}/crm/v3/objects/goal_targets/search",
+        headers=HEADERS,
+        json=payload,
+    )
+
+    owners = get_owners()
+    user_id_to_name = {
+        v["user_id"]: v.get("name", v["user_id"])
+        for v in owners.values() if v.get("user_id")
+    }
+
+    window_secs = (end - start).total_seconds()
+    raw_goals = []
+    for goal in (resp.json().get("results", []) if resp.ok else []):
+        props = goal.get("properties", {})
+        uid   = str(props.get("hs_assignee_user_id") or "")
+        start_raw = props.get("hs_start_datetime")
+        end_raw   = props.get("hs_end_datetime")
+        amount_raw = props.get("hs_target_amount")
+
+        # Attempt to parse and show pro-rate calculation
+        calc = "parse_error"
+        try:
+            gs = start_raw.replace("Z", "+00:00") if start_raw else ""
+            ge = end_raw.replace("Z", "+00:00") if end_raw else ""
+            goal_start_dt = __import__("datetime").datetime.fromisoformat(gs)
+            goal_end_dt   = __import__("datetime").datetime.fromisoformat(ge)
+            goal_secs = max((goal_end_dt - goal_start_dt).total_seconds(), 1)
+            overlap_secs = max((min(end, goal_end_dt) - max(start, goal_start_dt)).total_seconds(), 0)
+            amount = float(amount_raw or 0)
+            if goal_secs > window_secs * 2:
+                prorated = amount * (overlap_secs / goal_secs)
+                calc = f"PRO-RATED: {amount} × ({overlap_secs:.0f}s / {goal_secs:.0f}s) = {prorated:.2f}"
+            else:
+                calc = f"FULL: {amount} (goal {goal_secs/86400:.1f}d ≤ 2× window {window_secs/86400:.1f}d)"
+        except Exception as ex:
+            calc = f"parse_error: {ex}"
+
+        raw_goals.append({
+            "owner_name":           user_id_to_name.get(uid, f"uid:{uid}"),
+            "hs_goal_name":         props.get("hs_goal_name"),
+            "hs_target_amount":     amount_raw,
+            "hs_start_datetime_raw": start_raw,
+            "hs_end_datetime_raw":   end_raw,
+            "calculation":          calc,
+        })
+
+    return jsonify({
+        "period":          period,
+        "window_start":    start.isoformat(),
+        "window_end":      end.isoformat(),
+        "window_days":     round(window_secs / 86400, 1),
+        "api_status":      resp.status_code,
+        "goal_count":      len(raw_goals),
+        "goals":           raw_goals,
+    })
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.
