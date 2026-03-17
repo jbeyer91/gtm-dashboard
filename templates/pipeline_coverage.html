@@ -76,6 +76,7 @@
         <th class="px-4 py-3 text-right font-semibold">Stage 2</th>
         <th class="px-4 py-3 text-right font-semibold">Stage 3</th>
         <th class="px-4 py-3 text-right font-semibold">Stage 4</th>
+        <th class="px-4 py-3 text-right font-semibold">Closed Won</th>
         <th class="px-4 py-3 text-right font-semibold">Total Open</th>
       </tr>
     </thead>
@@ -87,6 +88,7 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s2_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s3_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s4_amt) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-medium">{{ fmt_money(row.won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ fmt_money(row.s1_amt + row.s2_amt + row.s3_amt + row.s4_amt) }}</td>
       </tr>
       {% endfor %}
@@ -99,6 +101,7 @@
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s2_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s3_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s4_amt) }}</td>
+        <td class="px-4 py-3 text-right text-green-600">{{ fmt_money(t.won_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s1_amt + t.s2_amt + t.s3_amt + t.s4_amt) }}</td>
       </tr>
     </tfoot>
