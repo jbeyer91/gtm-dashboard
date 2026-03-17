@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
@@ -112,6 +112,12 @@ def _deal_source(deal: dict) -> str:
 @ttl_cache
 def compute_call_stats(period: str) -> dict:
     start, end = get_date_range(period)
+    # Business days (Mon–Fri) elapsed in the period — used as avg/day denominator
+    period_bdays = sum(
+        1 for i in range((end - start).days + 1)
+        if (start + timedelta(days=i)).weekday() < 5
+    )
+    period_bdays = max(period_bdays, 1)
     owners = get_owners()
     calls = get_calls(start, end)
     deals_created = get_deals(start, end, "createdate")
@@ -192,14 +198,13 @@ def compute_call_stats(period: str) -> dict:
         dials = c["dials"]
         connects = c["connects"]
         convos = c["conversations"]
-        days = len(c["days"]) or 1
         deals_out = len(owner_deals_created[oid])
         deals_s2 = len(owner_deals_s2[oid])
         rows.append({
             "ae": owner["last_name"] or owner["name"],
             "owner_id": oid,
             "dials": dials,
-            "avg_dials_per_day": round(dials / days, 1),
+            "avg_dials_per_day": round(dials / period_bdays, 1),
             "pct_connect": _pct(connects, dials),
             "connects": connects,
             "pct_conversation": _pct(convos, connects),
@@ -214,7 +219,7 @@ def compute_call_stats(period: str) -> dict:
     totals = {
         "ae": "TOTAL",
         "dials": sum(r["dials"] for r in rows),
-        "avg_dials_per_day": round(sum(r["dials"] for r in rows) / max(sum(len(owner_calls[o]["days"]) for o in active_owners if owner_calls[o]["days"]), 1), 1),
+        "avg_dials_per_day": round(sum(r["dials"] for r in rows) / period_bdays, 1),
         "pct_connect": _pct(sum(r["connects"] for r in rows), sum(r["dials"] for r in rows)),
         "connects": sum(r["connects"] for r in rows),
         "pct_conversation": _pct(sum(r["conversations"] for r in rows), sum(r["connects"] for r in rows)),

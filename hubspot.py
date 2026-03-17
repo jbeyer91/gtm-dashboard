@@ -174,7 +174,7 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
         results.extend(data.get("results", []))
         paging = data.get("paging", {})
         after = paging.get("next", {}).get("after")
-        if not after or len(results) >= min(data.get("total", 0), max_records):
+        if not after or len(results) >= max_records:
             break
     return results
 
@@ -330,14 +330,34 @@ def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
 @ttl_cache
 def get_deal_contact_windows() -> dict:
     """
-    Return {contact_id: [(open_start_ms, open_end_ms_or_None), ...]} for all NB deals.
+    Return {contact_id: [(open_start_ms, open_end_ms_or_None), ...]} for NB deals.
     open_end_ms is None if the deal is still open.
     Lets us check if a call happened while a deal was active for that contact's company.
+
+    Two filter groups (HubSpot treats them as OR):
+      1. All currently-open deals — no date cap, because an old open deal
+         still means today's calls to that contact are not cold outreach.
+      2. Deals closed in the last 12 months — a deal closed >12 months ago
+         cannot affect any reporting period (YTD is the longest at ~12 months).
+    This keeps the in-memory footprint bounded while remaining fully correct.
     """
+    closed_cutoff_ms = int(
+        (datetime.now(timezone.utc) - timedelta(days=365)).timestamp() * 1000
+    )
     payload = {
-        "filterGroups": [{"filters": [
-            {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
-        ]}],
+        "filterGroups": [
+            # Group 1 — open deals (any age)
+            {"filters": [
+                {"propertyName": "pipeline",       "operator": "EQ", "value": "31544320"},
+                {"propertyName": "hs_is_closed_won",  "operator": "EQ", "value": "false"},
+                {"propertyName": "hs_is_closed_lost", "operator": "EQ", "value": "false"},
+            ]},
+            # Group 2 — recently closed deals (last 12 months)
+            {"filters": [
+                {"propertyName": "pipeline",   "operator": "EQ",  "value": "31544320"},
+                {"propertyName": "closedate",  "operator": "GTE", "value": str(closed_cutoff_ms)},
+            ]},
+        ],
         "properties": ["createdate", "closedate", "hs_is_closed_won", "hs_is_closed_lost"],
     }
     all_deals = _search_all("deals", payload)
@@ -388,8 +408,12 @@ def get_deal_contact_windows() -> dict:
     return contact_windows
 
 
-@ttl_cache
 def get_call_to_contact_map(call_ids: list) -> dict:
-    """Return {call_id: contact_id} for each call."""
+    """Return {call_id: contact_id} for each call.
+
+    Not cached — always called from within compute_call_stats which is itself
+    cached, so caching here only wastes memory (a huge tuple of all call IDs
+    becomes the cache key, repeated for every period).
+    """
     call_to_contacts = _batch_associations("calls", "contacts", call_ids)
     return {call_id: contacts[0] for call_id, contacts in call_to_contacts.items() if contacts}

@@ -16,6 +16,7 @@ If any individual fetch fails, the rest still run and the error is
 silently swallowed — the next scheduled sync will try again.
 """
 
+import gc
 import os
 import logging
 import threading
@@ -27,12 +28,14 @@ log = logging.getLogger(__name__)
 # How often to re-sync (configurable via env var, default 1 hour)
 SYNC_INTERVAL_S = float(os.environ.get("CACHE_SYNC_HOURS", "1")) * 3600
 
-# All selectable periods (must match app.py PERIODS)
+# All selectable periods (must match app.py PERIODS).
+# last_60 is intentionally omitted — it's the least-used range and its data
+# is fully bracketed by last_30 and last_90, so dropping it saves one full
+# set of raw API caches (calls, deals×2, open_deals, contacts) from RAM.
 ALL_PERIODS = [
     "this_month",
     "last_month",
     "last_30",
-    "last_60",
     "last_90",
     "this_quarter",
     "last_quarter",
@@ -103,7 +106,10 @@ def _sync():
     # Step 1: refresh period-agnostic data (owners, deal-contact graph)
     _refresh_base_data()
 
-    # Step 2: for each period, refresh raw API calls then compute analytics
+    # Step 2: for each period, refresh raw API calls then compute analytics.
+    # gc.collect() between periods lets Python reclaim the temporary objects
+    # created during _refresh_period_data before the next period's data loads,
+    # keeping the peak RSS lower during the sync spike.
     for period in ALL_PERIODS:
         _refresh_period_data(period)          # fetch fresh HubSpot data
         for fn in _VIEWS:                     # rebuild analytics from fresh data
@@ -113,6 +119,7 @@ def _sync():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        gc.collect()                          # release temporaries before next period
 
     log.info(
         "Cache sync complete (%d ok, %d failed). Next sync in %.0f min.",
