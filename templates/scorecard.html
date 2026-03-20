@@ -37,7 +37,7 @@
     </div>
     <div class="text-right hidden md:block">
       <p class="text-xs font-semibold uppercase tracking-widest" style="color: rgba(255,255,255,0.5);">Weighted Grade</p>
-      <p class="text-xs mt-1" style="color: rgba(255,255,255,0.45);">Quota 50% · Stage 2 10% · Coverage 10% · Deals 5% · Book Health 20% · Activity 5%</p>
+      <p class="text-xs mt-1" style="color: rgba(255,255,255,0.45);">Quota 55% · Stage 2 15% · Deals 10% · Stale Accounts 15% · Activity 5%</p>
     </div>
   </div>
 </div>
@@ -72,29 +72,6 @@
     <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} (4× quota)</p>
   </div>
 
-  {# Quota Coverage #}
-  {% if t.quota_met %}
-    {% set covc = "green" %}
-    {% set cov_label = "Quota Met" %}
-  {% elif t.coverage is none %}
-    {% set covc = "green" %}
-    {% set cov_label = "—" %}
-  {% elif t.coverage >= 5 %}
-    {% set covc = "green" %}
-    {% set cov_label = "%.1f"|format(t.coverage) ~ "x" %}
-  {% elif t.coverage >= 3 %}
-    {% set covc = "yellow" %}
-    {% set cov_label = "%.1f"|format(t.coverage) ~ "x" %}
-  {% else %}
-    {% set covc = "red" %}
-    {% set cov_label = "%.1f"|format(t.coverage) ~ "x" %}
-  {% endif %}
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Quota Coverage</p>
-    <div class="flex items-center">{{ dot(covc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ cov_label }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">open pipe / remaining quota · target: 5×</p>
-  </div>
-
   {# Avg Dials #}
   {% if t.avg_dials >= 40 %}{% set adc = "green" %}{% elif t.avg_dials >= 30 %}{% set adc = "yellow" %}{% else %}{% set adc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
@@ -111,20 +88,13 @@
     <p class="text-xs text-gray-400 mt-1">target: 10%</p>
   </div>
 
-  {# Active 30d #}
-  {% if t.active_30_pct >= 90 %}{% set a30c = "green" %}{% elif t.active_30_pct >= 70 %}{% set a30c = "yellow" %}{% else %}{% set a30c = "red" %}{% endif %}
+  {# Stale Accounts #}
+  {% set stale_pct = (t.stale_count / t.ac_accounts * 100) if t.ac_accounts else 0 %}
+  {% if stale_pct <= 10 %}{% set sc = "green" %}{% elif stale_pct <= 25 %}{% set sc = "yellow" %}{% else %}{% set sc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Active (30d)</p>
-    <div class="flex items-center">{{ dot(a30c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.active_30_pct) }}%</p></div>
-    <p class="text-xs text-gray-400 mt-1">{{ t.stale_count }} stale A–C accounts</p>
-  </div>
-
-  {# Called 120d #}
-  {% if t.called_120_pct >= 90 %}{% set c120c = "green" %}{% elif t.called_120_pct >= 70 %}{% set c120c = "yellow" %}{% else %}{% set c120c = "red" %}{% endif %}
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Called (120d)</p>
-    <div class="flex items-center">{{ dot(c120c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.called_120_pct) }}%</p></div>
-    <p class="text-xs text-gray-400 mt-1">{{ t.at_risk_count }} at-risk A–C accounts</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Stale Accounts</p>
+    <div class="flex items-center">{{ dot(sc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.stale_count }}</p></div>
+    <p class="text-xs text-gray-400 mt-1">A+–C accounts · no activity in 30d</p>
   </div>
 
 </div>
@@ -140,11 +110,9 @@
         <th class="px-4 py-3 text-right font-semibold">Quota %</th>
         <th class="px-4 py-3 text-right font-semibold">Deals Created</th>
         <th class="px-4 py-3 text-right font-semibold">$ to Stage 2</th>
-        <th class="px-4 py-3 text-right font-semibold">Quota Coverage</th>
         <th class="px-4 py-3 text-right font-semibold">Avg Dials</th>
         <th class="px-4 py-3 text-right font-semibold">Connect %</th>
-        <th class="px-4 py-3 text-right font-semibold">Active 30d</th>
-        <th class="px-4 py-3 text-right font-semibold">Called 120d</th>
+        <th class="px-4 py-3 text-right font-semibold">Stale Accounts</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -170,16 +138,6 @@
         {% if rs2p >= 80 %}{% set s2cls = "text-green-600" %}{% elif rs2p >= 60 %}{% set s2cls = "text-amber-600" %}{% else %}{% set s2cls = "text-red-500" %}{% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ s2cls }}">{{ fmt_money(row.s2_amt) }}</td>
 
-        {# Quota coverage #}
-        {% if row.quota_met %}
-          <td class="px-4 py-3 text-right tabular-nums font-semibold text-green-600">Quota Met</td>
-        {% elif row.coverage is none %}
-          <td class="px-4 py-3 text-right tabular-nums text-gray-400">—</td>
-        {% else %}
-          {% if row.coverage >= 5 %}{% set covcls = "text-green-600" %}{% elif row.coverage >= 3 %}{% set covcls = "text-amber-600" %}{% else %}{% set covcls = "text-red-500" %}{% endif %}
-          <td class="px-4 py-3 text-right tabular-nums font-semibold {{ covcls }}">{{ "%.1f"|format(row.coverage) }}×</td>
-        {% endif %}
-
         {# Avg dials #}
         {% if row.avg_dials >= 40 %}{% set adcls = "text-green-600" %}{% elif row.avg_dials >= 30 %}{% set adcls = "text-amber-600" %}{% else %}{% set adcls = "text-red-500" %}{% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ adcls }}">{{ row.avg_dials }}</td>
@@ -188,13 +146,10 @@
         {% if row.connect_rate >= 10 %}{% set crcls = "text-green-600" %}{% elif row.connect_rate >= 8 %}{% set crcls = "text-amber-600" %}{% else %}{% set crcls = "text-red-500" %}{% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ crcls }}">{{ "%.1f"|format(row.connect_rate) }}%</td>
 
-        {# Active 30d #}
-        {% if row.active_30_pct >= 90 %}{% set a30cls = "text-green-600" %}{% elif row.active_30_pct >= 70 %}{% set a30cls = "text-amber-600" %}{% else %}{% set a30cls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ a30cls }}">{{ "%.1f"|format(row.active_30_pct) }}%</td>
-
-        {# Called 120d #}
-        {% if row.called_120_pct >= 90 %}{% set c120cls = "text-green-600" %}{% elif row.called_120_pct >= 70 %}{% set c120cls = "text-amber-600" %}{% else %}{% set c120cls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ c120cls }}">{{ "%.1f"|format(row.called_120_pct) }}%</td>
+        {# Stale accounts #}
+        {% set row_stale_pct = (row.stale_count / row.ac_accounts * 100) if row.ac_accounts else 0 %}
+        {% if row_stale_pct <= 10 %}{% set sccls = "text-green-600" %}{% elif row_stale_pct <= 25 %}{% set sccls = "text-amber-600" %}{% else %}{% set sccls = "text-red-500" %}{% endif %}
+        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ sccls }}">{{ row.stale_count }}</td>
 
       </tr>
       {% endfor %}
