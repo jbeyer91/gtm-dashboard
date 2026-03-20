@@ -464,27 +464,22 @@ def get_contacts_inbound(start: datetime, end: datetime) -> list:
 
 @ttl_cache
 def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
-    """Fetch contacts that joined a HubSpot list within [start, end].
-
-    Filters by hs_date_entered_{list_id} — the date the contact joined the list
-    (i.e. when they submitted the form), not their original createdate.
-    """
+    """Fetch contacts from a HubSpot list filtered by demo_request_submitted_date."""
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
-    date_prop = f"hs_date_entered_{list_id}"
     payload = {
         "filterGroups": [
             {
                 "filters": [
-                    {"propertyName": date_prop, "operator": "GTE", "value": str(start_ts)},
-                    {"propertyName": date_prop, "operator": "LTE", "value": str(end_ts)},
+                    {"propertyName": "demo_request_submitted_date", "operator": "GTE", "value": str(start_ts)},
+                    {"propertyName": "demo_request_submitted_date", "operator": "LTE", "value": str(end_ts)},
                 ]
             }
         ],
         "properties": [
             "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
-            "hs_analytics_source", "hs_lead_status", "lifecyclestage",
-            "num_associated_deals", "last_touch_channel", date_prop,
+            "hs_lead_status", "last_touch_channel",
+            "demo_request_submitted_date", "first_sales_activity_after_demo_request",
         ],
     }
     return _search_all("contacts", payload)
