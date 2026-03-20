@@ -1219,7 +1219,7 @@ def compute_scorecard() -> dict:
         "deals_target":  15 * n_reps,
         "s2_amt":        sum(r["s2_amt"] for r in rows),
         "s2_target":     t_quota * 4,
-        "avg_dials":     round(t_dials / period_bdays, 1),
+        "avg_dials":     round(t_dials / period_bdays / n_reps, 1) if n_reps else 0.0,
         "connect_rate":  _pct(t_connects, t_dials),
         "stale_count":   sum(r["stale_count"] for r in rows),
         "ac_accounts":   sum(r["ac_accounts"] for r in rows),
