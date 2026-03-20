@@ -18,6 +18,8 @@ STAGE2_WIN_RATE    = 0.25     # Win rate for deals that reach stage 2
 S2_COVERAGE_MULT   = round(1 / STAGE2_WIN_RATE)          # 4x
 # Derived: created deals needed per $ of quota
 DEALS_PER_DOLLAR   = 1 / (ACV * STAGE1_TO_STAGE2 * STAGE2_WIN_RATE)  # 1/1800
+# Fixed monthly deals-created target per rep (12 outbound + 3 inbound)
+DEALS_CREATED_TARGET_PER_REP = 15
 
 SOURCE_MAP = {
     "PAID_SEARCH": "Paid Search",
@@ -1240,7 +1242,7 @@ def compute_scorecard() -> dict:
         rep_s1_to_s2  = rs.get("s1_to_s2",   STAGE1_TO_STAGE2)
         rep_acv       = rs.get("acv",         ACV)
         s2_target     = quota / rep_win_s2
-        deals_target  = max(1, round(quota / (rep_acv * rep_s1_to_s2 * rep_win_s2)))
+        deals_target  = DEALS_CREATED_TARGET_PER_REP
 
         book_row    = book_by_owner.get(oid, {})
         ac_accounts = book_row.get("ac_accounts", 0)
