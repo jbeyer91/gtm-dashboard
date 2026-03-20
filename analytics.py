@@ -5,6 +5,7 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
+    get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
 )
@@ -720,8 +721,12 @@ def compute_forecast(period: str) -> dict:
             owner_commit[oid] += amt
             owner_commit_n[oid] += 1
 
+    owner_team = get_owner_team_map()  # {owner_id: "Rising" | "Veterans"}
+
     rows = []
     for oid, owner in owners.items():
+        if not _owner_allowed(oid):
+            continue
         won_amt      = owner_won.get(oid, 0.0)
         commit_amt   = owner_commit.get(oid, 0.0)
         commit_n     = owner_commit_n.get(oid, 0)
@@ -735,6 +740,7 @@ def compute_forecast(period: str) -> dict:
 
         rows.append({
             "ae":             owner["last_name"] or owner["name"],
+            "team":           owner_team.get(oid, ""),
             "won_amt":        won_amt,
             "commit_amt":     commit_amt,
             "commit_n":       commit_n,
@@ -747,26 +753,58 @@ def compute_forecast(period: str) -> dict:
             "attain_pct":     attain_pct,
         })
 
-    rows.sort(key=lambda r: r["submitted_amt"] or 0, reverse=True)
+    rows.sort(key=lambda r: (r["team"], -(r["submitted_amt"] or 0)))
 
-    def _s(k): return sum(r[k] for r in rows if r[k] is not None)
-    total_submitted = _s("submitted_amt")
-    total_quota     = _s("quota_amt")
+    def _s(k, src): return sum(r[k] for r in src if r[k] is not None)
+
+    def _subtotal(label, src):
+        sub_submitted = _s("submitted_amt", src)
+        sub_quota     = _s("quota_amt", src)
+        return {
+            "ae":             label,
+            "won_amt":        _s("won_amt", src),
+            "commit_amt":     _s("commit_amt", src),
+            "commit_n":       _s("commit_n", src),
+            "submitted_amt":  sub_submitted,
+            "bestcase_amt":   _s("bestcase_amt", src),
+            "bestcase_n":     _s("bestcase_n", src),
+            "weighted_amt":   _s("weighted_amt", src),
+            "quota_amt":      sub_quota,
+            "gap_amt":        (sub_quota - sub_submitted) if sub_quota else None,
+            "attain_pct":     round(sub_submitted / sub_quota * 100, 1) if sub_quota else None,
+        }
+
+    # Build team groups (preserve TEAM_FILTER order)
+    from hubspot import TEAM_FILTER
+    groups = []
+    for team_name in TEAM_FILTER:
+        team_rows = [r for r in rows if r["team"] == team_name]
+        if not team_rows:
+            continue
+        groups.append({
+            "team":    team_name,
+            "manager": TEAM_MANAGER.get(team_name, team_name),
+            "rows":    team_rows,
+            "subtotal": _subtotal(f"{team_name} Total", team_rows),
+        })
+
+    total_submitted = _s("submitted_amt", rows)
+    total_quota     = _s("quota_amt", rows)
     totals = {
         "ae":             "TOTAL",
-        "won_amt":        _s("won_amt"),
-        "commit_amt":     _s("commit_amt"),
-        "commit_n":       _s("commit_n"),
+        "won_amt":        _s("won_amt", rows),
+        "commit_amt":     _s("commit_amt", rows),
+        "commit_n":       _s("commit_n", rows),
         "submitted_amt":  total_submitted,
-        "bestcase_amt":   _s("bestcase_amt"),
-        "bestcase_n":     _s("bestcase_n"),
-        "weighted_amt":   _s("weighted_amt"),
+        "bestcase_amt":   _s("bestcase_amt", rows),
+        "bestcase_n":     _s("bestcase_n", rows),
+        "weighted_amt":   _s("weighted_amt", rows),
         "quota_amt":      total_quota,
         "gap_amt":        (total_quota - total_submitted) if total_quota else None,
         "attain_pct":     round(total_submitted / total_quota * 100, 1) if total_quota else None,
     }
 
-    return {"rows": rows, "totals": totals, "period": period}
+    return {"rows": rows, "groups": groups, "totals": totals, "period": period}
 
 
 @ttl_cache
