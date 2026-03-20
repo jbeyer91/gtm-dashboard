@@ -26,6 +26,26 @@ PERIODS = [
     ("ytd", "Year to Date"),
 ]
 
+FORECAST_PERIODS = [
+    ("this_month", "This Month"),
+    ("last_month", "Last Month"),
+    ("this_quarter", "This Quarter"),
+    ("last_quarter", "Last Quarter"),
+    ("ytd", "Year to Date"),
+]
+
+CALL_STATS_PERIODS = [
+    ("today", "Today"),
+    ("this_week", "This Week"),
+    ("this_month", "This Month"),
+    ("last_month", "Last Month"),
+    ("last_30", "Last 30 Days"),
+    ("last_90", "Last 90 Days"),
+    ("this_quarter", "This Quarter"),
+    ("last_quarter", "Last Quarter"),
+    ("ytd", "Year to Date"),
+]
+
 COVERAGE_PERIODS = [
     ("this_month", "This Month"),
     ("next_month", "Next Month"),
@@ -105,7 +125,7 @@ def call_stats():
         data = analytics.compute_call_stats(period)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="call_stats")
-    return render_template("call_stats.html", data=data, periods=PERIODS, period=period, nav=NAV, active="call_stats")
+    return render_template("call_stats.html", data=data, periods=CALL_STATS_PERIODS, period=period, nav=NAV, active="call_stats")
 
 
 @app.route("/pipeline-generated")
@@ -173,7 +193,7 @@ def forecast():
         data = analytics.compute_forecast(period)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="forecast")
-    return render_template("forecast.html", data=data, periods=PERIODS, period=period, nav=NAV, active="forecast")
+    return render_template("forecast.html", data=data, periods=FORECAST_PERIODS, period=period, nav=NAV, active="forecast")
 
 
 @app.route("/inbound-funnel")
