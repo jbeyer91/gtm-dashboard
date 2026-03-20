@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
-    get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
+    get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime,
@@ -670,13 +670,14 @@ def compute_deals_lost(period: str) -> dict:
 def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     start, end = get_date_range(period)
 
-    SOURCES = ["Paid Search", "Organic Search", "Organic Social", "Paid Social",
-               "Direct Traffic", "Email Marketing", "Offline Sources", "Referrals", "AI Referrals"]
+    # Leads = Demo Requests from list 1082 only
+    contacts = get_list_contacts(1082, start, end)
 
-    contacts = get_contacts_inbound(start, end)
-    deals = get_deals(start, end, "createdate")
-    won_deals = [d for d in deals if d["properties"].get("hs_is_closed_won") == "true"]
-    lost_deals = [d for d in deals if d["properties"].get("hs_is_closed_lost") == "true"]
+    # Deals = Inbound deal source only, grouped by last_touch_channel
+    all_deals = get_deals(start, end, "createdate")
+    inbound_deals = [d for d in all_deals if (d["properties"].get("deal_source") or "").lower() == "inbound"]
+    won_deals = [d for d in inbound_deals if d["properties"].get("hs_is_closed_won") == "true"]
+    lost_deals = [d for d in inbound_deals if d["properties"].get("hs_is_closed_lost") == "true"]
 
     src_data = defaultdict(lambda: {
         "leads_created": 0,
@@ -690,52 +691,38 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         "lost_amt": 0.0,
     })
 
-    hs_to_display = {
-        "PAID_SEARCH": "Paid Search",
-        "ORGANIC_SEARCH": "Organic Search",
-        "SOCIAL_MEDIA": "Organic Social",
-        "PAID_SOCIAL": "Paid Social",
-        "DIRECT_TRAFFIC": "Direct Traffic",
-        "EMAIL_MARKETING": "Email Marketing",
-        "OFFLINE": "Offline Sources",
-        "REFERRALS": "Referrals",
-    }
+    def _channel(props):
+        return (props.get("last_touch_channel") or "Unknown").strip() or "Unknown"
 
     for c in contacts:
-        raw = (c["properties"].get("hs_analytics_source") or "").upper()
-        src = hs_to_display.get(raw, "Direct Traffic")
+        src = _channel(c["properties"])
         src_data[src]["leads_created"] += 1
         status = (c["properties"].get("hs_lead_status") or "").upper()
-        lifecycle = (c["properties"].get("lifecyclestage") or "").lower()
         if status in ("UNQUALIFIED", "BAD TIMING", "DISQUALIFIED"):
             src_data[src]["leads_disqualified"] += 1
         if c["properties"].get("num_associated_deals", 0):
             src_data[src]["leads_contacted"] += 1
 
-    for d in deals:
-        raw = (d["properties"].get("hs_analytics_source") or "").upper()
-        src = hs_to_display.get(raw, "Direct Traffic")
+    for d in inbound_deals:
+        src = _channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_created"] += 1
         src_data[src]["pg_amt"] += amount
 
     for d in won_deals:
-        raw = (d["properties"].get("hs_analytics_source") or "").upper()
-        src = hs_to_display.get(raw, "Direct Traffic")
+        src = _channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_won"] += 1
         src_data[src]["won_amt"] += amount
 
     for d in lost_deals:
-        raw = (d["properties"].get("hs_analytics_source") or "").upper()
-        src = hs_to_display.get(raw, "Direct Traffic")
+        src = _channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_lost"] += 1
         src_data[src]["lost_amt"] += amount
 
     rows = []
-    for src in SOURCES:
-        data = src_data[src]
+    for src, data in src_data.items():
         lc = data["leads_created"]
         dc = data["deals_created"]
         dw = data["deals_won"]
@@ -748,6 +735,8 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
             "deal_creation_pct": _pct(dc, lc),
             "win_rate_pct": _pct(dw, dc),
         })
+
+    rows.sort(key=lambda r: (r["leads_created"], r["deals_created"]), reverse=True)
 
     def _sum(key):
         return sum(r[key] for r in rows)
