@@ -441,6 +441,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",
+            "hs_v2_date_entered_71300358",
         ],
     }
     return _search_all("deals", payload)
@@ -463,6 +464,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
             "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
             "hs_date_entered_71300358",
+            "hs_v2_date_entered_71300358",
         ],
     }
     return _search_all("deals", payload)

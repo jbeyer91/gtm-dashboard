@@ -1185,9 +1185,6 @@ def compute_scorecard(period: str = "this_month") -> dict:
     rep_deal_stats   = _rep_trailing_deal_stats()
     call_stats       = compute_call_stats(period)
     call_stats_by_owner = {r["owner_id"]: r for r in call_stats["rows"]}
-    pipeline         = compute_pipeline_coverage(period)
-    pipeline_by_owner = {r["owner_id"]: r for r in pipeline["rows"]}
-
     # ── per-owner aggregations ────────────────────────────────────────────────
     owner_won   = defaultdict(float)
     for d in won_deals:
@@ -1203,13 +1200,27 @@ def compute_scorecard(period: str = "this_month") -> dict:
             continue
         owner_created[oid] += 1
 
-    # $ in stage 2+ pipeline: use pipeline coverage data (same source as Pipeline tab)
-    # hs_date_entered_* fields are not available on this HubSpot plan
+    # $ advanced to Stage 2 this period: use hs_v2_date_entered_71300358 (exact
+    # date the deal entered Stage 2) across open deals + won deals this period.
+    open_deals   = get_all_open_deals()
+    all_deals_for_s2 = list(open_deals) + list(won_deals)
     owner_s2_amt = defaultdict(float)
-    for r in pipeline["rows"]:
-        oid = r["owner_id"]
-        if _owner_allowed(oid):
-            owner_s2_amt[oid] = r["s2_amt"] + r["s3_amt"] + r["s4_amt"]
+    start_ms = int(start.timestamp() * 1000)
+    end_ms   = int(end.timestamp() * 1000)
+    for d in all_deals_for_s2:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        raw = (d["properties"].get("hs_v2_date_entered_71300358")
+               or d["properties"].get("hs_date_entered_71300358"))
+        if not raw:
+            continue
+        try:
+            ts = int(float(raw))
+        except (ValueError, TypeError):
+            continue
+        if start_ms <= ts <= end_ms:
+            owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
