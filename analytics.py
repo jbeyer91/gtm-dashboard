@@ -624,6 +624,94 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
 
 @ttl_cache
+def compute_forecast(period: str) -> dict:
+    start, end = get_date_range(period)
+    owners = get_owners()
+    quotas = get_quotas(start, end)
+
+    won_deals = get_deals(start, end, "closedate")
+    won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
+
+    open_deals = get_all_open_deals(start, end)
+
+    # Index won by owner
+    owner_won = defaultdict(float)
+    for d in won_deals:
+        oid = d["properties"].get("hubspot_owner_id") or ""
+        owner_won[oid] += float(d["properties"].get("amount") or 0)
+
+    # Index open deals by owner — commit, best case, weighted
+    owner_commit   = defaultdict(float)
+    owner_bestcase = defaultdict(float)
+    owner_weighted = defaultdict(float)
+    owner_commit_n   = defaultdict(int)
+    owner_bestcase_n = defaultdict(int)
+
+    for d in open_deals:
+        props = d["properties"]
+        oid = props.get("hubspot_owner_id") or ""
+        amt  = float(props.get("amount") or 0)
+        prob = float(props.get("hs_deal_stage_probability") or 0)
+        cat  = (props.get("hs_manual_forecast_category") or "").lower()
+
+        owner_bestcase[oid] += amt
+        owner_bestcase_n[oid] += 1
+        owner_weighted[oid] += amt * prob
+
+        if cat == "commit":
+            owner_commit[oid] += amt
+            owner_commit_n[oid] += 1
+
+    rows = []
+    for oid, owner in owners.items():
+        won_amt    = owner_won.get(oid, 0.0)
+        commit_amt = owner_commit.get(oid, 0.0)
+        commit_n   = owner_commit_n.get(oid, 0)
+        bestcase_amt = owner_bestcase.get(oid, 0.0)
+        bestcase_n   = owner_bestcase_n.get(oid, 0)
+        weighted_amt = owner_weighted.get(oid, 0.0)
+        quota_amt    = quotas.get(oid, 0.0)
+        forecast_amt = won_amt + commit_amt   # Won + Commit
+        gap_amt      = (quota_amt - forecast_amt) if quota_amt else None
+        attain_pct   = round(forecast_amt / quota_amt * 100, 1) if quota_amt else None
+
+        rows.append({
+            "ae":            owner["last_name"] or owner["name"],
+            "won_amt":       won_amt,
+            "commit_amt":    commit_amt,
+            "commit_n":      commit_n,
+            "forecast_amt":  forecast_amt,
+            "bestcase_amt":  bestcase_amt,
+            "bestcase_n":    bestcase_n,
+            "weighted_amt":  weighted_amt,
+            "quota_amt":     quota_amt,
+            "gap_amt":       gap_amt,
+            "attain_pct":    attain_pct,
+        })
+
+    rows.sort(key=lambda r: r["forecast_amt"], reverse=True)
+
+    def _s(k): return sum(r[k] for r in rows)
+    total_forecast = _s("forecast_amt")
+    total_quota    = _s("quota_amt")
+    totals = {
+        "ae":           "TOTAL",
+        "won_amt":      _s("won_amt"),
+        "commit_amt":   _s("commit_amt"),
+        "commit_n":     _s("commit_n"),
+        "forecast_amt": total_forecast,
+        "bestcase_amt": _s("bestcase_amt"),
+        "bestcase_n":   _s("bestcase_n"),
+        "weighted_amt": _s("weighted_amt"),
+        "quota_amt":    total_quota,
+        "gap_amt":      (total_quota - total_forecast) if total_quota else None,
+        "attain_pct":   round(total_forecast / total_quota * 100, 1) if total_quota else None,
+    }
+
+    return {"rows": rows, "totals": totals, "period": period}
+
+
+@ttl_cache
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()

@@ -43,6 +43,7 @@ NAV = [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
+        {"endpoint": "forecast",        "label": "Forecast"},
     ]},
     {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Book Coverage"},
@@ -162,6 +163,17 @@ def deals_lost():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_lost")
     return render_template("deals_lost.html", data=data, periods=PERIODS, period=period, nav=NAV, active="deals_lost")
+
+
+@app.route("/forecast")
+@login_required
+def forecast():
+    period = request.args.get("period", "this_quarter")
+    try:
+        data = analytics.compute_forecast(period)
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="forecast")
+    return render_template("forecast.html", data=data, periods=PERIODS, period=period, nav=NAV, active="forecast")
 
 
 @app.route("/inbound-funnel")

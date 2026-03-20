@@ -424,7 +424,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
         "properties": [
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
-            "deal_source",
+            "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
         ],
     }
     return _search_all("deals", payload)
