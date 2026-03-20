@@ -217,6 +217,20 @@ def debug_deals_won():
     })
 
 
+@app.route("/api/debug/lost-reasons")
+@login_required
+def debug_lost_reasons():
+    """Show raw hs_closed_lost_reason values from HubSpot for lost deals."""
+    from hubspot import get_date_range, get_deals
+    from collections import Counter
+    period = request.args.get("period", "this_month")
+    start, end = get_date_range(period)
+    deals = get_deals(start, end, "closedate")
+    lost = [d for d in deals if d["properties"].get("hs_is_closed_lost") == "true"]
+    counts = Counter(d["properties"].get("hs_closed_lost_reason") or "__NONE__" for d in lost)
+    return jsonify({"period": period, "total_lost": len(lost), "reason_values": dict(counts.most_common())})
+
+
 @app.route("/api/debug/company-properties")
 @login_required
 def debug_company_properties():
