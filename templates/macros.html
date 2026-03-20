@@ -32,11 +32,33 @@
 </div>
 {% endmacro %}
 
-{% macro stat_card(label, value, sub='', tip='') %}
+{% macro stat_card(label, value, sub='', tip='', delta=none, invert=false, delta_fmt='num') %}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5 hover:shadow-md transition-shadow duration-200">
   <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2"{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
   <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">{{ value }}</p>
   {% if sub %}<p class="text-xs text-gray-400 mt-2 font-medium">{{ sub }}</p>{% endif %}
+  {% if delta is not none %}
+    {% set absv = delta|abs %}
+    {% set pos  = delta > 0 %}
+    {% set good = (pos and not invert) or (not pos and invert) %}
+    {% set color  = 'text-green-500' if good else 'text-red-400' %}
+    {% set arrow  = '↑' if pos else '↓' %}
+    {% if delta == 0 %}
+      <p class="text-xs text-gray-400 mt-1">— vs prior</p>
+    {% elif delta_fmt == 'money' %}
+      {% if absv >= 1000000 %}
+        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ (absv / 1000000)|round(1) }}M</p>
+      {% elif absv >= 1000 %}
+        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ (absv // 1000)|int }}k</p>
+      {% else %}
+        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ absv|int }}</p>
+      {% endif %}
+    {% elif delta_fmt == 'pct' %}
+      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|round(1) }}pp</p>
+    {% else %}
+      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|int }}</p>
+    {% endif %}
+  {% endif %}
 </div>
 {% endmacro %}
 

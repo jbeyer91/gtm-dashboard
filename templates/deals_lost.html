@@ -11,11 +11,12 @@
 {{ csv_link(url_for('deals_lost_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  {{ stat_card("Total Lost", t.total) }}
-  {{ stat_card("Cost", t.cost) }}
-  {{ stat_card("Never Demo'd", t.never_demoed) }}
-  {{ stat_card("Timeline", t.timeline) }}
+  {{ stat_card("Total Lost", t.total, delta=deltas.total, invert=true) }}
+  {{ stat_card("Cost", t.cost, delta=deltas.cost, invert=true) }}
+  {{ stat_card("Never Demo'd", t.never_demoed, delta=deltas.never_demoed, invert=true) }}
+  {{ stat_card("Timeline", t.timeline, delta=deltas.timeline, invert=true) }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">

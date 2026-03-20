@@ -11,11 +11,12 @@
 {{ csv_link(url_for('forecast_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
-  {{ stat_card("Won Revenue", fmt_money(t.won_amt)) }}
-  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "") }}
-  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool") }}
+  {{ stat_card("Won Revenue", fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
+  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "", delta=deltas.attain_pct, delta_fmt='pct') }}
+  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool", delta=deltas.submitted_amt, delta_fmt='money') }}
 </div>
 
 {# ── reusable row macro ───────────────────────────────────────────────────── #}

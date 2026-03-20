@@ -11,12 +11,13 @@
 {{ csv_link(url_for('pipeline_coverage_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
-  {{ stat_card("Stage 1", t.s1_n ~ " deals · " ~ fmt_money(t.s1_amt)) }}
-  {{ stat_card("Stage 2", t.s2_n ~ " deals · " ~ fmt_money(t.s2_amt)) }}
-  {{ stat_card("Stage 3", t.s3_n ~ " deals · " ~ fmt_money(t.s3_amt)) }}
-  {{ stat_card("Stage 4", t.s4_n ~ " deals · " ~ fmt_money(t.s4_amt)) }}
-  {{ stat_card("Closed Won (MTD)", t.won_n ~ " deals · " ~ fmt_money(t.won_amt)) }}
+  {{ stat_card("Stage 1", t.s1_n ~ " deals · " ~ fmt_money(t.s1_amt), delta=deltas.s1_amt, delta_fmt='money') }}
+  {{ stat_card("Stage 2", t.s2_n ~ " deals · " ~ fmt_money(t.s2_amt), delta=deltas.s2_amt, delta_fmt='money') }}
+  {{ stat_card("Stage 3", t.s3_n ~ " deals · " ~ fmt_money(t.s3_amt), delta=deltas.s3_amt, delta_fmt='money') }}
+  {{ stat_card("Stage 4", t.s4_n ~ " deals · " ~ fmt_money(t.s4_amt), delta=deltas.s4_amt, delta_fmt='money') }}
+  {{ stat_card("Closed Won (MTD)", t.won_n ~ " deals · " ~ fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
 </div>
 
 <!-- Deal count table -->

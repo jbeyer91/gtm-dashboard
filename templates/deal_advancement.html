@@ -12,13 +12,14 @@
 {{ csv_link(url_for('deal_advancement_csv') ~ '?period=' ~ period ~ '&source=' ~ source) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-  {{ stat_card("Deals Created", t.created) }}
-  {{ stat_card("→ Stage 2", t.to_s2) }}
-  {{ stat_card("→ Stage 3", t.to_s3) }}
-  {{ stat_card("→ Stage 4", t.to_s4) }}
-  {{ stat_card("Closed Won", t.won) }}
-  {{ stat_card("Closed Lost", t.lost) }}
+  {{ stat_card("Deals Created", t.created, delta=deltas.created) }}
+  {{ stat_card("→ Stage 2", t.to_s2, delta=deltas.to_s2) }}
+  {{ stat_card("→ Stage 3", t.to_s3, delta=deltas.to_s3) }}
+  {{ stat_card("→ Stage 4", t.to_s4, delta=deltas.to_s4) }}
+  {{ stat_card("Closed Won", t.won, delta=deltas.won) }}
+  {{ stat_card("Closed Lost", t.lost, delta=deltas.lost, invert=true) }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">

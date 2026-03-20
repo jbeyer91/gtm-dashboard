@@ -12,11 +12,12 @@
 {{ csv_link(url_for('deals_won_csv') ~ '?period=' ~ period ~ '&source=' ~ source) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  {{ stat_card("Won Revenue", fmt_money(t.total_won_amt)) }}
-  {{ stat_card("Deals Won", t.total_won_n) }}
-  {{ stat_card("Avg ACV", fmt_money(t.acv)) }}
-  {{ stat_card("Win Rate", fmt_pct(t.win_rate), t.total_won_n ~ " won / " ~ (t.total_won_n + t.total_lost_n) ~ " closed") }}
+  {{ stat_card("Won Revenue", fmt_money(t.total_won_amt), delta=deltas.total_won_amt, delta_fmt='money') }}
+  {{ stat_card("Deals Won", t.total_won_n, delta=deltas.total_won_n) }}
+  {{ stat_card("Avg ACV", fmt_money(t.acv), delta=deltas.acv, delta_fmt='money') }}
+  {{ stat_card("Win Rate", fmt_pct(t.win_rate), t.total_won_n ~ " won / " ~ (t.total_won_n + t.total_lost_n) ~ " closed", delta=deltas.win_rate, delta_fmt='pct') }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">

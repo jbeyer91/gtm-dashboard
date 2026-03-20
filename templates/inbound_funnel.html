@@ -11,12 +11,13 @@
 {{ csv_link(url_for('inbound_funnel_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
-  {{ stat_card("Leads Created", t.leads_created) }}
-  {{ stat_card("Deal Creation %", fmt_pct(t.deal_creation_pct)) }}
-  {{ stat_card("Deals Created", t.deals_created) }}
-  {{ stat_card("Win Rate", fmt_pct(t.win_rate_pct)) }}
-  {{ stat_card("Won Revenue", fmt_money(t.won_amt)) }}
+  {{ stat_card("Leads Created", t.leads_created, delta=deltas.leads_created) }}
+  {{ stat_card("Deal Creation %", fmt_pct(t.deal_creation_pct), delta=deltas.deal_creation_pct, delta_fmt='pct') }}
+  {{ stat_card("Deals Created", t.deals_created, delta=deltas.deals_created) }}
+  {{ stat_card("Win Rate", fmt_pct(t.win_rate_pct), delta=deltas.win_rate_pct, delta_fmt='pct') }}
+  {{ stat_card("Won Revenue", fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
 </div>
 
 <!-- Volume table -->
