@@ -96,6 +96,35 @@ OWNER_EXCLUDE = frozenset({
 })
 
 
+@lru_cache(maxsize=1)
+def get_lifecyclestage_value(label: str) -> str:
+    """Return the internal API value for a lifecycle stage label (e.g. 'Disqualified').
+
+    HubSpot stores custom lifecycle stages with numeric internal IDs. This
+    function calls the properties API once (result is process-lifetime cached)
+    and maps the human-readable label to its internal value string.
+    Falls back to label.lower() with spaces stripped if the API call fails or
+    the label isn't found.
+    """
+    fallback = label.lower().replace(" ", "")
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/crm/v3/properties/contacts/lifecyclestage",
+            headers=HEADERS,
+        )
+        if not resp.ok:
+            logger.warning("lifecyclestage property fetch failed: %s", resp.text)
+            return fallback
+        for opt in resp.json().get("options", []):
+            if opt.get("label", "").strip().lower() == label.strip().lower():
+                return opt["value"]
+        logger.warning("lifecyclestage label %r not found in options", label)
+        return fallback
+    except Exception as exc:
+        logger.warning("lifecyclestage lookup error: %s", exc)
+        return fallback
+
+
 @ttl_cache
 def get_team_owner_ids() -> frozenset:
     """Return CRM owner IDs for all members of the TEAM_FILTER teams.
