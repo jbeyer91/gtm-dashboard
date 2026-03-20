@@ -667,6 +667,159 @@ def deals_won_csv():
     )
 
 
+@app.route("/pipeline-generated/export.csv")
+@login_required
+def pipeline_generated_csv():
+    period = request.args.get("period", "this_month")
+    data = analytics.compute_pipeline_generated(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Total Pipeline $", "Total Deals", "Total ACV $",
+                "Cold Outreach $", "Cold Outreach #",
+                "Inbound $", "Inbound #",
+                "Conference $", "Conference #",
+                "Referral $", "Referral #"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["total_amt"], r["total_n"], round(r["total_acv"]),
+                    r["cold_outreach_amt"], r["cold_outreach_n"],
+                    r["inbound_amt"], r["inbound_n"],
+                    r["conference_amt"], r["conference_n"],
+                    r["referral_amt"], r["referral_n"]])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["total_amt"], t["total_n"], round(t["total_acv"]),
+                t["cold_outreach_amt"], t["cold_outreach_n"],
+                t["inbound_amt"], t["inbound_n"],
+                t["conference_amt"], t["conference_n"],
+                t["referral_amt"], t["referral_n"]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=pipeline-generated-{period}.csv"})
+
+
+@app.route("/pipeline-coverage/export.csv")
+@login_required
+def pipeline_coverage_csv():
+    period = request.args.get("period", "this_month")
+    data = analytics.compute_pipeline_coverage(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "S1 #", "S1 $", "S2 #", "S2 $", "S3 #", "S3 $", "S4 #", "S4 $", "Won #", "Won $"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["s1_n"], r["s1_amt"], r["s2_n"], r["s2_amt"],
+                    r["s3_n"], r["s3_amt"], r["s4_n"], r["s4_amt"], r["won_n"], r["won_amt"]])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["s1_n"], t["s1_amt"], t["s2_n"], t["s2_amt"],
+                t["s3_n"], t["s3_amt"], t["s4_n"], t["s4_amt"], t["won_n"], t["won_amt"]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=pipeline-coverage-{period}.csv"})
+
+
+@app.route("/deal-advancement/export.csv")
+@login_required
+def deal_advancement_csv():
+    period = request.args.get("period", "last_90")
+    source = request.args.get("source", "All")
+    data = analytics.compute_deal_advancement(period, source)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Deals Created", "Advanced to S2", "Advanced to S3", "Advanced to S4", "Won", "Lost"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["created"], r["to_s2"], r["to_s3"], r["to_s4"], r["won"], r["lost"]])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["created"], t["to_s2"], t["to_s3"], t["to_s4"], t["won"], t["lost"]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=deal-advancement-{period}.csv"})
+
+
+@app.route("/deals-lost/export.csv")
+@login_required
+def deals_lost_csv():
+    period = request.args.get("period", "this_month")
+    data = analytics.compute_deals_lost(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Total Lost", "Cost/Price", "Never Demoed", "Timeline",
+                "Stakeholder Issue", "Competitor", "Product Gap", "Other", "Value/ROI"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["total"], r["cost"], r["never_demoed"], r["timeline"],
+                    r["stakeholder_issue"], r["competitor"], r["product"], r["other"], r["value"]])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["total"], t["cost"], t["never_demoed"], t["timeline"],
+                t["stakeholder_issue"], t["competitor"], t["product"], t["other"], t["value"]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=deals-lost-{period}.csv"})
+
+
+@app.route("/forecast/export.csv")
+@login_required
+def forecast_csv():
+    period = request.args.get("period", "this_quarter")
+    data = analytics.compute_forecast(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Won $", "Commit $", "Commit #", "Submitted Forecast $",
+                "Best Case $", "Best Case #", "Weighted $", "Quota $", "Gap $", "Attain %"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["won_amt"], r["commit_amt"], r["commit_n"],
+                    r["submitted_amt"] or "", r["bestcase_amt"], r["bestcase_n"],
+                    r["weighted_amt"], r["quota_amt"], r["gap_amt"],
+                    f"{r['attain_pct']:.1f}%" if r["attain_pct"] is not None else ""])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["won_amt"], t["commit_amt"], t["commit_n"],
+                t["submitted_amt"] or "", t["bestcase_amt"], t["bestcase_n"],
+                t["weighted_amt"], t["quota_amt"], t["gap_amt"],
+                f"{t['attain_pct']:.1f}%" if t["attain_pct"] is not None else ""])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=forecast-{period}.csv"})
+
+
+@app.route("/book-coverage/export.csv")
+@login_required
+def book_coverage_csv():
+    data = analytics.compute_book_coverage()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Active (30d)", "Called (120d)",
+                "In Sequence", "Active %", "Called %", "In Seq %", "Overdue Tasks"])
+    for r in data["rows"]:
+        w.writerow([r["ae"], r["total_accounts"], r["ac_accounts"], r["active_30"],
+                    r["called_120"], r["in_sequence"],
+                    f"{r['pct_active_30']:.1f}%", f"{r['pct_called_120']:.1f}%",
+                    f"{r['pct_in_sequence']:.1f}%", r["overdue_tasks"]])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["total_accounts"], t["ac_accounts"], t["active_30"],
+                t["called_120"], t["in_sequence"],
+                f"{t['pct_active_30']:.1f}%", f"{t['pct_called_120']:.1f}%",
+                f"{t['pct_in_sequence']:.1f}%", t["overdue_tasks"]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=book-coverage.csv"})
+
+
+@app.route("/inbound-funnel/export.csv")
+@login_required
+def inbound_funnel_csv():
+    period = request.args.get("period", "this_month")
+    data = analytics.compute_inbound_funnel(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Source", "Leads Created", "Disqualified", "Contacted", "DQ %",
+                "Follow-up %", "Deals Created", "Deal Creation %", "Deals Lost",
+                "Deals Won", "Win Rate %", "Pipeline $", "Won $", "Lost $", "ACV $"])
+    for r in data["rows"]:
+        w.writerow([r["source"], r["leads_created"], r["leads_disqualified"],
+                    r["leads_contacted"], f"{r['dq_pct']:.1f}%", f"{r['follow_up_pct']:.1f}%",
+                    r["deals_created"], f"{r['deal_creation_pct']:.1f}%",
+                    r["deals_lost"], r["deals_won"], f"{r['win_rate_pct']:.1f}%",
+                    r["pg_amt"], r["won_amt"], r["lost_amt"], round(r["acv_won"])])
+    t = data["totals"]
+    w.writerow(["TOTAL", t["leads_created"], t["leads_disqualified"],
+                t["leads_contacted"], f"{t['dq_pct']:.1f}%", f"{t['follow_up_pct']:.1f}%",
+                t["deals_created"], f"{t['deal_creation_pct']:.1f}%",
+                t["deals_lost"], t["deals_won"], f"{t['win_rate_pct']:.1f}%",
+                t["pg_amt"], t["won_amt"], t["lost_amt"], round(t["acv_won"])])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=inbound-funnel-{period}.csv"})
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.

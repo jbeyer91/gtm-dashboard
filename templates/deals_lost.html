@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, stat_card %}
+{% from "macros.html" import period_filter, stat_card, csv_link %}
 {% block title %} — Deals Lost{% endblock %}
 {% block content %}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
@@ -8,6 +8,7 @@
 </div>
 
 {{ period_filter(period, periods) }}
+{{ csv_link(url_for('deals_lost_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
