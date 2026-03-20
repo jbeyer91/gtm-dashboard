@@ -6,7 +6,7 @@ from hubspot import (
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
-    get_overdue_sequence_tasks, _parse_hs_datetime,
+    get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
 )
 
 SOURCE_MAP = {
@@ -624,6 +624,142 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
 
 @ttl_cache
+def compute_forecast(period: str) -> dict:
+    start, end = get_date_range(period)
+    owners = get_owners()
+    quotas = get_quotas(start, end)
+
+    won_deals = get_deals(start, end, "closedate")
+    won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
+
+    open_deals = get_all_open_deals(start, end)
+
+    # Map HubSpot user_id → owner_id (needed to resolve forecast submissions)
+    user_id_to_owner_id = {
+        v["user_id"]: v["id"] for v in owners.values() if v.get("user_id")
+    }
+
+    # Fetch HubSpot forecast submissions and pick the most-recent one per rep.
+    # The beta API returns an object per submission; we take the latest by
+    # hs_createdate for each user.  Amount field name is not yet confirmed in
+    # public docs, so we try the most likely candidates in order.
+    _AMOUNT_FIELDS = (
+        "hs_forecasted_amount",
+        "hs_amount",
+        "hs_submission_amount",
+        "hs_target_amount",
+    )
+    owner_submitted: dict[str, float] = {}
+    raw_submissions = get_forecast_submissions()
+    # Group by user, keep latest
+    latest_by_user: dict[str, dict] = {}
+    for sub in raw_submissions:
+        props = sub.get("properties", {})
+        uid = props.get("hs_created_by_user_id") or ""
+        if not uid:
+            continue
+        created = props.get("hs_createdate") or ""
+        prev = latest_by_user.get(uid)
+        if prev is None or created > (prev.get("properties", {}).get("hs_createdate") or ""):
+            latest_by_user[uid] = sub
+    for uid, sub in latest_by_user.items():
+        props = sub.get("properties", {})
+        amt = 0.0
+        for field in _AMOUNT_FIELDS:
+            raw = props.get(field)
+            if raw not in (None, "", "0", 0):
+                try:
+                    amt = float(raw)
+                    break
+                except (ValueError, TypeError):
+                    pass
+        oid = user_id_to_owner_id.get(uid)
+        if oid:
+            owner_submitted[oid] = amt
+
+    # Index won by owner
+    owner_won = defaultdict(float)
+    for d in won_deals:
+        oid = d["properties"].get("hubspot_owner_id") or ""
+        owner_won[oid] += float(d["properties"].get("amount") or 0)
+
+    # Index open deals by owner — commit, best case, weighted
+    owner_commit   = defaultdict(float)
+    owner_bestcase = defaultdict(float)
+    owner_weighted = defaultdict(float)
+    owner_commit_n   = defaultdict(int)
+    owner_bestcase_n = defaultdict(int)
+
+    for d in open_deals:
+        props = d["properties"]
+        oid = props.get("hubspot_owner_id") or ""
+        amt  = float(props.get("amount") or 0)
+        prob = float(props.get("hs_deal_stage_probability") or 0)
+        cat  = (props.get("hs_manual_forecast_category") or "").lower()
+
+        owner_bestcase[oid] += amt
+        owner_bestcase_n[oid] += 1
+        owner_weighted[oid] += amt * prob
+
+        if cat == "commit":
+            owner_commit[oid] += amt
+            owner_commit_n[oid] += 1
+
+    rows = []
+    for oid, owner in owners.items():
+        won_amt      = owner_won.get(oid, 0.0)
+        commit_amt   = owner_commit.get(oid, 0.0)
+        commit_n     = owner_commit_n.get(oid, 0)
+        bestcase_amt = owner_bestcase.get(oid, 0.0)
+        bestcase_n   = owner_bestcase_n.get(oid, 0)
+        weighted_amt = owner_weighted.get(oid, 0.0)
+        submitted_amt = owner_submitted.get(oid)   # None = not submitted
+        quota_amt    = quotas.get(oid, 0.0)
+        forecast_amt = won_amt + commit_amt   # Won + Commit
+        gap_amt      = (quota_amt - forecast_amt) if quota_amt else None
+        attain_pct   = round(forecast_amt / quota_amt * 100, 1) if quota_amt else None
+
+        rows.append({
+            "ae":             owner["last_name"] or owner["name"],
+            "won_amt":        won_amt,
+            "commit_amt":     commit_amt,
+            "commit_n":       commit_n,
+            "forecast_amt":   forecast_amt,
+            "submitted_amt":  submitted_amt,
+            "bestcase_amt":   bestcase_amt,
+            "bestcase_n":     bestcase_n,
+            "weighted_amt":   weighted_amt,
+            "quota_amt":      quota_amt,
+            "gap_amt":        gap_amt,
+            "attain_pct":     attain_pct,
+        })
+
+    rows.sort(key=lambda r: r["forecast_amt"], reverse=True)
+
+    def _s(k): return sum(r[k] for r in rows if r[k] is not None)
+    any_submitted = any(r["submitted_amt"] is not None for r in rows)
+    total_submitted = _s("submitted_amt") if any_submitted else None
+    total_forecast = _s("forecast_amt")
+    total_quota    = _s("quota_amt")
+    totals = {
+        "ae":             "TOTAL",
+        "won_amt":        _s("won_amt"),
+        "commit_amt":     _s("commit_amt"),
+        "commit_n":       _s("commit_n"),
+        "forecast_amt":   total_forecast,
+        "submitted_amt":  total_submitted,
+        "bestcase_amt":   _s("bestcase_amt"),
+        "bestcase_n":     _s("bestcase_n"),
+        "weighted_amt":   _s("weighted_amt"),
+        "quota_amt":      total_quota,
+        "gap_amt":        (total_quota - total_forecast) if total_quota else None,
+        "attain_pct":     round(total_forecast / total_quota * 100, 1) if total_quota else None,
+    }
+
+    return {"rows": rows, "totals": totals, "period": period, "has_submissions": any_submitted}
+
+
+@ttl_cache
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
@@ -814,8 +950,6 @@ def compute_book_coverage() -> dict:
         "overdue_tasks": 0,
     })
 
-    owners_with_custom_overdue: set = set()
-
     def _is_truthy(val) -> bool:
         return str(val).strip().lower() in ("true", "yes", "1")
 
@@ -833,32 +967,22 @@ def compute_book_coverage() -> dict:
             owner_data[oid]["ac_accounts"] += 1
 
             # Sales activity in last 30 days
-            custom_active = props.get("sales_activity_in_last_30_days")
-            if custom_active is not None and custom_active != "":
-                if _is_truthy(custom_active):
-                    owner_data[oid]["active_30"] += 1
-            else:
-                last_act_raw = props.get("notes_last_activity_date")
-                if last_act_raw:
-                    try:
-                        if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
-                            owner_data[oid]["active_30"] += 1
-                    except Exception:
-                        pass
+            last_act_raw = props.get("notes_last_activity_date")
+            if last_act_raw:
+                try:
+                    if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
+                        owner_data[oid]["active_30"] += 1
+                except Exception:
+                    pass
 
             # Called within 120 days
-            custom_called = props.get("called_within_120_days")
-            if custom_called is not None and custom_called != "":
-                if _is_truthy(custom_called):
-                    owner_data[oid]["called_120"] += 1
-            else:
-                last_contacted_raw = props.get("notes_last_contacted")
-                if last_contacted_raw:
-                    try:
-                        if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
-                            owner_data[oid]["called_120"] += 1
-                    except Exception:
-                        pass
+            last_contacted_raw = props.get("notes_last_contacted")
+            if last_contacted_raw:
+                try:
+                    if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
+                        owner_data[oid]["called_120"] += 1
+                except Exception:
+                    pass
 
             # In active sequence
             custom_seq = props.get("in_active_sequence")
@@ -869,19 +993,9 @@ def compute_book_coverage() -> dict:
                 if company["id"] in seq_company_ids:
                     owner_data[oid]["in_sequence"] += 1
 
-            # Overdue tasks (per company custom property)
-            custom_overdue = props.get("num_of_overdue_tasks")
-            if custom_overdue is not None and custom_overdue != "":
-                try:
-                    owner_data[oid]["overdue_tasks"] += int(float(custom_overdue))
-                    owners_with_custom_overdue.add(oid)
-                except (ValueError, TypeError):
-                    pass
-
-    # Fall back to task search for owners without custom overdue data
     for task in tasks:
         oid = task["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid) and oid not in owners_with_custom_overdue:
+        if oid and _owner_allowed(oid):
             owner_data[oid]["overdue_tasks"] += 1
 
     rows = []

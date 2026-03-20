@@ -424,7 +424,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
         "properties": [
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
-            "deal_source",
+            "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
         ],
     }
     return _search_all("deals", payload)
@@ -666,9 +666,6 @@ def get_companies_for_coverage() -> list:
                 "notes_last_contacted",
                 "name",
                 "in_active_sequence",
-                "sales_activity_in_last_30_days",
-                "called_within_120_days",
-                "num_of_overdue_tasks",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
@@ -747,3 +744,40 @@ def get_call_to_contact_map(call_ids: list) -> dict:
     """
     call_to_contacts = _batch_associations("calls", "contacts", call_ids)
     return {call_id: contacts[0] for call_id, contacts in call_to_contacts.items() if contacts}
+
+
+@ttl_cache
+def get_forecast_submissions() -> list:
+    """Fetch forecast submissions from HubSpot's Forecast Read API (beta, Jan 2026).
+
+    Requires crm.objects.forecasts.read scope on the token.
+    Returns raw list of forecast objects; empty list if the API is unavailable
+    or the token lacks the required scope.
+    """
+    # Discover all available properties first so we fetch everything useful.
+    # Fall back to a known-good minimal set if the schema endpoint fails.
+    props_to_fetch = [
+        "hs_created_by_user_id",
+        "hs_createdate",
+        "hs_lastmodifieddate",
+        "hs_milestone",
+        "hs_object_id",
+        "hs_team_id",
+        "hs_year",
+        # Amount field — name is not yet confirmed in public docs; try common variants.
+        "hs_forecasted_amount",
+        "hs_amount",
+        "hs_submission_amount",
+        "hs_target_amount",
+    ]
+
+    payload = {
+        "filterGroups": [{"filters": []}],
+        "properties": props_to_fetch,
+        "limit": 200,
+    }
+    try:
+        return _search_all("forecasts", payload)
+    except Exception as exc:
+        logger.warning("get_forecast_submissions: %s", exc)
+        return []

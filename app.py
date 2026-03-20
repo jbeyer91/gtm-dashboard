@@ -43,6 +43,7 @@ NAV = [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
+        {"endpoint": "forecast",        "label": "Forecast"},
     ]},
     {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Book Coverage"},
@@ -162,6 +163,17 @@ def deals_lost():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_lost")
     return render_template("deals_lost.html", data=data, periods=PERIODS, period=period, nav=NAV, active="deals_lost")
+
+
+@app.route("/forecast")
+@login_required
+def forecast():
+    period = request.args.get("period", "this_quarter")
+    try:
+        data = analytics.compute_forecast(period)
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="forecast")
+    return render_template("forecast.html", data=data, periods=PERIODS, period=period, nav=NAV, active="forecast")
 
 
 @app.route("/inbound-funnel")
@@ -468,6 +480,17 @@ def debug_quotas():
         "goal_count":      len(raw_goals),
         "goals":           raw_goals,
     })
+
+
+@app.route("/api/debug/forecast-submissions")
+@login_required
+def debug_forecast_submissions():
+    """Show raw forecast submission objects to help identify the correct amount property."""
+    from hubspot import get_forecast_submissions
+    subs = get_forecast_submissions()
+    # Return all properties from the first few records so we can see what's available
+    sample = [s.get("properties", {}) for s in subs[:20]]
+    return jsonify({"total": len(subs), "sample": sample})
 
 
 @app.route("/api/debug/icp-rank-values")
