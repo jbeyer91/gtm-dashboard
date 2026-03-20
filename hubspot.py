@@ -464,52 +464,30 @@ def get_contacts_inbound(start: datetime, end: datetime) -> list:
 
 @ttl_cache
 def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
-    """Fetch contacts that are members of a HubSpot list, filtered to createdate in [start, end]."""
-    # Page through list memberships to collect all contact IDs
-    member_ids = []
-    after = None
-    while True:
-        url = f"{BASE_URL}/crm/v3/lists/{list_id}/memberships?limit=100"
-        if after:
-            url += f"&after={after}"
-        resp = requests.get(url, headers=HEADERS)
-        if not resp.ok:
-            logger.warning("List %s memberships error: %s", list_id, resp.text)
-            break
-        data = resp.json()
-        for r in data.get("results", []):
-            member_ids.append(str(r["recordId"]))
-        after = data.get("paging", {}).get("next", {}).get("after")
-        if not after:
-            break
+    """Fetch contacts that joined a HubSpot list within [start, end].
 
-    if not member_ids:
-        return []
-
-    props = [
-        "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
-        "hs_analytics_source", "hs_lead_status", "lifecyclestage",
-        "num_associated_deals", "last_touch_channel",
-    ]
-    contacts = []
-    for i in range(0, len(member_ids), 100):
-        batch = member_ids[i : i + 100]
-        resp = requests.post(
-            f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
-            headers=HEADERS,
-            json={"inputs": [{"id": cid} for cid in batch], "properties": props},
-        )
-        if not resp.ok:
-            continue
-        for c in resp.json().get("results", []):
-            raw_date = c["properties"].get("createdate") or ""
-            try:
-                dt = _parse_hs_datetime(raw_date)
-                if start <= dt <= end:
-                    contacts.append(c)
-            except ValueError:
-                pass
-    return contacts
+    Filters by hs_date_entered_{list_id} — the date the contact joined the list
+    (i.e. when they submitted the form), not their original createdate.
+    """
+    start_ts = int(start.timestamp() * 1000)
+    end_ts = int(end.timestamp() * 1000)
+    date_prop = f"hs_date_entered_{list_id}"
+    payload = {
+        "filterGroups": [
+            {
+                "filters": [
+                    {"propertyName": date_prop, "operator": "GTE", "value": str(start_ts)},
+                    {"propertyName": date_prop, "operator": "LTE", "value": str(end_ts)},
+                ]
+            }
+        ],
+        "properties": [
+            "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
+            "hs_analytics_source", "hs_lead_status", "lifecyclestage",
+            "num_associated_deals", "last_touch_channel", date_prop,
+        ],
+    }
+    return _search_all("contacts", payload)
 
 
 def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
