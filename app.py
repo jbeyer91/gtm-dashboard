@@ -220,15 +220,42 @@ def debug_deals_won():
 @app.route("/api/debug/lost-reasons")
 @login_required
 def debug_lost_reasons():
-    """Show raw hs_closed_lost_reason values from HubSpot for lost deals."""
-    from hubspot import get_date_range, get_deals
-    from collections import Counter
+    """Find the correct HubSpot property name for closed lost reasons."""
+    import requests as req
+    from hubspot import BASE_URL, HEADERS, get_date_range
     period = request.args.get("period", "this_month")
     start, end = get_date_range(period)
-    deals = get_deals(start, end, "closedate")
-    lost = [d for d in deals if d["properties"].get("hs_is_closed_lost") == "true"]
-    counts = Counter(d["properties"].get("hs_closed_lost_reason") or "__NONE__" for d in lost)
-    return jsonify({"period": period, "total_lost": len(lost), "reason_values": dict(counts.most_common())})
+
+    # Step 1: find all deal properties whose name or label contains "reason" or "lost"
+    props_resp = req.get(f"{BASE_URL}/crm/v3/properties/deals?limit=500", headers=HEADERS)
+    candidate_props = []
+    if props_resp.ok:
+        for p in props_resp.json().get("results", []):
+            name = p.get("name", "")
+            label = p.get("label", "")
+            if any(kw in name.lower() or kw in label.lower() for kw in ("reason", "lost", "loss")):
+                candidate_props.append({"name": name, "label": label, "type": p.get("type")})
+
+    # Step 2: fetch 3 sample lost deals with those candidate property names
+    prop_names = [p["name"] for p in candidate_props]
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "pipeline",         "operator": "EQ",  "value": "31544320"},
+            {"propertyName": "hs_is_closed_lost", "operator": "EQ",  "value": "true"},
+            {"propertyName": "closedate",         "operator": "GTE", "value": str(int(start.timestamp() * 1000))},
+            {"propertyName": "closedate",         "operator": "LTE", "value": str(int(end.timestamp() * 1000))},
+        ]}],
+        "properties": prop_names,
+        "limit": 3,
+    }
+    deals_resp = req.post(f"{BASE_URL}/crm/v3/objects/deals/search", headers=HEADERS, json=payload)
+    samples = []
+    if deals_resp.ok:
+        for deal in deals_resp.json().get("results", []):
+            populated = {k: v for k, v in deal.get("properties", {}).items() if v and k in prop_names}
+            samples.append({"id": deal["id"], "populated_reason_props": populated})
+
+    return jsonify({"candidate_properties": candidate_props, "sample_deals": samples})
 
 
 @app.route("/api/debug/company-properties")
