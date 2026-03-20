@@ -10,6 +10,15 @@ from hubspot import (
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
 )
 
+# ── Business model constants ──────────────────────────────────────────────────
+ACV                = 12_000   # Average contract value ($)
+STAGE1_TO_STAGE2   = 0.60     # % of created deals that advance to stage 2
+STAGE2_WIN_RATE    = 0.25     # Win rate for deals that reach stage 2
+# Derived: stage 2 pipeline multiple needed to cover quota
+S2_COVERAGE_MULT   = round(1 / STAGE2_WIN_RATE)          # 4x
+# Derived: created deals needed per $ of quota
+DEALS_PER_DOLLAR   = 1 / (ACV * STAGE1_TO_STAGE2 * STAGE2_WIN_RATE)  # 1/1800
+
 SOURCE_MAP = {
     "PAID_SEARCH": "Paid Search",
     "ORGANIC_SEARCH": "Organic Search",
@@ -735,8 +744,8 @@ def compute_forecast(period: str) -> dict:
         weighted_amt = owner_weighted.get(oid, 0.0)
         submitted_amt = owner_submitted.get(oid)   # None = not submitted
         quota_amt    = quotas.get(oid, 0.0)
-        gap_amt      = (quota_amt - submitted_amt) if (quota_amt and submitted_amt is not None) else None
-        attain_pct   = round(submitted_amt / quota_amt * 100, 1) if (quota_amt and submitted_amt is not None) else None
+        gap_amt      = (quota_amt - won_amt) if quota_amt else None
+        attain_pct   = round(won_amt / quota_amt * 100, 1) if quota_amt else None
 
         rows.append({
             "ae":             owner["last_name"] or owner["name"],
@@ -770,8 +779,8 @@ def compute_forecast(period: str) -> dict:
             "bestcase_n":     _s("bestcase_n", src),
             "weighted_amt":   _s("weighted_amt", src),
             "quota_amt":      sub_quota,
-            "gap_amt":        (sub_quota - sub_submitted) if sub_quota else None,
-            "attain_pct":     round(sub_submitted / sub_quota * 100, 1) if sub_quota else None,
+            "gap_amt":        (sub_quota - _s("won_amt", src)) if sub_quota else None,
+            "attain_pct":     round(_s("won_amt", src) / sub_quota * 100, 1) if sub_quota else None,
         }
 
     # Build team groups (preserve TEAM_FILTER order)
@@ -800,8 +809,8 @@ def compute_forecast(period: str) -> dict:
         "bestcase_n":     _s("bestcase_n", rows),
         "weighted_amt":   _s("weighted_amt", rows),
         "quota_amt":      total_quota,
-        "gap_amt":        (total_quota - total_submitted) if total_quota else None,
-        "attain_pct":     round(total_submitted / total_quota * 100, 1) if total_quota else None,
+        "gap_amt":        (total_quota - _s("won_amt", rows)) if total_quota else None,
+        "attain_pct":     round(_s("won_amt", rows) / total_quota * 100, 1) if total_quota else None,
     }
 
     return {"rows": rows, "groups": groups, "totals": totals, "period": period}
@@ -1090,6 +1099,66 @@ def compute_book_coverage() -> dict:
 
 
 @ttl_cache
+def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
+    """Compute per-rep win rate, stage-2 advancement rate, and ACV from closed deals.
+
+    Uses trailing `lookback_days` of won+lost deals. Falls back to global constants
+    for reps with fewer than MIN_SAMPLE concluded deals.
+
+    Returns {owner_id: {"win_rate_s2": float, "s1_to_s2": float, "acv": float, "sample": int}}
+    """
+    MIN_SAMPLE = 5
+    _s2 = NB_STAGES["stage2"]
+
+    end   = datetime.now(timezone.utc)
+    start = end - timedelta(days=lookback_days)
+    deals = get_deals(start, end, "closedate")
+    closed = [d for d in deals
+              if d["properties"].get("hs_is_closed_won") == "true"
+              or d["properties"].get("hs_is_closed_lost") == "true"]
+
+    owner_stats = defaultdict(lambda: {
+        "total": 0, "won": 0, "s2_total": 0, "s2_won": 0, "won_amt": 0.0
+    })
+    for d in closed:
+        oid  = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        props  = d["properties"]
+        is_won = props.get("hs_is_closed_won") == "true"
+        amt    = float(props.get("amount") or 0)
+        # Deal reached stage 2 if the hs_date_entered field for that stage is populated
+        hit_s2 = bool(props.get(f"hs_date_entered_{_s2}"))
+
+        owner_stats[oid]["total"] += 1
+        if is_won:
+            owner_stats[oid]["won"]     += 1
+            owner_stats[oid]["won_amt"] += amt
+        if hit_s2:
+            owner_stats[oid]["s2_total"] += 1
+            if is_won:
+                owner_stats[oid]["s2_won"] += 1
+
+    result = {}
+    for oid, s in owner_stats.items():
+        if s["total"] >= MIN_SAMPLE:
+            win_rate_s2 = (s["s2_won"] / s["s2_total"]) if s["s2_total"] else STAGE2_WIN_RATE
+            s1_to_s2    = (s["s2_total"] / s["total"])  if s["total"]    else STAGE1_TO_STAGE2
+            acv         = (s["won_amt"]  / s["won"])     if s["won"]      else ACV
+        else:
+            win_rate_s2 = STAGE2_WIN_RATE
+            s1_to_s2    = STAGE1_TO_STAGE2
+            acv         = ACV
+        result[oid] = {
+            "win_rate_s2": max(win_rate_s2, 0.05),  # floor at 5% to avoid runaway targets
+            "s1_to_s2":    max(s1_to_s2,    0.10),
+            "acv":         max(acv,          1_000),
+            "sample":      s["total"],
+        }
+    return result
+
+
+@ttl_cache
 def compute_scorecard() -> dict:
     """This-month scorecard: per-rep weighted grade across 8 KPIs."""
     start, end = get_date_range("this_month")
@@ -1107,6 +1176,7 @@ def compute_scorecard() -> dict:
     created_deals = get_deals(start, end, "createdate")
     book             = compute_book_coverage()
     book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
+    rep_deal_stats   = _rep_trailing_deal_stats()
     call_stats       = compute_call_stats("this_month")
     call_stats_by_owner = {r["owner_id"]: r for r in call_stats["rows"]}
     pipeline         = compute_pipeline_coverage("this_month")
@@ -1165,7 +1235,12 @@ def compute_scorecard() -> dict:
         avg_dials     = cs.get("avg_dials_per_day", 0.0)
         connect_rate  = cs.get("pct_connect", 0.0)
         attain_pct    = round(won / quota * 100, 1) if quota else 0.0
-        s2_target     = quota * 4
+        rs            = rep_deal_stats.get(oid, {})
+        rep_win_s2    = rs.get("win_rate_s2", STAGE2_WIN_RATE)
+        rep_s1_to_s2  = rs.get("s1_to_s2",   STAGE1_TO_STAGE2)
+        rep_acv       = rs.get("acv",         ACV)
+        s2_target     = quota / rep_win_s2
+        deals_target  = max(1, round(quota / (rep_acv * rep_s1_to_s2 * rep_win_s2)))
 
         book_row    = book_by_owner.get(oid, {})
         ac_accounts = book_row.get("ac_accounts", 0)
@@ -1177,7 +1252,7 @@ def compute_scorecard() -> dict:
         scores = {
             "quota_attainment": _score(attain_pct, 100),
             "stage2":           _score(s2_amt, s2_target),
-            "deals_created":    _score(created, 15),
+            "deals_created":    _score(created, deals_target),
             "stale_accounts":   stale_score,
             "avg_dials":        _score(avg_dials, 40),
             "connect_rate":     _score(connect_rate, 10),
@@ -1194,8 +1269,11 @@ def compute_scorecard() -> dict:
             "won_amt":       won,
             "attain_pct":    attain_pct,
             "deals_created": created,
+            "deals_target":  deals_target,
             "s2_amt":        s2_amt,
-            "s2_target":     s2_target,
+            "s2_target":     round(s2_target),
+            "rep_win_rate":  round(rep_win_s2 * 100, 1),
+            "rep_acv":       round(rep_acv),
             "avg_dials":     avg_dials,
             "connect_rate":  connect_rate,
             "stale_count":   stale_count,
@@ -1216,10 +1294,10 @@ def compute_scorecard() -> dict:
         "won_amt":       t_won,
         "quota_amt":     t_quota,
         "deals_created": sum(r["deals_created"] for r in rows),
-        "deals_target":  15 * n_reps,
+        "deals_target":  sum(r["deals_target"] for r in rows),
         "s2_amt":        sum(r["s2_amt"] for r in rows),
-        "s2_target":     t_quota * 4,
-        "avg_dials":     round(t_dials / period_bdays, 1),
+        "s2_target":     sum(r["s2_target"] for r in rows),
+        "avg_dials":     round(t_dials / period_bdays / n_reps, 1) if n_reps else 0.0,
         "connect_rate":  _pct(t_connects, t_dials),
         "stale_count":   sum(r["stale_count"] for r in rows),
         "ac_accounts":   sum(r["ac_accounts"] for r in rows),
