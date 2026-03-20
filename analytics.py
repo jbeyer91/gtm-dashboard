@@ -10,6 +10,15 @@ from hubspot import (
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
 )
 
+# ── Business model constants ──────────────────────────────────────────────────
+ACV                = 12_000   # Average contract value ($)
+STAGE1_TO_STAGE2   = 0.60     # % of created deals that advance to stage 2
+STAGE2_WIN_RATE    = 0.25     # Win rate for deals that reach stage 2
+# Derived: stage 2 pipeline multiple needed to cover quota
+S2_COVERAGE_MULT   = round(1 / STAGE2_WIN_RATE)          # 4x
+# Derived: created deals needed per $ of quota
+DEALS_PER_DOLLAR   = 1 / (ACV * STAGE1_TO_STAGE2 * STAGE2_WIN_RATE)  # 1/1800
+
 SOURCE_MAP = {
     "PAID_SEARCH": "Paid Search",
     "ORGANIC_SEARCH": "Organic Search",
@@ -1165,7 +1174,8 @@ def compute_scorecard() -> dict:
         avg_dials     = cs.get("avg_dials_per_day", 0.0)
         connect_rate  = cs.get("pct_connect", 0.0)
         attain_pct    = round(won / quota * 100, 1) if quota else 0.0
-        s2_target     = quota * 4
+        s2_target     = quota * S2_COVERAGE_MULT
+        deals_target  = max(1, round(quota * DEALS_PER_DOLLAR))
 
         book_row    = book_by_owner.get(oid, {})
         ac_accounts = book_row.get("ac_accounts", 0)
@@ -1177,7 +1187,7 @@ def compute_scorecard() -> dict:
         scores = {
             "quota_attainment": _score(attain_pct, 100),
             "stage2":           _score(s2_amt, s2_target),
-            "deals_created":    _score(created, 15),
+            "deals_created":    _score(created, deals_target),
             "stale_accounts":   stale_score,
             "avg_dials":        _score(avg_dials, 40),
             "connect_rate":     _score(connect_rate, 10),
@@ -1194,6 +1204,7 @@ def compute_scorecard() -> dict:
             "won_amt":       won,
             "attain_pct":    attain_pct,
             "deals_created": created,
+            "deals_target":  deals_target,
             "s2_amt":        s2_amt,
             "s2_target":     s2_target,
             "avg_dials":     avg_dials,
@@ -1216,9 +1227,9 @@ def compute_scorecard() -> dict:
         "won_amt":       t_won,
         "quota_amt":     t_quota,
         "deals_created": sum(r["deals_created"] for r in rows),
-        "deals_target":  15 * n_reps,
+        "deals_target":  sum(r["deals_target"] for r in rows),
         "s2_amt":        sum(r["s2_amt"] for r in rows),
-        "s2_target":     t_quota * 4,
+        "s2_target":     t_quota * S2_COVERAGE_MULT,
         "avg_dials":     round(t_dials / period_bdays / n_reps, 1) if n_reps else 0.0,
         "connect_rate":  _pct(t_connects, t_dials),
         "stale_count":   sum(r["stale_count"] for r in rows),
