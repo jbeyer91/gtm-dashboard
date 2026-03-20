@@ -464,25 +464,54 @@ def get_contacts_inbound(start: datetime, end: datetime) -> list:
 
 @ttl_cache
 def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
-    """Fetch contacts from a HubSpot list filtered by demo_request_submitted_date."""
-    start_ts = int(start.timestamp() * 1000)
-    end_ts = int(end.timestamp() * 1000)
-    payload = {
-        "filterGroups": [
-            {
-                "filters": [
-                    {"propertyName": "demo_request_submitted_date", "operator": "GTE", "value": str(start_ts)},
-                    {"propertyName": "demo_request_submitted_date", "operator": "LTE", "value": str(end_ts)},
-                ]
-            }
-        ],
-        "properties": [
-            "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
-            "hs_lead_status", "last_touch_channel",
-            "demo_request_submitted_date", "first_sales_activity_after_demo_request",
-        ],
-    }
-    return _search_all("contacts", payload)
+    """Fetch contacts in a HubSpot list, filtered by demo_request_submitted_date in [start, end]."""
+    props = [
+        "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
+        "hs_lead_status", "last_touch_channel",
+        "demo_request_submitted_date", "first_sales_activity_after_demo_request",
+    ]
+
+    # Page through all list members
+    member_ids = []
+    after = None
+    while True:
+        url = f"{BASE_URL}/crm/v3/lists/{list_id}/memberships?limit=100"
+        if after:
+            url += f"&after={after}"
+        resp = requests.get(url, headers=HEADERS)
+        if not resp.ok:
+            logger.warning("List %s memberships error: %s", list_id, resp.text)
+            break
+        data = resp.json()
+        for r in data.get("results", []):
+            member_ids.append(str(r["recordId"]))
+        after = data.get("paging", {}).get("next", {}).get("after")
+        if not after:
+            break
+
+    if not member_ids:
+        return []
+
+    # Batch read properties, then filter by demo_request_submitted_date
+    contacts = []
+    for i in range(0, len(member_ids), 100):
+        batch = member_ids[i : i + 100]
+        resp = requests.post(
+            f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
+            headers=HEADERS,
+            json={"inputs": [{"id": cid} for cid in batch], "properties": props},
+        )
+        if not resp.ok:
+            continue
+        for c in resp.json().get("results", []):
+            raw = c["properties"].get("demo_request_submitted_date") or ""
+            try:
+                dt = _parse_hs_datetime(raw)
+                if start <= dt <= end:
+                    contacts.append(c)
+            except ValueError:
+                pass
+    return contacts
 
 
 def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
