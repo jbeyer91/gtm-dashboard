@@ -803,7 +803,7 @@ def compute_book_coverage() -> dict:
     seq_company_ids = get_sequence_enrolled_company_ids()
     tasks = get_overdue_sequence_tasks()
 
-    AC_TIERS = {"a+", "a", "b", "c"}
+    AC_TIERS = {"superior", "strong", "moderate", "conservative"}
 
     owner_data = defaultdict(lambda: {
         "total": 0,
