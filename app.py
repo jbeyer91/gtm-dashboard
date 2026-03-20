@@ -6,10 +6,11 @@ load_dotenv()
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, abort
+    session, jsonify, abort, Response
 )
+import csv, io
 import analytics
-from cache_utils import clear_cache, last_refreshed_str
+from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -74,7 +75,10 @@ NAV = [
 @app.context_processor
 def inject_cache_info():
     """Make last_refreshed available in every template automatically."""
-    return {"last_refreshed": last_refreshed_str()}
+    import time
+    ts = last_refreshed_ts()
+    stale = ts > 0 and (time.time() - ts) > 7200  # >2 hours = stale
+    return {"last_refreshed": last_refreshed_str(), "cache_stale": stale}
 
 
 def login_required(f):
@@ -122,10 +126,22 @@ def index():
 @login_required
 def scorecard():
     from datetime import datetime, timezone
-    data = analytics.compute_scorecard()
+    data      = analytics.compute_scorecard("this_month")
+    last_data = analytics.compute_scorecard("last_month")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
+    # Build team-level deltas (this month vs last month)
+    t, lt = data["team"], last_data["team"]
+    def _delta(key): return round(t[key] - lt[key], 1)
+    deltas = {
+        "attain_pct":    _delta("attain_pct"),
+        "deals_created": _delta("deals_created"),
+        "s2_amt":        round(t["s2_amt"] - lt["s2_amt"]),
+        "avg_dials":     _delta("avg_dials"),
+        "connect_rate":  _delta("connect_rate"),
+        "stale_count":   _delta("stale_count"),
+    }
     return render_template("scorecard.html", data=data, month_label=month_label,
-                           active="scorecard", nav=NAV)
+                           deltas=deltas, active="scorecard", nav=NAV)
 
 
 @app.route("/call-stats")
@@ -536,6 +552,119 @@ def debug_icp_rank_values():
         rank = (c["properties"].get("icp_rank") or "").strip()
         rank_counts[rank if rank else "(blank)"] += 1
     return jsonify({"total_companies": len(companies), "icp_rank_distribution": dict(rank_counts)})
+
+
+# ── CSV export routes ────────────────────────────────────────────────────────
+
+@app.route("/scorecard/export.csv")
+@login_required
+def scorecard_csv():
+    from datetime import datetime, timezone
+    data = analytics.compute_scorecard("this_month")
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Grade", "Quota %", "Won $", "Quota $", "Deals Created",
+                "$ to Stage 2", "Stage 2 Target $", "Avg Dials/Day", "Connect %", "Stale Accounts", "Total Accounts"])
+    for r in data["rows"]:
+        w.writerow([
+            r["ae"], r["grade"],
+            f"{r['attain_pct']:.1f}%",
+            r["won_amt"], r["quota_amt"],
+            r["deals_created"],
+            r["s2_amt"], r["s2_target"],
+            r["avg_dials"],
+            f"{r['connect_rate']:.1f}%",
+            r["stale_count"], r["ac_accounts"],
+        ])
+    t = data["team"]
+    w.writerow([
+        "TOTAL", "",
+        f"{t['attain_pct']:.1f}%",
+        t["won_amt"], t["quota_amt"],
+        t["deals_created"],
+        t["s2_amt"], t["s2_target"],
+        t["avg_dials"],
+        f"{t['connect_rate']:.1f}%",
+        t["stale_count"], t["ac_accounts"],
+    ])
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=scorecard-{month}.csv"},
+    )
+
+
+@app.route("/call-stats/export.csv")
+@login_required
+def call_stats_csv():
+    period = request.args.get("period", "last_90")
+    data = analytics.compute_call_stats(period)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Dials", "Avg Dials/Day", "Connects", "Connect %",
+                "Conversations", "Convo %", "OB Deals Created", "Dial→Deal %", "OB Deals to Stage 2"])
+    for r in data["rows"]:
+        w.writerow([
+            r["ae"], r["dials"], r["avg_dials_per_day"],
+            r["connects"], f"{r['pct_connect']:.1f}%",
+            r["conversations"], f"{r['pct_conversation']:.1f}%",
+            r["outbound_deals_created"], f"{r['pct_deals']:.1f}%",
+            r["outbound_deals_to_s2"],
+        ])
+    t = data["totals"]
+    w.writerow([
+        "TOTAL", t["dials"], t["avg_dials_per_day"],
+        t["connects"], f"{t['pct_connect']:.1f}%",
+        t["conversations"], f"{t['pct_conversation']:.1f}%",
+        t["outbound_deals_created"], f"{t['pct_deals']:.1f}%",
+        t["outbound_deals_to_s2"],
+    ])
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=call-stats-{period}.csv"},
+    )
+
+
+@app.route("/deals-won/export.csv")
+@login_required
+def deals_won_csv():
+    period = request.args.get("period", "this_month")
+    source = request.args.get("source", "All")
+    data = analytics.compute_deals_won(period, source)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Rep", "Won $", "Won Deals", "Lost Deals", "Win Rate %", "ACV $",
+                "Quota $", "Attain %", "Cold Outbound $", "Cold Outbound #",
+                "Inbound $", "Inbound #", "Conference $", "Conference #", "Referral $", "Referral #"])
+    for r in data["rows"]:
+        w.writerow([
+            r["ae"], r["total_won_amt"], r["total_won_n"], r["total_lost_n"],
+            f"{r['win_rate']:.1f}%", round(r["acv"]),
+            r["quota_amt"],
+            f"{r['attain_pct']:.1f}%" if r["attain_pct"] is not None else "",
+            r["cold_amt"], r["cold_n"],
+            r["inbound_amt"], r["inbound_n"],
+            r["conf_amt"], r["conf_n"],
+            r["ref_amt"], r["ref_n"],
+        ])
+    t = data["totals"]
+    w.writerow([
+        "TOTAL", t["total_won_amt"], t["total_won_n"], t["total_lost_n"],
+        f"{t['win_rate']:.1f}%", round(t["acv"]),
+        t["quota_amt"],
+        f"{t['attain_pct']:.1f}%" if t["attain_pct"] is not None else "",
+        t["cold_amt"], t["cold_n"],
+        t["inbound_amt"], t["inbound_n"],
+        t["conf_amt"], t["conf_n"],
+        t["ref_amt"], t["ref_n"],
+    ])
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=deals-won-{period}.csv"},
+    )
 
 
 # ── Background cache scheduler ───────────────────────────────────────────────

@@ -27,6 +27,22 @@
   {% endif %}
 {% endmacro %}
 
+{% macro delta_badge(val, invert=false) %}
+  {# invert=true means lower is better (e.g. stale accounts) #}
+  {% if val > 0 %}
+    {% set good = not invert %}
+  {% elif val < 0 %}
+    {% set good = invert %}
+  {% endif %}
+  {% if val == 0 %}
+    <span class="text-xs text-gray-400 ml-1">—</span>
+  {% elif good %}
+    <span class="text-xs text-green-500 ml-1">↑ {{ val|abs }}</span>
+  {% else %}
+    <span class="text-xs text-red-400 ml-1">↓ {{ val|abs }}</span>
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
@@ -36,8 +52,13 @@
       <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">{{ month_label }} · This Month</p>
     </div>
     <div class="text-right hidden md:block">
-      <p class="text-xs font-semibold uppercase tracking-widest" style="color: rgba(255,255,255,0.5);">Weighted Grade</p>
-      <p class="text-xs mt-1" style="color: rgba(255,255,255,0.45);">Quota 75% · Stage 2 8% · Deals 6% · Stale Accounts 8% · Activity 3%</p>
+      <a href="{{ url_for('scorecard_csv') }}"
+         class="mb-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white/80 hover:text-white border border-white/20 hover:bg-white/10 transition-colors duration-100">
+        ↓ CSV
+      </a>
+      <p class="text-xs font-semibold uppercase tracking-widest" style="color: rgba(255,255,255,0.5);">How grades work</p>
+      <p class="text-xs mt-1" style="color: rgba(255,255,255,0.45);">Quota 75% · $ to Stage 2 8% · Stale Accounts 8% · Deals Created 6% · Dials 2% · Connect 1%</p>
+      <p class="text-xs mt-0.5" style="color: rgba(255,255,255,0.35);">100% quota = min A · 150%+ quota = A+</p>
     </div>
   </div>
 </div>
@@ -52,7 +73,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Revenue closed this month vs. monthly quota. Hitting 100% guarantees a minimum A grade.">Quota Attainment</p>
     <div class="flex items-center">{{ dot(qc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.attain_pct) }}%</p></div>
-    <p class="text-xs text-gray-400 mt-1">{{ fmt_money(t.won_amt) }} / {{ fmt_money(t.quota_amt) }}</p>
+    <p class="text-xs text-gray-400 mt-1">{{ fmt_money(t.won_amt) }} / {{ fmt_money(t.quota_amt) }} {{ delta_badge(deltas.attain_pct) }}</p>
   </div>
 
   {# Deals Created #}
@@ -63,7 +84,7 @@
     <div class="flex items-center">{{ dot(dc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.deals_created }}</p></div>
     {% set deals_per_rep = (t.deals_created / data.rows|length)|round|int %}
     {% set deals_remaining_per_rep = [15 - deals_per_rep, 0]|max %}
-    <p class="text-xs text-gray-400 mt-1">target: 15 / rep · {{ deals_per_rep }} avg created · {{ deals_remaining_per_rep }} remaining</p>
+    <p class="text-xs text-gray-400 mt-1">target: 15 / rep · {{ deals_per_rep }} avg created · {{ deals_remaining_per_rep }} remaining {{ delta_badge(deltas.deals_created) }}</p>
   </div>
 
   {# $ to Stage 2 #}
@@ -72,7 +93,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Total $ value of open deals in Stage 2 or beyond. Stage 2 = qualified opportunity with a committed next step.">$ to Stage 2</p>
     <div class="flex items-center">{{ dot(s2c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.s2_amt) }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} (per-rep win rate)</p>
+    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} {{ delta_badge(deltas.s2_amt) }}</p>
   </div>
 
   {# Avg Dials #}
@@ -80,7 +101,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Average outbound dials logged per working day this month. Target: 40/day.">Avg Dials / Day</p>
     <div class="flex items-center">{{ dot(adc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.avg_dials }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: 40</p>
+    <p class="text-xs text-gray-400 mt-1">target: 40 {{ delta_badge(deltas.avg_dials) }}</p>
   </div>
 
   {# Connect Rate #}
@@ -88,7 +109,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="% of outbound dials that reached a live person. Industry benchmark is 8–12%. Target: 10%.">Connect Rate</p>
     <div class="flex items-center">{{ dot(crc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.connect_rate) }}%</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: 10%</p>
+    <p class="text-xs text-gray-400 mt-1">target: 10% {{ delta_badge(deltas.connect_rate) }}</p>
   </div>
 
   {# Stale Accounts #}
@@ -97,7 +118,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="A+ through C-tier named accounts with no logged activity in the last 30 days. Lower is better.">Stale Accounts</p>
     <div class="flex items-center">{{ dot(sc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.stale_count }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">{{ stale_pct|round|int }}% of A+–C book · no activity in 30d</p>
+    <p class="text-xs text-gray-400 mt-1">{{ stale_pct|round|int }}% of A+–C book · no activity in 30d {{ delta_badge(deltas.stale_count, invert=true) }}</p>
   </div>
 
 </div>
