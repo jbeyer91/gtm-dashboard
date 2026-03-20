@@ -324,6 +324,18 @@ def debug_inbound_funnel():
     return jsonify({"matching_props": matching_props, "sample_contact_props": samples})
 
 
+@app.route("/api/debug/lifecyclestage-values")
+@login_required
+def debug_lifecyclestage_values():
+    """Show lifecyclestage values from actual list-1082 contacts for last 30 days."""
+    from hubspot import get_list_contacts, get_date_range
+    from collections import Counter
+    start, end = get_date_range("last_30")
+    contacts = get_list_contacts(1082, start, end)
+    values = Counter(c["properties"].get("lifecyclestage") or "NULL" for c in contacts)
+    return jsonify({"total": len(contacts), "lifecyclestage_counts": dict(values)})
+
+
 @app.route("/api/debug/deal-sources")
 @login_required
 def debug_deal_sources():
