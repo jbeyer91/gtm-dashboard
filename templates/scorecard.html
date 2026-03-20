@@ -27,19 +27,24 @@
   {% endif %}
 {% endmacro %}
 
-{% macro delta_badge(val, invert=false) %}
+{% macro delta_badge(val, invert=false, money=false) %}
   {# invert=true means lower is better (e.g. stale accounts) #}
   {% if val > 0 %}
     {% set good = not invert %}
   {% elif val < 0 %}
     {% set good = invert %}
   {% endif %}
+  {% if money %}
+    {% set display = "$" ~ (val|abs // 1000)|int ~ "k" if val|abs >= 1000 else "$" ~ val|abs %}
+  {% else %}
+    {% set display = val|abs %}
+  {% endif %}
   {% if val == 0 %}
     <span class="text-xs text-gray-400 ml-1">—</span>
   {% elif good %}
-    <span class="text-xs text-green-500 ml-1">↑ {{ val|abs }}</span>
+    <span class="text-xs text-green-500 ml-1">↑ {{ display }}</span>
   {% else %}
-    <span class="text-xs text-red-400 ml-1">↓ {{ val|abs }}</span>
+    <span class="text-xs text-red-400 ml-1">↓ {{ display }}</span>
   {% endif %}
 {% endmacro %}
 
@@ -93,7 +98,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Total $ value of open deals in Stage 2 or beyond. Stage 2 = qualified opportunity with a committed next step.">$ to Stage 2</p>
     <div class="flex items-center">{{ dot(s2c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.s2_amt) }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} {{ delta_badge(deltas.s2_amt) }}</p>
+    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} {{ delta_badge(deltas.s2_amt, money=true) }}</p>
   </div>
 
   {# Avg Dials #}
