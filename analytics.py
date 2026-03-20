@@ -713,8 +713,7 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     for c in contacts:
         src = _contact_channel(c["properties"])
         src_data[src]["leads_created"] += 1
-        status = (c["properties"].get("hs_lead_status") or "").upper()
-        if status in ("UNQUALIFIED", "BAD TIMING", "DISQUALIFIED"):
+        if (c["properties"].get("lifecyclestage") or "").lower() == "disqualified":
             src_data[src]["leads_disqualified"] += 1
         if c["properties"].get("first_sales_activity_after_demo_request"):
             src_data[src]["leads_contacted"] += 1

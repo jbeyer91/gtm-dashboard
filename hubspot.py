@@ -467,7 +467,7 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
     """Fetch contacts in a HubSpot list, filtered by demo_request_submitted_date in [start, end]."""
     props = [
         "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
-        "hs_lead_status", "utm_source",
+        "lifecyclestage", "utm_source",
         "demo_request_submitted_date", "first_sales_activity_after_demo_request",
     ]
 
