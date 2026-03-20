@@ -278,6 +278,52 @@ def debug_company_properties():
     return jsonify(matches)
 
 
+@app.route("/api/debug/inbound-funnel")
+@login_required
+def debug_inbound_funnel():
+    """Show all non-null properties on sample list-1082 contacts to find field names."""
+    import requests as req
+    from hubspot import BASE_URL, HEADERS
+
+    # Fetch a few members from list 1082
+    list_resp = req.get(
+        f"{BASE_URL}/crm/v3/lists/1082/memberships?limit=5",
+        headers=HEADERS,
+    )
+    if not list_resp.ok:
+        return jsonify({"error": list_resp.text})
+
+    member_ids = [str(r["recordId"]) for r in list_resp.json().get("results", [])]
+    if not member_ids:
+        return jsonify({"error": "no members in list"})
+
+    # Read ALL properties so we can find the demo request date + first sales activity fields
+    props_resp = req.get(
+        f"{BASE_URL}/crm/v3/properties/contacts?limit=1000",
+        headers=HEADERS,
+    )
+    all_prop_names = [p["name"] for p in props_resp.json().get("results", [])] if props_resp.ok else []
+
+    batch_resp = req.post(
+        f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
+        headers=HEADERS,
+        json={"inputs": [{"id": cid} for cid in member_ids[:3]], "properties": all_prop_names},
+    )
+    samples = []
+    if batch_resp.ok:
+        for r in batch_resp.json().get("results", []):
+            samples.append({k: v for k, v in r["properties"].items() if v and v != "false"})
+
+    # Also surface any property whose label contains "demo" or "sales activity"
+    matching_props = [
+        {"name": p["name"], "label": p["label"]}
+        for p in (props_resp.json().get("results", []) if props_resp.ok else [])
+        if any(kw in (p.get("label") or "").lower() for kw in ["demo", "sales activity", "first sales"])
+    ]
+
+    return jsonify({"matching_props": matching_props, "sample_contact_props": samples})
+
+
 @app.route("/api/debug/deal-sources")
 @login_required
 def debug_deal_sources():

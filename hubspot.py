@@ -370,7 +370,8 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_deal_stage_probability", "hs_is_closed_won",
             "hs_is_closed_lost", "deal_source", "hs_analytics_source",
-            "closed_lost_reason", "closed_lost_sub_reason", "num_associated_contacts",
+            "closed_lost_reason", "closed_lost_sub_reason", "last_touch_channel",
+            "num_associated_contacts",
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",
@@ -456,6 +457,34 @@ def get_contacts_inbound(start: datetime, end: datetime) -> list:
             "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
             "hs_analytics_source", "hs_analytics_source_data_1",
             "hs_lead_status", "lifecyclestage", "num_associated_deals",
+        ],
+    }
+    return _search_all("contacts", payload)
+
+
+@ttl_cache
+def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
+    """Fetch contacts that joined a HubSpot list within [start, end].
+
+    Filters by hs_date_entered_{list_id} — the date the contact joined the list
+    (i.e. when they submitted the form), not their original createdate.
+    """
+    start_ts = int(start.timestamp() * 1000)
+    end_ts = int(end.timestamp() * 1000)
+    date_prop = f"hs_date_entered_{list_id}"
+    payload = {
+        "filterGroups": [
+            {
+                "filters": [
+                    {"propertyName": date_prop, "operator": "GTE", "value": str(start_ts)},
+                    {"propertyName": date_prop, "operator": "LTE", "value": str(end_ts)},
+                ]
+            }
+        ],
+        "properties": [
+            "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
+            "hs_analytics_source", "hs_lead_status", "lifecyclestage",
+            "num_associated_deals", "last_touch_channel", date_prop,
         ],
     }
     return _search_all("contacts", payload)
