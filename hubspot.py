@@ -171,6 +171,12 @@ def get_date_range(period: str):
         start = (first - timedelta(days=1)).replace(day=1)
         end = first - timedelta(seconds=1)
         return start, end
+    elif period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return start, now
+    elif period == "this_week":
+        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        return start, now
     elif period == "last_30":
         return now - timedelta(days=30), now
     elif period == "last_60":
