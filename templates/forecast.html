@@ -2,11 +2,9 @@
 {% from "macros.html" import period_filter, stat_card, fmt_money, fmt_pct %}
 {% block title %} — Forecast{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Forecast</h1>
-    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">HubSpot Submitted Forecast vs Quota</p>
-  </div>
+<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Forecast</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">HubSpot Submitted Forecast vs Quota</p>
 </div>
 
 {{ period_filter(period, periods) }}
@@ -18,6 +16,33 @@
   {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
   {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "") }}
 </div>
+
+{# ── reusable row macro ───────────────────────────────────────────────────── #}
+{% macro forecast_row(row, is_subtotal=false) %}
+<tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-blue-50/60 transition-colors duration-100{% endif %}">
+  <td class="px-4 py-3 {% if is_subtotal %}text-xs uppercase tracking-wider{% else %}font-medium{% endif %}">{{ row.ae }}</td>
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}text-indigo-600">
+    {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+  </td>
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
+    {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
+  </td>
+  <td class="px-4 py-3 text-right tabular-nums font-semibold
+    {% if row.gap_amt is none %}text-gray-400
+    {% elif row.gap_amt <= 0 %}text-green-600
+    {% else %}text-red-500{% endif %}">
+    {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
+  </td>
+  <td class="px-4 py-3 text-right tabular-nums font-semibold
+    {% if row.attain_pct is none %}text-gray-400
+    {% elif row.attain_pct >= 100 %}text-green-600
+    {% elif row.attain_pct >= 75 %}text-yellow-600
+    {% else %}text-red-500{% endif %}">
+    {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
+  </td>
+</tr>
+{% endmacro %}
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
@@ -31,36 +56,28 @@
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-100">
-      {% for row in data.rows %}
-      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
-        <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold text-indigo-600">
-          {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
-        </td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
-          {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
-        </td>
-        <td class="px-4 py-3 text-right tabular-nums font-semibold
-          {% if row.gap_amt is none %}text-gray-400
-          {% elif row.gap_amt <= 0 %}text-green-600
-          {% else %}text-red-500{% endif %}">
-          {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
-        </td>
-        <td class="px-4 py-3 text-right tabular-nums font-semibold
-          {% if row.attain_pct is none %}text-gray-400
-          {% elif row.attain_pct >= 100 %}text-green-600
-          {% elif row.attain_pct >= 75 %}text-yellow-600
-          {% else %}text-red-500{% endif %}">
-          {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
+
+    {% for group in data.groups %}
+    {# Team header #}
+    <tbody>
+      <tr class="bg-indigo-50 border-t border-indigo-100">
+        <td colspan="6" class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-700">
+          {{ group.team }} — {{ group.manager }}
         </td>
       </tr>
-      {% endfor %}
     </tbody>
-    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+    {# Rep rows #}
+    <tbody class="divide-y divide-gray-100">
+      {% for row in group.rows %}
+        {{ forecast_row(row) }}
+      {% endfor %}
+      {{ forecast_row(group.subtotal, is_subtotal=true) }}
+    </tbody>
+    {% endfor %}
+
+    <tfoot class="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-800">
       <tr>
-        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Grand Total</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.won_amt) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}

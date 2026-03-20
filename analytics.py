@@ -5,6 +5,7 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
+    get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
 )
@@ -179,7 +180,7 @@ def compute_call_stats(period: str) -> dict:
             continue
         if not _owner_allowed(oid):
             continue
-        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         # Exclude calls where a deal was open for that contact at the time of the call
         contact_id = call_to_contact.get(call["id"])
@@ -720,8 +721,12 @@ def compute_forecast(period: str) -> dict:
             owner_commit[oid] += amt
             owner_commit_n[oid] += 1
 
+    owner_team = get_owner_team_map()  # {owner_id: "Rising" | "Veterans"}
+
     rows = []
     for oid, owner in owners.items():
+        if not _owner_allowed(oid):
+            continue
         won_amt      = owner_won.get(oid, 0.0)
         commit_amt   = owner_commit.get(oid, 0.0)
         commit_n     = owner_commit_n.get(oid, 0)
@@ -735,6 +740,7 @@ def compute_forecast(period: str) -> dict:
 
         rows.append({
             "ae":             owner["last_name"] or owner["name"],
+            "team":           owner_team.get(oid, ""),
             "won_amt":        won_amt,
             "commit_amt":     commit_amt,
             "commit_n":       commit_n,
@@ -747,26 +753,58 @@ def compute_forecast(period: str) -> dict:
             "attain_pct":     attain_pct,
         })
 
-    rows.sort(key=lambda r: r["submitted_amt"] or 0, reverse=True)
+    rows.sort(key=lambda r: (r["team"], -(r["submitted_amt"] or 0)))
 
-    def _s(k): return sum(r[k] for r in rows if r[k] is not None)
-    total_submitted = _s("submitted_amt")
-    total_quota     = _s("quota_amt")
+    def _s(k, src): return sum(r[k] for r in src if r[k] is not None)
+
+    def _subtotal(label, src):
+        sub_submitted = _s("submitted_amt", src)
+        sub_quota     = _s("quota_amt", src)
+        return {
+            "ae":             label,
+            "won_amt":        _s("won_amt", src),
+            "commit_amt":     _s("commit_amt", src),
+            "commit_n":       _s("commit_n", src),
+            "submitted_amt":  sub_submitted,
+            "bestcase_amt":   _s("bestcase_amt", src),
+            "bestcase_n":     _s("bestcase_n", src),
+            "weighted_amt":   _s("weighted_amt", src),
+            "quota_amt":      sub_quota,
+            "gap_amt":        (sub_quota - sub_submitted) if sub_quota else None,
+            "attain_pct":     round(sub_submitted / sub_quota * 100, 1) if sub_quota else None,
+        }
+
+    # Build team groups (preserve TEAM_FILTER order)
+    from hubspot import TEAM_FILTER
+    groups = []
+    for team_name in TEAM_FILTER:
+        team_rows = [r for r in rows if r["team"] == team_name]
+        if not team_rows:
+            continue
+        groups.append({
+            "team":    team_name,
+            "manager": TEAM_MANAGER.get(team_name, team_name),
+            "rows":    team_rows,
+            "subtotal": _subtotal(f"{team_name} Total", team_rows),
+        })
+
+    total_submitted = _s("submitted_amt", rows)
+    total_quota     = _s("quota_amt", rows)
     totals = {
         "ae":             "TOTAL",
-        "won_amt":        _s("won_amt"),
-        "commit_amt":     _s("commit_amt"),
-        "commit_n":       _s("commit_n"),
+        "won_amt":        _s("won_amt", rows),
+        "commit_amt":     _s("commit_amt", rows),
+        "commit_n":       _s("commit_n", rows),
         "submitted_amt":  total_submitted,
-        "bestcase_amt":   _s("bestcase_amt"),
-        "bestcase_n":     _s("bestcase_n"),
-        "weighted_amt":   _s("weighted_amt"),
+        "bestcase_amt":   _s("bestcase_amt", rows),
+        "bestcase_n":     _s("bestcase_n", rows),
+        "weighted_amt":   _s("weighted_amt", rows),
         "quota_amt":      total_quota,
         "gap_amt":        (total_quota - total_submitted) if total_quota else None,
         "attain_pct":     round(total_submitted / total_quota * 100, 1) if total_quota else None,
     }
 
-    return {"rows": rows, "totals": totals, "period": period}
+    return {"rows": rows, "groups": groups, "totals": totals, "period": period}
 
 
 @ttl_cache
@@ -1080,8 +1118,8 @@ def compute_scorecard() -> dict:
         if oid and _owner_allowed(oid):
             owner_won[oid] += _parse_amount(d["properties"].get("amount"))
 
+    # Deals created this month (cold outreach only)
     owner_created = defaultdict(int)
-    owner_s2_amt  = defaultdict(float)
     for d in created_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
@@ -1089,10 +1127,31 @@ def compute_scorecard() -> dict:
         if _deal_source(d) != "Cold outreach":
             continue
         owner_created[oid] += 1
-        stage = d["properties"].get("dealstage", "")
-        if stage in (NB_STAGES["stage2"], NB_STAGES["stage3"],
-                     NB_STAGES["stage4"], NB_STAGES["won"]):
-            owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+
+    # $ to Stage 2: deals that advanced INTO stage 2 this month (any source)
+    # Use hs_date_entered_71300358 across open + created + won deal sets
+    _start_ms = int(start.timestamp() * 1000)
+    _end_ms   = int(end.timestamp() * 1000)
+    owner_s2_amt  = defaultdict(float)
+    _seen_s2_ids  = set()
+    for d in (*open_deals, *created_deals, *won_deals):
+        deal_id = d.get("id", "")
+        if not deal_id or deal_id in _seen_s2_ids:
+            continue
+        _seen_s2_ids.add(deal_id)
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        s2_raw = d["properties"].get("hs_date_entered_71300358")
+        if not s2_raw:
+            continue
+        try:
+            s2_ms = int(datetime.fromisoformat(
+                str(s2_raw).replace("Z", "+00:00")).timestamp() * 1000)
+            if _start_ms <= s2_ms <= _end_ms:
+                owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+        except Exception:
+            pass
 
     owner_open = defaultdict(float)
     for d in open_deals:
@@ -1105,7 +1164,7 @@ def compute_scorecard() -> dict:
         oid = call["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
-        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         contact_id = call_to_contact.get(call["id"])
         if contact_id and contact_id in contact_windows:
@@ -1126,12 +1185,12 @@ def compute_scorecard() -> dict:
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
-        "quota_attainment": 0.25,
-        "stage2":           0.15,
-        "coverage":         0.15,
-        "deals_created":    0.10,
-        "active_30":        0.15,
-        "called_120":       0.15,
+        "quota_attainment": 0.50,
+        "stage2":           0.10,
+        "coverage":         0.10,
+        "deals_created":    0.05,
+        "active_30":        0.10,
+        "called_120":       0.10,
         "avg_dials":        0.03,
         "connect_rate":     0.02,
     }
@@ -1213,11 +1272,13 @@ def compute_scorecard() -> dict:
     t_dials    = sum(owner_calls[r["owner_id"]]["dials"] for r in rows)
     t_connects = sum(owner_calls[r["owner_id"]]["connects"] for r in rows)
 
+    n_reps = len(rows)
     team = {
         "attain_pct":     round(t_won / t_quota * 100, 1) if t_quota else 0.0,
         "won_amt":        t_won,
         "quota_amt":      t_quota,
         "deals_created":  sum(r["deals_created"] for r in rows),
+        "deals_target":   15 * n_reps,
         "s2_amt":         sum(r["s2_amt"] for r in rows),
         "s2_target":      t_quota * 4,
         "coverage":       round(t_open / t_remaining, 2) if t_remaining > 0 else None,

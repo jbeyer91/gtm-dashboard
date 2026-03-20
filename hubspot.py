@@ -99,6 +99,12 @@ OWNER_EXCLUDE = frozenset({
     "403559039",  # Taylor Tempel
 })
 
+# Which manager owns each team (for forecast roll-up labels).
+TEAM_MANAGER = {
+    "Rising":   "Joe",
+    "Veterans": "Jordan",
+}
+
 
 @lru_cache(maxsize=1)
 def get_lifecyclestage_value(label: str) -> str:
@@ -162,6 +168,27 @@ def get_team_owner_ids() -> frozenset:
                 break  # no need to check other teams for this owner
 
     return frozenset(allowed)
+
+
+@ttl_cache
+def get_owner_team_map() -> dict:
+    """Return {owner_id: team_name} for every allowed (non-manager) rep."""
+    resp = requests.get(
+        f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
+        headers=HEADERS,
+    )
+    if not resp.ok:
+        return {}
+    result = {}
+    for o in resp.json().get("results", []):
+        owner_id = str(o["id"])
+        if owner_id in OWNER_EXCLUDE:
+            continue
+        for team in o.get("teams", []):
+            if team.get("name") in TEAM_FILTER:
+                result[owner_id] = team["name"]
+                break
+    return result
 
 
 @ttl_cache
@@ -435,6 +462,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
             "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
+            "hs_date_entered_71300358",
         ],
     }
     return _search_all("deals", payload)
