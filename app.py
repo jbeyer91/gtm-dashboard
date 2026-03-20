@@ -470,6 +470,20 @@ def debug_quotas():
     })
 
 
+@app.route("/api/debug/icp-rank-values")
+@login_required
+def debug_icp_rank_values():
+    """Show distinct icp_rank values on a sample of companies to diagnose blank A+ to C counts."""
+    from hubspot import get_companies_for_coverage
+    companies = get_companies_for_coverage()
+    from collections import Counter
+    rank_counts = Counter()
+    for c in companies:
+        rank = (c["properties"].get("icp_rank") or "").strip()
+        rank_counts[rank if rank else "(blank)"] += 1
+    return jsonify({"total_companies": len(companies), "icp_rank_distribution": dict(rank_counts)})
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.
