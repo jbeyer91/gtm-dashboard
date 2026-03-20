@@ -281,56 +281,47 @@ def debug_company_properties():
 @app.route("/api/debug/inbound-funnel")
 @login_required
 def debug_inbound_funnel():
-    """Inspect inbound deals and list-1082 contact properties."""
+    """Show all non-null properties on sample list-1082 contacts to find field names."""
     import requests as req
-    from hubspot import BASE_URL, HEADERS, get_date_range, get_list_contacts, get_deals
-    from collections import Counter
+    from hubspot import BASE_URL, HEADERS
 
-    start, end = get_date_range("this_month")
-
-    # Sample a few contacts from list 1082 to see their raw properties
+    # Fetch a few members from list 1082
     list_resp = req.get(
-        f"{BASE_URL}/crm/v3/lists/1082/memberships?limit=3",
+        f"{BASE_URL}/crm/v3/lists/1082/memberships?limit=5",
         headers=HEADERS,
     )
-    sample_contact_props = []
-    if list_resp.ok:
-        member_ids = [str(r["recordId"]) for r in list_resp.json().get("results", [])]
-        if member_ids:
-            batch_resp = req.post(
-                f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
-                headers=HEADERS,
-                json={
-                    "inputs": [{"id": cid} for cid in member_ids],
-                    "properties": [
-                        "createdate", "hs_analytics_source", "last_touch_channel",
-                        "hs_lead_status", "num_associated_deals",
-                    ],
-                },
-            )
-            if batch_resp.ok:
-                sample_contact_props = [
-                    {k: v for k, v in r["properties"].items()}
-                    for r in batch_resp.json().get("results", [])
-                ]
+    if not list_resp.ok:
+        return jsonify({"error": list_resp.text})
 
-    # List contacts in current month and show last_touch_channel + hs_analytics_source breakdown
-    contacts = get_list_contacts(1082, start, end)
-    ltc_counts = Counter((c["properties"].get("last_touch_channel") or "(blank)") for c in contacts)
-    src_counts = Counter((c["properties"].get("hs_analytics_source") or "(blank)") for c in contacts)
+    member_ids = [str(r["recordId"]) for r in list_resp.json().get("results", [])]
+    if not member_ids:
+        return jsonify({"error": "no members in list"})
 
-    deals = get_deals(start, end, "createdate")
-    inbound = [d for d in deals if (d["properties"].get("deal_source") or "").lower() == "inbound"]
-    deal_ltc_counts = Counter((d["properties"].get("last_touch_channel") or "(blank)") for d in inbound)
+    # Read ALL properties so we can find the demo request date + first sales activity fields
+    props_resp = req.get(
+        f"{BASE_URL}/crm/v3/properties/contacts?limit=1000",
+        headers=HEADERS,
+    )
+    all_prop_names = [p["name"] for p in props_resp.json().get("results", [])] if props_resp.ok else []
 
-    return jsonify({
-        "list_contacts_this_month": len(contacts),
-        "contact_last_touch_channel_breakdown": dict(ltc_counts.most_common()),
-        "contact_hs_analytics_source_breakdown": dict(src_counts.most_common()),
-        "sample_contact_props": sample_contact_props,
-        "inbound_deals": len(inbound),
-        "deal_last_touch_channel_breakdown": dict(deal_ltc_counts.most_common()),
-    })
+    batch_resp = req.post(
+        f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
+        headers=HEADERS,
+        json={"inputs": [{"id": cid} for cid in member_ids[:3]], "properties": all_prop_names},
+    )
+    samples = []
+    if batch_resp.ok:
+        for r in batch_resp.json().get("results", []):
+            samples.append({k: v for k, v in r["properties"].items() if v and v != "false"})
+
+    # Also surface any property whose label contains "demo" or "sales activity"
+    matching_props = [
+        {"name": p["name"], "label": p["label"]}
+        for p in (props_resp.json().get("results", []) if props_resp.ok else [])
+        if any(kw in (p.get("label") or "").lower() for kw in ["demo", "sales activity", "first sales"])
+    ]
+
+    return jsonify({"matching_props": matching_props, "sample_contact_props": samples})
 
 
 @app.route("/api/debug/deal-sources")
