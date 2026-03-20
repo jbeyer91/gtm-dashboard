@@ -239,8 +239,77 @@ def get_date_range(period: str):
         else:
             end = start.replace(month=start.month + 1) - timedelta(seconds=1)
         return start, end
+    elif period.startswith("prior_"):
+        p_start, p_end, _ = get_prior_range(period[6:])
+        return p_start, p_end
     else:
         return now - timedelta(days=30), now
+
+
+def get_prior_range(period: str):
+    """Return (start, end, label) for the prior comparison period.
+
+    Matches elapsed time so comparisons are apples-to-apples:
+    e.g. 'this_month' on March 20 → Feb 1–20 (not the full Feb).
+    """
+    now = datetime.now(timezone.utc)
+    cur_start, cur_end = get_date_range(period)
+    days_elapsed = max((cur_end - cur_start).days, 0)
+
+    if period == "this_month":
+        prev_last = cur_start - timedelta(seconds=1)
+        prev_start = prev_last.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_end   = prev_start + timedelta(days=days_elapsed)
+        label = f"{prev_start.strftime('%b %-d')}–{prev_end.strftime('%-d')}"
+
+    elif period == "last_month":
+        prev_end   = (cur_start - timedelta(seconds=1)).replace(
+                         hour=23, minute=59, second=59, microsecond=0)
+        prev_start = prev_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        label      = prev_start.strftime("%B")
+
+    elif period in ("last_30", "last_60", "last_90"):
+        n          = int(period.split("_")[1])
+        prev_end   = cur_start - timedelta(seconds=1)
+        prev_start = prev_end - timedelta(days=n - 1)
+        label      = f"prev {n}d"
+
+    elif period == "this_quarter":
+        prev_last  = cur_start - timedelta(seconds=1)
+        q_month    = ((prev_last.month - 1) // 3) * 3 + 1
+        prev_start = prev_last.replace(month=q_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_end   = prev_start + timedelta(days=days_elapsed)
+        label      = f"{prev_start.strftime('%b %-d')}–{prev_end.strftime('%b %-d')}"
+
+    elif period == "last_quarter":
+        prev_end   = (cur_start - timedelta(seconds=1)).replace(
+                         hour=23, minute=59, second=59, microsecond=0)
+        q_month    = ((prev_end.month - 1) // 3) * 3 + 1
+        prev_start = prev_end.replace(month=q_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        label      = f"Q{(q_month - 1) // 3 + 1} {prev_start.year}"
+
+    elif period == "ytd":
+        prev_start = cur_start.replace(year=cur_start.year - 1)
+        prev_end   = cur_end.replace(year=cur_end.year - 1)
+        label      = f"Jan–{prev_end.strftime('%b %-d')} '{str(prev_start.year)[2:]}"
+
+    elif period == "today":
+        prev_start = cur_start - timedelta(days=1)
+        prev_end   = prev_start.replace(hour=23, minute=59, second=59)
+        label      = "yesterday"
+
+    elif period == "this_week":
+        prev_start = cur_start - timedelta(days=7)
+        prev_end   = cur_end   - timedelta(days=7)
+        label      = "last week"
+
+    else:
+        duration   = cur_end - cur_start
+        prev_end   = cur_start - timedelta(seconds=1)
+        prev_start = prev_end  - duration
+        label      = "prior period"
+
+    return prev_start, prev_end, label
 
 
 def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> list:
@@ -441,6 +510,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",
+            "hs_v2_date_entered_71300358",
         ],
     }
     return _search_all("deals", payload)
@@ -463,6 +533,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
             "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
             "hs_date_entered_71300358",
+            "hs_v2_date_entered_71300358",
         ],
     }
     return _search_all("deals", payload)

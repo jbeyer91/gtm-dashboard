@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import fmt_pct, fmt_money, fmt_num %}
+{% from "macros.html" import fmt_pct, fmt_money, fmt_num, csv_link %}
 {% block title %} — Scorecard{% endblock %}
 
 {% macro grade_badge(grade) %}
@@ -27,19 +27,24 @@
   {% endif %}
 {% endmacro %}
 
-{% macro delta_badge(val, invert=false) %}
+{% macro delta_badge(val, invert=false, money=false) %}
   {# invert=true means lower is better (e.g. stale accounts) #}
   {% if val > 0 %}
     {% set good = not invert %}
   {% elif val < 0 %}
     {% set good = invert %}
   {% endif %}
+  {% if money %}
+    {% set display = "$" ~ (val|abs // 1000)|int ~ "k" if val|abs >= 1000 else "$" ~ val|abs %}
+  {% else %}
+    {% set display = val|abs %}
+  {% endif %}
   {% if val == 0 %}
     <span class="text-xs text-gray-400 ml-1">—</span>
   {% elif good %}
-    <span class="text-xs text-green-500 ml-1">↑ {{ val|abs }}</span>
+    <span class="text-xs text-green-500 ml-1">↑ {{ display }}</span>
   {% else %}
-    <span class="text-xs text-red-400 ml-1">↓ {{ val|abs }}</span>
+    <span class="text-xs text-red-400 ml-1">↓ {{ display }}</span>
   {% endif %}
 {% endmacro %}
 
@@ -52,10 +57,6 @@
       <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">{{ month_label }} · This Month</p>
     </div>
     <div class="text-right hidden md:block">
-      <a href="{{ url_for('scorecard_csv') }}"
-         class="mb-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white/80 hover:text-white border border-white/20 hover:bg-white/10 transition-colors duration-100">
-        ↓ CSV
-      </a>
       <p class="text-xs font-semibold uppercase tracking-widest" style="color: rgba(255,255,255,0.5);">How grades work</p>
       <p class="text-xs mt-1" style="color: rgba(255,255,255,0.45);">Quota 75% · $ to Stage 2 8% · Stale Accounts 8% · Deals Created 6% · Dials 2% · Connect 1%</p>
       <p class="text-xs mt-0.5" style="color: rgba(255,255,255,0.35);">100% quota = min A · 150%+ quota = A+</p>
@@ -63,8 +64,11 @@
   </div>
 </div>
 
+{{ csv_link(url_for('scorecard_csv')) }}
+
 {# ── Team overview cards ──────────────────────────────────────────────────── #}
 {% set t = data.team %}
+{% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Overview</h2>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
 
@@ -91,9 +95,9 @@
   {% set s2_pct = (t.s2_amt / t.s2_target * 100) if t.s2_target else 0 %}
   {% if s2_pct >= 80 %}{% set s2c = "green" %}{% elif s2_pct >= 60 %}{% set s2c = "yellow" %}{% else %}{% set s2c = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Total $ value of open deals in Stage 2 or beyond. Stage 2 = qualified opportunity with a committed next step.">$ to Stage 2</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="$ value of deals that entered Stage 2 this month (open, won, or lost). Uses exact HubSpot stage-entry date. Stage 2 = qualified opportunity with a committed next step.">$ Advanced to S2</p>
     <div class="flex items-center">{{ dot(s2c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.s2_amt) }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} {{ delta_badge(deltas.s2_amt) }}</p>
+    <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }}</p>
   </div>
 
   {# Avg Dials #}
@@ -133,7 +137,7 @@
         <th class="px-4 py-3 text-left font-semibold">Rep</th>
         <th class="px-4 py-3 text-right font-semibold" title="Revenue closed this month as % of monthly quota. Hitting 100% guarantees a minimum A grade.">Quota %</th>
         <th class="px-4 py-3 text-right font-semibold" title="New deals entered into CRM this month (all sources). Target: 15/rep (12 outbound + 3 inbound).">Deals Created</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Total $ value of this rep's open deals currently in Stage 2 or beyond.">$ to Stage 2</th>
+        <th class="px-4 py-3 text-right font-semibold" title="$ value of deals that entered Stage 2 this month (open, won, or lost). Uses exact HubSpot stage-entry date.">$ Adv. to S2</th>
         <th class="px-4 py-3 text-right font-semibold" title="Average outbound dials per working day this month. Target: 40/day.">Avg Dials</th>
         <th class="px-4 py-3 text-right font-semibold" title="% of outbound dials that connected to a live person. Target: 10%.">Connect %</th>
         <th class="px-4 py-3 text-right font-semibold" title="A+ through C-tier accounts with no logged activity in the last 30 days. Lower is better.">Stale Accounts</th>
