@@ -1185,12 +1185,12 @@ def compute_scorecard() -> dict:
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
-        "quota_attainment": 0.55,
-        "stage2":           0.15,
-        "deals_created":    0.10,
-        "stale_accounts":   0.15,
-        "avg_dials":        0.03,
-        "connect_rate":     0.02,
+        "quota_attainment": 0.75,
+        "stage2":           0.08,
+        "deals_created":    0.06,
+        "stale_accounts":   0.08,
+        "avg_dials":        0.02,
+        "connect_rate":     0.01,
     }
 
     def _score(actual, target):
