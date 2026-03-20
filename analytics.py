@@ -1185,14 +1185,12 @@ def compute_scorecard() -> dict:
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
-        "quota_attainment": 0.50,
-        "stage2":           0.10,
-        "coverage":         0.10,
-        "deals_created":    0.05,
-        "active_30":        0.10,
-        "called_120":       0.10,
-        "avg_dials":        0.03,
-        "connect_rate":     0.02,
+        "quota_attainment": 0.75,
+        "stage2":           0.08,
+        "deals_created":    0.06,
+        "stale_accounts":   0.08,
+        "avg_dials":        0.02,
+        "connect_rate":     0.01,
     }
 
     def _score(actual, target):
@@ -1220,17 +1218,18 @@ def compute_scorecard() -> dict:
         coverage      = round(open_amt / remaining, 2) if remaining > 0 else None
         s2_target     = quota * 4
 
-        book_row   = book_by_owner.get(oid, {})
-        active_30  = book_row.get("pct_active_30", 0.0)
-        called_120 = book_row.get("pct_called_120", 0.0)
+        book_row    = book_by_owner.get(oid, {})
+        ac_accounts = book_row.get("ac_accounts", 0)
+        stale_count = ac_accounts - book_row.get("active_30", 0)
+        # stale score: 0 stale = 100, all stale = 0; target ≤10% stale (90% active)
+        stale_pct   = (stale_count / ac_accounts * 100) if ac_accounts else 0.0
+        stale_score = max(0.0, 100.0 - stale_pct / 10 * 100) if ac_accounts else 100.0
 
         scores = {
             "quota_attainment": _score(attain_pct, 100),
             "stage2":           _score(s2_amt, s2_target),
-            "coverage":         100.0 if quota_met else _score(coverage or 0, 5),
             "deals_created":    _score(created, 15),
-            "active_30":        _score(active_30, 90),
-            "called_120":       _score(called_120, 90),
+            "stale_accounts":   stale_score,
             "avg_dials":        _score(avg_dials, 40),
             "connect_rate":     _score(connect_rate, 10),
         }
@@ -1248,15 +1247,10 @@ def compute_scorecard() -> dict:
             "deals_created": created,
             "s2_amt":        s2_amt,
             "s2_target":     s2_target,
-            "coverage":      coverage,
-            "quota_met":     quota_met,
             "avg_dials":     avg_dials,
             "connect_rate":  connect_rate,
-            "active_30_pct": active_30,
-            "called_120_pct":called_120,
-            "stale_count":   book_row.get("ac_accounts", 0) - book_row.get("active_30", 0),
-            "at_risk_count": book_row.get("ac_accounts", 0) - book_row.get("called_120", 0),
-            "ac_accounts":   book_row.get("ac_accounts", 0),
+            "stale_count":   stale_count,
+            "ac_accounts":   ac_accounts,
         })
 
     rows.sort(key=lambda r: r["grade_sort"])
@@ -1264,31 +1258,22 @@ def compute_scorecard() -> dict:
     # ── team totals ───────────────────────────────────────────────────────────
     t_quota    = sum(r["quota_amt"] for r in rows)
     t_won      = sum(r["won_amt"] for r in rows)
-    t_open     = sum(owner_open.get(r["owner_id"], 0.0) for r in rows)
-    t_remaining = max(t_quota - t_won, 0.0)
-    t_ac       = sum(r["ac_accounts"] for r in rows)
-    t_active_30  = sum(book_by_owner.get(r["owner_id"], {}).get("active_30", 0) for r in rows)
-    t_called_120 = sum(book_by_owner.get(r["owner_id"], {}).get("called_120", 0) for r in rows)
     t_dials    = sum(owner_calls[r["owner_id"]]["dials"] for r in rows)
     t_connects = sum(owner_calls[r["owner_id"]]["connects"] for r in rows)
 
     n_reps = len(rows)
     team = {
-        "attain_pct":     round(t_won / t_quota * 100, 1) if t_quota else 0.0,
-        "won_amt":        t_won,
-        "quota_amt":      t_quota,
-        "deals_created":  sum(r["deals_created"] for r in rows),
-        "deals_target":   15 * n_reps,
-        "s2_amt":         sum(r["s2_amt"] for r in rows),
-        "s2_target":      t_quota * 4,
-        "coverage":       round(t_open / t_remaining, 2) if t_remaining > 0 else None,
-        "quota_met":      t_quota > 0 and t_won >= t_quota,
-        "avg_dials":      round(t_dials / period_bdays, 1),
-        "connect_rate":   _pct(t_connects, t_dials),
-        "active_30_pct":  _pct(t_active_30, t_ac),
-        "called_120_pct": _pct(t_called_120, t_ac),
-        "stale_count":    t_ac - t_active_30,
-        "at_risk_count":  t_ac - t_called_120,
+        "attain_pct":    round(t_won / t_quota * 100, 1) if t_quota else 0.0,
+        "won_amt":       t_won,
+        "quota_amt":     t_quota,
+        "deals_created": sum(r["deals_created"] for r in rows),
+        "deals_target":  15 * n_reps,
+        "s2_amt":        sum(r["s2_amt"] for r in rows),
+        "s2_target":     t_quota * 4,
+        "avg_dials":     round(t_dials / period_bdays, 1),
+        "connect_rate":  _pct(t_connects, t_dials),
+        "stale_count":   sum(r["stale_count"] for r in rows),
+        "ac_accounts":   sum(r["ac_accounts"] for r in rows),
     }
 
     return {"rows": rows, "team": team}
