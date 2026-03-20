@@ -154,7 +154,7 @@ def get_date_range(period: str):
         return start, now
     elif period == "last_quarter":
         q_month = ((now.month - 1) // 3) * 3 + 1
-        end = now.replace(month=q_month, day=1) - timedelta(seconds=1)
+        end = now.replace(month=q_month, day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
         prev_q_month = ((end.month - 1) // 3) * 3 + 1
         start = end.replace(month=prev_q_month, day=1, hour=0, minute=0, second=0, microsecond=0)
         return start, end
@@ -545,6 +545,100 @@ def get_deal_contact_windows() -> dict:
             contact_windows.setdefault(contact_id, []).extend(windows)
 
     return contact_windows
+
+
+@ttl_cache
+def get_companies_for_coverage() -> list:
+    """Fetch all companies owned by team members for book coverage analysis."""
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return []
+    all_companies = []
+    # HubSpot filterGroups are OR-ed; max 5 per request
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [{"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid}]}
+                for oid in batch
+            ],
+            "properties": [
+                "hubspot_owner_id",
+                "icp_rank",
+                "notes_last_activity_date",
+                "notes_last_contacted",
+                "name",
+                "in_active_sequence",
+                "sales_activity_in_last_30_days",
+                "called_within_120_days",
+                "num_of_overdue_tasks",
+            ],
+        }
+        all_companies.extend(_search_all("companies", payload))
+    return all_companies
+
+
+@ttl_cache
+def get_sequence_enrolled_company_ids() -> set:
+    """Return the set of company IDs that have at least one contact in a sequence.
+
+    Strategy: fetch contacts (by team owner) currently enrolled in a sequence,
+    then batch-resolve their associated companies.
+    """
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return set()
+
+    seq_contacts = []
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                    {"propertyName": "hs_sequences_is_enrolled", "operator": "EQ", "value": "true"},
+                ]}
+                for oid in batch
+            ],
+            "properties": ["hubspot_owner_id"],
+        }
+        seq_contacts.extend(_search_all("contacts", payload))
+
+    if not seq_contacts:
+        return set()
+
+    contact_ids = [c["id"] for c in seq_contacts]
+    contact_to_companies = _batch_associations("contacts", "companies", contact_ids)
+
+    company_ids: set = set()
+    for companies in contact_to_companies.values():
+        company_ids.update(companies)
+    return company_ids
+
+
+@ttl_cache
+def get_overdue_sequence_tasks() -> list:
+    """Fetch overdue (past-due, not-started) tasks for team members."""
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return []
+    now_ts = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+    all_tasks = []
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                    {"propertyName": "hs_task_status", "operator": "EQ", "value": "NOT_STARTED"},
+                    {"propertyName": "hs_timestamp", "operator": "LTE", "value": now_ts},
+                ]}
+                for oid in batch
+            ],
+            "properties": ["hubspot_owner_id", "hs_task_type", "hs_task_status", "hs_timestamp"],
+        }
+        all_tasks.extend(_search_all("tasks", payload))
+    return all_tasks
 
 
 def get_call_to_contact_map(call_ids: list) -> dict:

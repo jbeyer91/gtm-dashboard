@@ -45,6 +45,7 @@ NAV = [
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
     ]},
     {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
+    {"type": "link",  "endpoint": "book_coverage",     "label": "Book Coverage"},
 ]
 
 
@@ -172,6 +173,68 @@ def inbound_funnel():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="inbound_funnel")
     return render_template("inbound_funnel.html", data=data, periods=PERIODS, period=period, nav=NAV, active="inbound_funnel")
+
+
+@app.route("/book-coverage")
+@login_required
+def book_coverage():
+    try:
+        data = analytics.compute_book_coverage()
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="book_coverage")
+    return render_template("book_coverage.html", data=data, nav=NAV, active="book_coverage")
+
+
+@app.route("/api/cache/clear", methods=["POST"])
+@login_required
+def api_cache_clear():
+    """Bust the entire in-memory + disk cache so the next request fetches fresh data."""
+    clear_cache()
+    return jsonify({"status": "ok", "message": "Cache cleared. Fresh data will be fetched on next page load."})
+
+
+@app.route("/api/debug/deals-won")
+@login_required
+def debug_deals_won():
+    """Show the raw date range and deal counts used by the Deals Won view."""
+    from hubspot import get_date_range, get_deals
+    period = request.args.get("period", "last_quarter")
+    start, end = get_date_range(period, _force=True)
+    raw_deals = get_deals(start, end, "closedate", _force=True)
+    won = [d for d in raw_deals if d["properties"].get("hs_is_closed_won") == "true"]
+    lost = [d for d in raw_deals if d["properties"].get("hs_is_closed_lost") == "true"]
+    return jsonify({
+        "period": period,
+        "window_start": start.isoformat(),
+        "window_end": end.isoformat(),
+        "total_deals_in_range": len(raw_deals),
+        "won_deals": len(won),
+        "lost_deals": len(lost),
+        "sample_won": [
+            {"id": d["id"], "closedate": d["properties"].get("closedate"), "amount": d["properties"].get("amount")}
+            for d in won[:5]
+        ],
+    })
+
+
+@app.route("/api/debug/company-properties")
+@login_required
+def debug_company_properties():
+    """List company properties whose label or name matches coverage-related keywords."""
+    import requests
+    from hubspot import BASE_URL, HEADERS
+    resp = requests.get(f"{BASE_URL}/crm/v3/properties/companies?limit=500", headers=HEADERS)
+    if not resp.ok:
+        return jsonify({"error": resp.status_code, "body": resp.text}), resp.status_code
+    keywords = {"sequence", "activity", "called", "overdue", "task", "icp", "rank"}
+    matches = []
+    for p in resp.json().get("results", []):
+        label = p.get("label", "").lower()
+        name  = p.get("name", "").lower()
+        if any(k in label or k in name for k in keywords):
+            matches.append({"name": p["name"], "label": p["label"], "type": p.get("type")})
+    matches.sort(key=lambda x: x["label"])
+    return jsonify(matches)
 
 
 @app.route("/api/debug/deal-sources")

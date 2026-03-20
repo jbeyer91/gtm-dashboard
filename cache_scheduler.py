@@ -60,7 +60,14 @@ _timer: threading.Timer = None
 
 def _refresh_base_data():
     """Force-refresh HubSpot API calls that don't depend on period."""
-    for fn in (hubspot.get_owners, hubspot.get_team_owner_ids, hubspot.get_deal_contact_windows):
+    for fn in (
+        hubspot.get_owners,
+        hubspot.get_team_owner_ids,
+        hubspot.get_deal_contact_windows,
+        hubspot.get_companies_for_coverage,
+        hubspot.get_sequence_enrolled_company_ids,
+        hubspot.get_overdue_sequence_tasks,
+    ):
         try:
             fn(_force=True)
         except Exception as exc:
@@ -113,8 +120,14 @@ def _sync():
     log.info("Cache sync starting — %d periods × %d views…", len(ALL_PERIODS), len(_VIEWS))
     total, failed = 0, 0
 
-    # Step 1: refresh period-agnostic data (owners, deal-contact graph)
+    # Step 1: refresh period-agnostic data (owners, deal-contact graph, book coverage)
     _refresh_base_data()
+    try:
+        analytics.compute_book_coverage(_force=True)
+        total += 1
+    except Exception as exc:
+        log.warning("  ✗ compute_book_coverage: %s", exc)
+        failed += 1
 
     # Step 2: for each period, refresh raw API calls then compute analytics.
     # gc.collect() between periods lets Python reclaim the temporary objects
