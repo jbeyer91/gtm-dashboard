@@ -13,10 +13,10 @@
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
   {{ stat_card("Total Dials", "{:,}".format(t.dials)) }}
-  {{ stat_card("Connect Rate", fmt_pct(t.pct_connect)) }}
-  {{ stat_card("Conversation Rate", fmt_pct(t.pct_conversation)) }}
-  {{ stat_card("Outbound Deals Created", t.outbound_deals_created) }}
-  {{ stat_card("Deals to Stage 2", t.outbound_deals_to_s2) }}
+  {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), tip="% of dials that reached a live person. Target: 10%.") }}
+  {{ stat_card("Conversation Rate", fmt_pct(t.pct_conversation), tip="% of live connects that turned into a real conversation (2+ min).") }}
+  {{ stat_card("Outbound Deals Created", t.outbound_deals_created, tip="New deals created in CRM sourced from cold outreach calls this period.") }}
+  {{ stat_card("Deals to Stage 2", t.outbound_deals_to_s2, tip="Cold outreach deals that advanced to Stage 2 or beyond.") }}
 </div>
 
 <!-- Table -->
@@ -27,13 +27,13 @@
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Dials</th>
         <th class="px-4 py-3 text-right font-semibold">Avg / Day</th>
-        <th class="px-4 py-3 text-right font-semibold">Connect %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of dials that reached a live person. Target: 10%.">Connect %</th>
         <th class="px-4 py-3 text-right font-semibold">Connects</th>
-        <th class="px-4 py-3 text-right font-semibold">Convo %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of live connections that turned into a real conversation (2+ min).">Convo %</th>
         <th class="px-4 py-3 text-right font-semibold">Convos</th>
-        <th class="px-4 py-3 text-right font-semibold">Dial → Deal %</th>
-        <th class="px-4 py-3 text-right font-semibold">CO Deals Created</th>
-        <th class="px-4 py-3 text-right font-semibold">Deals → S2</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of total dials that resulted in a new deal being created in CRM.">Dial → Deal %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Cold outreach deals created this period (excludes inbound/referral).">CO Deals Created</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Cold outreach deals that advanced to Stage 2 or beyond.">Deals → S2</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
