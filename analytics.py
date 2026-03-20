@@ -700,7 +700,7 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         status = (c["properties"].get("hs_lead_status") or "").upper()
         if status in ("UNQUALIFIED", "BAD TIMING", "DISQUALIFIED"):
             src_data[src]["leads_disqualified"] += 1
-        if c["properties"].get("num_associated_deals", 0):
+        if c["properties"].get("first_sales_activity_after_demo_request"):
             src_data[src]["leads_contacted"] += 1
 
     for d in inbound_deals:
