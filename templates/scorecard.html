@@ -60,7 +60,8 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Deals Created</p>
     <div class="flex items-center">{{ dot(dc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.deals_created }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">target: {{ t.deals_target }} (~{{ (t.deals_target / data.rows|length)|round|int }} / rep)</p>
+    {% set deals_remaining = [t.deals_target - t.deals_created, 0]|max %}
+    <p class="text-xs text-gray-400 mt-1">target: {{ t.deals_target }} · need ~{{ (deals_remaining / data.rows|length)|round|int }} more / rep</p>
   </div>
 
   {# $ to Stage 2 #}
@@ -94,7 +95,7 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Stale Accounts</p>
     <div class="flex items-center">{{ dot(sc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.stale_count }}</p></div>
-    <p class="text-xs text-gray-400 mt-1">A+–C accounts · no activity in 30d</p>
+    <p class="text-xs text-gray-400 mt-1">{{ stale_pct|round|int }}% of A+–C book · no activity in 30d</p>
   </div>
 
 </div>
