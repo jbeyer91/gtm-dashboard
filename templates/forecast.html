@@ -16,7 +16,11 @@
   {{ stat_card("Won Revenue", fmt_money(t.won_amt)) }}
   {{ stat_card("Commit", fmt_money(t.commit_amt), t.commit_n | string ~ " deals") }}
   {{ stat_card("Forecast (Won + Commit)", fmt_money(t.forecast_amt)) }}
+  {% if data.has_submissions %}
+  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt), "from HubSpot forecast tool") }}
+  {% else %}
   {{ stat_card("Weighted Pipeline", fmt_money(t.weighted_amt), "open deals × stage probability") }}
+  {% endif %}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -30,6 +34,7 @@
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Forecast $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Best Case $</th>
         <th class="px-3 py-3 text-right font-semibold"># Open</th>
+        {% if data.has_submissions %}<th class="px-4 py-3 text-right font-semibold border-l border-gray-200">HS Submitted $</th>{% endif %}
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Weighted $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Quota $</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
@@ -46,6 +51,11 @@
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold">{{ fmt_money(row.forecast_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.bestcase_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ row.bestcase_n }}</td>
+        {% if data.has_submissions %}
+        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold text-indigo-600">
+          {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+        </td>
+        {% endif %}
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
           {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
@@ -75,6 +85,11 @@
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.forecast_amt) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.bestcase_amt) }}</td>
         <td class="px-3 py-3 text-right text-gray-500">{{ t.bestcase_n }}</td>
+        {% if data.has_submissions %}
+        <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
+          {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
+        </td>
+        {% endif %}
         <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">
           {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}

@@ -482,6 +482,17 @@ def debug_quotas():
     })
 
 
+@app.route("/api/debug/forecast-submissions")
+@login_required
+def debug_forecast_submissions():
+    """Show raw forecast submission objects to help identify the correct amount property."""
+    from hubspot import get_forecast_submissions
+    subs = get_forecast_submissions()
+    # Return all properties from the first few records so we can see what's available
+    sample = [s.get("properties", {}) for s in subs[:20]]
+    return jsonify({"total": len(subs), "sample": sample})
+
+
 @app.route("/api/debug/icp-rank-values")
 @login_required
 def debug_icp_rank_values():
