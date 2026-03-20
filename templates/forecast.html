@@ -25,11 +25,6 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Won $</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Commit $</th>
-        <th class="px-3 py-3 text-right font-semibold"># Commit</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Best Case $</th>
-        <th class="px-3 py-3 text-right font-semibold"># Open</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Weighted $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">HS Submitted $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Quota $</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
@@ -41,11 +36,6 @@
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.commit_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ row.commit_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.bestcase_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ row.bestcase_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold text-indigo-600">
           {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
         </td>
@@ -72,11 +62,6 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.won_amt) }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.commit_amt) }}</td>
-        <td class="px-3 py-3 text-right text-gray-500">{{ t.commit_n }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.bestcase_amt) }}</td>
-        <td class="px-3 py-3 text-right text-gray-500">{{ t.bestcase_n }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
         </td>
