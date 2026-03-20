@@ -741,12 +741,13 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         lc = data["leads_created"]
         dc = data["deals_created"]
         dw = data["deals_won"]
+        qualified = lc - data["leads_disqualified"]
         rows.append({
             "source": src,
             **data,
             "acv_won": data["won_amt"] / dw if dw else 0,
             "dq_pct": _pct(data["leads_disqualified"], lc),
-            "follow_up_pct": _pct(data["leads_contacted"], lc),
+            "follow_up_pct": _pct(data["leads_contacted"], qualified),
             "deal_creation_pct": _pct(dc, lc),
             "win_rate_pct": _pct(dw, dc),
         })
@@ -772,7 +773,7 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         "lost_amt": _sum("lost_amt"),
         "acv_won": _sum("won_amt") / tot_dw if tot_dw else 0,
         "dq_pct": _pct(_sum("leads_disqualified"), tot_lc),
-        "follow_up_pct": _pct(_sum("leads_contacted"), tot_lc),
+        "follow_up_pct": _pct(_sum("leads_contacted"), tot_lc - _sum("leads_disqualified")),
         "deal_creation_pct": _pct(tot_dc, tot_lc),
         "win_rate_pct": _pct(tot_dw, tot_dc),
     }
