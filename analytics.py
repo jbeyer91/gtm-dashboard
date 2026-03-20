@@ -6,7 +6,7 @@ from hubspot import (
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
-    get_overdue_sequence_tasks, _parse_hs_datetime, get_lifecyclestage_value,
+    get_overdue_sequence_tasks, _parse_hs_datetime,
 )
 
 SOURCE_MAP = {
@@ -710,12 +710,10 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         raw = (props.get("last_touch_channel") or "").strip().upper()
         return CHANNEL_LABELS.get(raw, raw) if raw else "Unknown"
 
-    _dq_stage_value = get_lifecyclestage_value("Disqualified")
-
     for c in contacts:
         src = _contact_channel(c["properties"])
         src_data[src]["leads_created"] += 1
-        if (c["properties"].get("lifecyclestage") or "") == _dq_stage_value:
+        if (c["properties"].get("lifecyclestage") or "") == "184059525":
             src_data[src]["leads_disqualified"] += 1
         if c["properties"].get("first_sales_activity_after_demo_request"):
             src_data[src]["leads_contacted"] += 1
