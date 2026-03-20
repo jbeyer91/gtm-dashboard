@@ -24,7 +24,11 @@ def _parse_hs_datetime(raw: str) -> datetime:
     if s.lstrip("-").isdigit() and 10 <= len(s) <= 14:
         return datetime.fromtimestamp(int(s) / 1000, tz=timezone.utc)
     # ISO 8601 — replace trailing Z with explicit UTC offset
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    # Date-only strings (e.g. "2026-03-01") produce naive datetimes; assume UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 HUBSPOT_TOKEN = os.environ.get("HUBSPOT_TOKEN", "")
 BASE_URL = "https://api.hubapi.com"
