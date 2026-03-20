@@ -63,6 +63,7 @@ def _refresh_base_data():
     for fn in (
         hubspot.get_owners,
         hubspot.get_team_owner_ids,
+        hubspot.get_lost_reason_labels,
         hubspot.get_deal_contact_windows,
         hubspot.get_companies_for_coverage,
         hubspot.get_sequence_enrolled_company_ids,

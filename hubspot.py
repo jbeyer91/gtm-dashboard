@@ -202,6 +202,21 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
 
 
 @ttl_cache
+def get_lost_reason_labels() -> dict:
+    """Return {internal_enum_value: display_label} for hs_closed_lost_reason.
+
+    HubSpot enumeration properties return internal keys via the API, not
+    display labels. This fetches the property definition so we can map
+    keys → labels before classifying lost reasons.
+    Returns {} if the property is free-text (no options) or on any error.
+    """
+    resp = requests.get(f"{BASE_URL}/crm/v3/properties/deals/hs_closed_lost_reason", headers=HEADERS)
+    if not resp.ok:
+        return {}
+    return {opt["value"]: opt["label"] for opt in resp.json().get("options", [])}
+
+
+@ttl_cache
 def get_owners() -> dict:
     resp = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
     resp.raise_for_status()

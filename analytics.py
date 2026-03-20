@@ -6,7 +6,7 @@ from hubspot import (
     get_contacts_inbound, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
-    get_overdue_sequence_tasks, _parse_hs_datetime,
+    get_overdue_sequence_tasks, _parse_hs_datetime, get_lost_reason_labels,
 )
 
 SOURCE_MAP = {
@@ -635,14 +635,17 @@ def compute_deals_lost(period: str) -> dict:
 
     owner_data = defaultdict(lambda: {r: 0 for r in REASONS} | {"total": 0})
 
+    reason_labels = get_lost_reason_labels()  # {internal_key: display_label} or {}
+
     for d in lost_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
         if not _owner_allowed(oid):
             continue
-        reason = d["properties"].get("hs_closed_lost_reason") or "Other"
-        # normalize
+        raw = d["properties"].get("hs_closed_lost_reason") or ""
+        # Convert internal enum key → display label if available, else use raw text
+        reason = reason_labels.get(raw, raw) or "Other"
         matched = next((r for r in REASONS if r.lower() in reason.lower()), "Other")
         owner_data[oid][matched] += 1
         owner_data[oid]["total"] += 1
