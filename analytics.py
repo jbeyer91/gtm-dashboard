@@ -70,6 +70,21 @@ CALL_CONVERSATION_GUIDS = {
 }
 
 
+def _letter_grade(score: float) -> str:
+    if score >= 97: return "A+"
+    if score >= 93: return "A"
+    if score >= 85: return "A-"
+    if score >= 80: return "B+"
+    if score >= 75: return "B"
+    if score >= 70: return "B-"
+    if score >= 65: return "C+"
+    if score >= 60: return "C"
+    if score >= 55: return "C-"
+    if score >= 50: return "D+"
+    if score >= 45: return "D"
+    return "D-"
+
+
 def _safe_div(a, b):
     return a / b if b else None
 
@@ -1033,6 +1048,189 @@ def compute_book_coverage() -> dict:
     }
 
     return {"rows": rows, "totals": totals}
+
+
+@ttl_cache
+def compute_scorecard() -> dict:
+    """This-month scorecard: per-rep weighted grade across 8 KPIs."""
+    start, end = get_date_range("this_month")
+    period_bdays = max(
+        sum(1 for i in range((end - start).days + 1)
+            if (start + timedelta(days=i)).weekday() < 5),
+        1,
+    )
+
+    owners = get_owners()
+    quotas = get_quotas(start, end)
+
+    won_deals     = [d for d in get_deals(start, end, "closedate")
+                     if d["properties"].get("hs_is_closed_won") == "true"]
+    created_deals = get_deals(start, end, "createdate")
+    open_deals    = get_all_open_deals(start, _coverage_end("this_month", start, end))
+    calls         = get_calls(start, end)
+    contact_windows  = get_deal_contact_windows()
+    call_to_contact  = get_call_to_contact_map([c["id"] for c in calls])
+    book             = compute_book_coverage()
+    book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
+
+    # ── per-owner aggregations ────────────────────────────────────────────────
+    owner_won   = defaultdict(float)
+    for d in won_deals:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if oid and _owner_allowed(oid):
+            owner_won[oid] += _parse_amount(d["properties"].get("amount"))
+
+    owner_created = defaultdict(int)
+    owner_s2_amt  = defaultdict(float)
+    for d in created_deals:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        if _deal_source(d) != "Cold outreach":
+            continue
+        owner_created[oid] += 1
+        stage = d["properties"].get("dealstage", "")
+        if stage in (NB_STAGES["stage2"], NB_STAGES["stage3"],
+                     NB_STAGES["stage4"], NB_STAGES["won"]):
+            owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+
+    owner_open = defaultdict(float)
+    for d in open_deals:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if oid and _owner_allowed(oid):
+            owner_open[oid] += _parse_amount(d["properties"].get("amount"))
+
+    owner_calls = defaultdict(lambda: {"dials": 0, "connects": 0})
+    for call in calls:
+        oid = call["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+            continue
+        contact_id = call_to_contact.get(call["id"])
+        if contact_id and contact_id in contact_windows:
+            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+            if ts_raw:
+                try:
+                    call_ts_ms = int(datetime.fromisoformat(
+                        str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+                    if any(ws <= call_ts_ms and (we is None or call_ts_ms <= we)
+                           for ws, we in contact_windows[contact_id]):
+                        continue
+                except Exception:
+                    pass
+        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
+        owner_calls[oid]["dials"] += 1
+        if disposition in CALL_CONNECTED_GUIDS:
+            owner_calls[oid]["connects"] += 1
+
+    # ── grade weights ─────────────────────────────────────────────────────────
+    WEIGHTS = {
+        "quota_attainment": 0.25,
+        "stage2":           0.15,
+        "coverage":         0.15,
+        "deals_created":    0.10,
+        "active_30":        0.15,
+        "called_120":       0.15,
+        "avg_dials":        0.03,
+        "connect_rate":     0.02,
+    }
+
+    def _score(actual, target):
+        return min(actual / target * 100, 100.0) if target else 0.0
+
+    GRADE_ORDER = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-"]
+
+    all_oids = {oid for oid in (set(quotas) | set(owner_won) | set(owner_calls))
+                if _owner_allowed(oid) and owners.get(oid)}
+
+    rows = []
+    for oid in all_oids:
+        quota     = quotas.get(oid, 0.0)
+        won       = owner_won.get(oid, 0.0)
+        created   = owner_created.get(oid, 0)
+        s2_amt    = owner_s2_amt.get(oid, 0.0)
+        open_amt  = owner_open.get(oid, 0.0)
+        dials     = owner_calls[oid]["dials"]
+        connects  = owner_calls[oid]["connects"]
+        avg_dials     = round(dials / period_bdays, 1)
+        connect_rate  = _pct(connects, dials)
+        attain_pct    = round(won / quota * 100, 1) if quota else 0.0
+        quota_met     = quota > 0 and won >= quota
+        remaining     = max(quota - won, 0.0)
+        coverage      = round(open_amt / remaining, 2) if remaining > 0 else None
+        s2_target     = quota * 4
+
+        book_row   = book_by_owner.get(oid, {})
+        active_30  = book_row.get("pct_active_30", 0.0)
+        called_120 = book_row.get("pct_called_120", 0.0)
+
+        scores = {
+            "quota_attainment": _score(attain_pct, 100),
+            "stage2":           _score(s2_amt, s2_target),
+            "coverage":         100.0 if quota_met else _score(coverage or 0, 5),
+            "deals_created":    _score(created, 15),
+            "active_30":        _score(active_30, 90),
+            "called_120":       _score(called_120, 90),
+            "avg_dials":        _score(avg_dials, 40),
+            "connect_rate":     _score(connect_rate, 10),
+        }
+        weighted = sum(scores[k] * WEIGHTS[k] for k in WEIGHTS)
+        grade    = _letter_grade(weighted)
+
+        rows.append({
+            "ae":            owners[oid]["last_name"] or owners[oid]["name"],
+            "owner_id":      oid,
+            "grade":         grade,
+            "grade_sort":    GRADE_ORDER.index(grade),
+            "quota_amt":     quota,
+            "won_amt":       won,
+            "attain_pct":    attain_pct,
+            "deals_created": created,
+            "s2_amt":        s2_amt,
+            "s2_target":     s2_target,
+            "coverage":      coverage,
+            "quota_met":     quota_met,
+            "avg_dials":     avg_dials,
+            "connect_rate":  connect_rate,
+            "active_30_pct": active_30,
+            "called_120_pct":called_120,
+            "stale_count":   book_row.get("ac_accounts", 0) - book_row.get("active_30", 0),
+            "at_risk_count": book_row.get("ac_accounts", 0) - book_row.get("called_120", 0),
+            "ac_accounts":   book_row.get("ac_accounts", 0),
+        })
+
+    rows.sort(key=lambda r: r["grade_sort"])
+
+    # ── team totals ───────────────────────────────────────────────────────────
+    t_quota    = sum(r["quota_amt"] for r in rows)
+    t_won      = sum(r["won_amt"] for r in rows)
+    t_open     = sum(owner_open.get(r["owner_id"], 0.0) for r in rows)
+    t_remaining = max(t_quota - t_won, 0.0)
+    t_ac       = sum(r["ac_accounts"] for r in rows)
+    t_active_30  = sum(book_by_owner.get(r["owner_id"], {}).get("active_30", 0) for r in rows)
+    t_called_120 = sum(book_by_owner.get(r["owner_id"], {}).get("called_120", 0) for r in rows)
+    t_dials    = sum(owner_calls[r["owner_id"]]["dials"] for r in rows)
+    t_connects = sum(owner_calls[r["owner_id"]]["connects"] for r in rows)
+
+    team = {
+        "attain_pct":     round(t_won / t_quota * 100, 1) if t_quota else 0.0,
+        "won_amt":        t_won,
+        "quota_amt":      t_quota,
+        "deals_created":  sum(r["deals_created"] for r in rows),
+        "s2_amt":         sum(r["s2_amt"] for r in rows),
+        "s2_target":      t_quota * 4,
+        "coverage":       round(t_open / t_remaining, 2) if t_remaining > 0 else None,
+        "quota_met":      t_quota > 0 and t_won >= t_quota,
+        "avg_dials":      round(t_dials / period_bdays, 1),
+        "connect_rate":   _pct(t_connects, t_dials),
+        "active_30_pct":  _pct(t_active_30, t_ac),
+        "called_120_pct": _pct(t_called_120, t_ac),
+        "stale_count":    t_ac - t_active_30,
+        "at_risk_count":  t_ac - t_called_120,
+    }
+
+    return {"rows": rows, "team": team}
 
 
 @ttl_cache

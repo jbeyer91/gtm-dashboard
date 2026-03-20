@@ -16,11 +16,11 @@
   {{ stat_card("Won Revenue", fmt_money(t.won_amt)) }}
   {{ stat_card("HS Submitted", fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool") }}
   {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
-  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", ("$" ~ fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "") }}
+  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-  <table class="text-sm mx-auto">
+  <table class="w-full text-sm">
     <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
