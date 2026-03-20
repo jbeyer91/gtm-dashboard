@@ -9,12 +9,12 @@
 
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-  {{ stat_card("Total Named Accounts", "{:,}".format(t.total_accounts)) }}
-  {{ stat_card("A+ to C Accounts", "{:,}".format(t.ac_accounts)) }}
-  {{ stat_card("Activity (30d)", fmt_pct(t.pct_active_30)) }}
-  {{ stat_card("Called (120d)", fmt_pct(t.pct_called_120)) }}
-  {{ stat_card("In Sequence", fmt_pct(t.pct_in_sequence)) }}
-  {{ stat_card("Overdue Tasks", "{:,}".format(t.overdue_tasks)) }}
+  {{ stat_card("Total Named Accounts", "{:,}".format(t.total_accounts), tip="All accounts assigned to AEs in the named account book.") }}
+  {{ stat_card("A+ to C Accounts", "{:,}".format(t.ac_accounts), tip="Highest-priority accounts (A+, A, B, C tiers) that reps should be actively covering.") }}
+  {{ stat_card("Activity (30d)", fmt_pct(t.pct_active_30), tip="% of A+-C accounts with any logged activity (call, email, meeting, note) in the last 30 days. Target: 60%+.") }}
+  {{ stat_card("Called (120d)", fmt_pct(t.pct_called_120), tip="% of A+-C accounts that received at least one outbound call in the last 120 days. Target: 75%+.") }}
+  {{ stat_card("In Sequence", fmt_pct(t.pct_in_sequence), tip="% of A+-C accounts currently enrolled in an automated outreach sequence.") }}
+  {{ stat_card("Overdue Tasks", "{:,}".format(t.overdue_tasks), tip="HubSpot tasks that are past their due date across all reps. Target: 0.") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -23,11 +23,11 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Total Named Accounts</th>
-        <th class="px-4 py-3 text-right font-semibold">A+ to C Accounts</th>
-        <th class="px-4 py-3 text-right font-semibold">% Activity (30d)</th>
-        <th class="px-4 py-3 text-right font-semibold">% Contacted (120d)</th>
-        <th class="px-4 py-3 text-right font-semibold">% In Sequence</th>
-        <th class="px-4 py-3 text-right font-semibold">Overdue Tasks</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Highest-priority named accounts (A+, A, B, C tiers) that reps should be actively working.">A+ to C Accounts</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts with any logged activity (call, email, meeting, note) in the last 30 days. Target: 60%+.">% Activity (30d)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts that received at least one outbound call in the last 120 days. Target: 75%+.">% Contacted (120d)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts currently enrolled in an automated outreach sequence.">% In Sequence</th>
+        <th class="px-4 py-3 text-right font-semibold" title="HubSpot tasks that are past their due date. Should be 0.">Overdue Tasks</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">

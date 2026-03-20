@@ -23,9 +23,9 @@
 </div>
 {% endmacro %}
 
-{% macro stat_card(label, value, sub='') %}
+{% macro stat_card(label, value, sub='', tip='') %}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5 hover:shadow-md transition-shadow duration-200">
-  <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">{{ label }}</p>
+  <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2"{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
   <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">{{ value }}</p>
   {% if sub %}<p class="text-xs text-gray-400 mt-2 font-medium">{{ sub }}</p>{% endif %}
 </div>

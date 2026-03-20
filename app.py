@@ -55,19 +55,19 @@ SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
     {"type": "link",  "endpoint": "scorecard",         "label": "Scorecard"},
-    {"type": "link",  "endpoint": "call_stats",        "label": "Call Stats"},
-    {"type": "group", "label": "Pipeline", "children": [
-        {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
-        {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
-    ]},
     {"type": "group", "label": "Deals", "children": [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
         {"endpoint": "forecast",        "label": "Forecast"},
     ]},
+    {"type": "group", "label": "Pipeline", "children": [
+        {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
+        {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
+    ]},
+    {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
+    {"type": "link",  "endpoint": "call_stats",        "label": "Calls"},
     {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
-    {"type": "link",  "endpoint": "book_coverage",     "label": "Book Coverage"},
 ]
 
 

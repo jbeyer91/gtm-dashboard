@@ -18,6 +18,8 @@ STAGE2_WIN_RATE    = 0.25     # Win rate for deals that reach stage 2
 S2_COVERAGE_MULT   = round(1 / STAGE2_WIN_RATE)          # 4x
 # Derived: created deals needed per $ of quota
 DEALS_PER_DOLLAR   = 1 / (ACV * STAGE1_TO_STAGE2 * STAGE2_WIN_RATE)  # 1/1800
+# Fixed monthly deals-created target per rep (12 outbound + 3 inbound)
+DEALS_CREATED_TARGET_PER_REP = 15
 
 SOURCE_MAP = {
     "PAID_SEARCH": "Paid Search",
@@ -81,17 +83,18 @@ CALL_CONVERSATION_GUIDS = {
 
 
 def _letter_grade(score: float) -> str:
-    if score >= 97: return "A+"
-    if score >= 93: return "A"
-    if score >= 85: return "A-"
-    if score >= 80: return "B+"
-    if score >= 75: return "B"
-    if score >= 70: return "B-"
-    if score >= 65: return "C+"
-    if score >= 60: return "C"
-    if score >= 55: return "C-"
-    if score >= 50: return "D+"
-    if score >= 45: return "D"
+    # Scale allows >100 when quota is overachieved (quota score capped at 150)
+    if score >= 110: return "A+"
+    if score >= 88:  return "A"
+    if score >= 80:  return "A-"
+    if score >= 72:  return "B+"
+    if score >= 65:  return "B"
+    if score >= 58:  return "B-"
+    if score >= 50:  return "C+"
+    if score >= 42:  return "C"
+    if score >= 35:  return "C-"
+    if score >= 27:  return "D+"
+    if score >= 18:  return "D"
     return "D-"
 
 
@@ -1240,17 +1243,19 @@ def compute_scorecard() -> dict:
         rep_s1_to_s2  = rs.get("s1_to_s2",   STAGE1_TO_STAGE2)
         rep_acv       = rs.get("acv",         ACV)
         s2_target     = quota / rep_win_s2
-        deals_target  = max(1, round(quota / (rep_acv * rep_s1_to_s2 * rep_win_s2)))
+        deals_target  = DEALS_CREATED_TARGET_PER_REP
 
         book_row    = book_by_owner.get(oid, {})
         ac_accounts = book_row.get("ac_accounts", 0)
         stale_count = ac_accounts - book_row.get("active_30", 0)
         # stale score: 0 stale = 100, all stale = 0; target ≤10% stale (90% active)
         stale_pct   = (stale_count / ac_accounts * 100) if ac_accounts else 0.0
-        stale_score = max(0.0, 100.0 - stale_pct / 10 * 100) if ac_accounts else 100.0
+        # Gradual decay: 0% stale=100, 50% stale=50, 100% stale=0 (was cliff at 10%)
+        stale_score = max(0.0, 100.0 - stale_pct) if ac_accounts else 100.0
 
         scores = {
-            "quota_attainment": _score(attain_pct, 100),
+            # Uncapped at 150: 300% quota → score 150, rewarding overperformance
+            "quota_attainment": min(attain_pct, 150.0),
             "stage2":           _score(s2_amt, s2_target),
             "deals_created":    _score(created, deals_target),
             "stale_accounts":   stale_score,
@@ -1258,6 +1263,14 @@ def compute_scorecard() -> dict:
             "connect_rate":     _score(connect_rate, 10),
         }
         weighted = sum(scores[k] * WEIGHTS[k] for k in WEIGHTS)
+        # Quota attainment floor: hitting quota guarantees a minimum grade
+        # regardless of how other metrics score (stale accounts, dials, etc.)
+        if attain_pct >= 100:
+            weighted = max(weighted, 88.0)   # floor at A
+        elif attain_pct >= 80:
+            weighted = max(weighted, 65.0)   # floor at B
+        elif attain_pct >= 60:
+            weighted = max(weighted, 42.0)   # floor at C
         grade    = _letter_grade(weighted)
 
         rows.append({
