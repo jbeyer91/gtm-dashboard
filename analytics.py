@@ -1203,7 +1203,14 @@ def compute_scorecard(period: str = "this_month") -> dict:
     # $ advanced to Stage 2 this period: use hs_v2_date_entered_71300358 (exact
     # date the deal entered Stage 2) across open deals + won deals this period.
     open_deals   = get_all_open_deals()
-    all_deals_for_s2 = list(open_deals) + list(won_deals)
+    # Combine open + won + created (covers lost deals); dedup by deal id
+    _seen_s2 = set()
+    all_deals_for_s2 = []
+    for d in list(open_deals) + list(won_deals) + list(created_deals):
+        did = d.get("id")
+        if did not in _seen_s2:
+            _seen_s2.add(did)
+            all_deals_for_s2.append(d)
     owner_s2_amt = defaultdict(float)
     start_ms = int(start.timestamp() * 1000)
     end_ms   = int(end.timestamp() * 1000)
