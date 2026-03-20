@@ -121,12 +121,13 @@
     <div class="flex items-center gap-1 ml-auto pl-4">
 
       <!-- Data freshness badge -->
-      <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs text-gray-300 whitespace-nowrap"
-           title="Data is pre-fetched from HubSpot and refreshes automatically every hour">
+      <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border whitespace-nowrap text-xs
+                  {% if cache_stale %}border-amber-400/60 bg-amber-400/20 text-amber-200{% else %}border-white/20 bg-white/10 text-gray-300{% endif %}"
+           title="{% if cache_stale %}Data is over 2 hours old — consider refreshing{% else %}Data is pre-fetched from HubSpot and refreshes automatically every hour{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
         </svg>
-        <span>{{ last_refreshed }}</span>
+        <span>{{ last_refreshed }}{% if cache_stale %} ⚠{% endif %}</span>
       </div>
 
       <!-- Manual refresh -->

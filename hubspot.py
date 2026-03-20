@@ -702,6 +702,7 @@ def get_companies_for_coverage() -> list:
                 "icp_rank",
                 "notes_last_activity_date",
                 "notes_last_contacted",
+                "hs_last_call_date",
                 "name",
                 "in_active_sequence",
             ],

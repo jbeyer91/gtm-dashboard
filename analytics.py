@@ -1026,9 +1026,10 @@ def compute_book_coverage() -> dict:
         if is_ac:
             owner_data[oid]["ac_accounts"] += 1
 
-            # Sales activity in last 30 days — use notes_last_contacted since
-            # notes_last_activity_date is not populated at the company level in this HubSpot setup
-            last_act_raw = props.get("notes_last_contacted")
+            # Any sales activity in last 30 days — prefer notes_last_activity_date
+            # (broadest activity signal); fall back to notes_last_contacted
+            last_act_raw = (props.get("notes_last_activity_date")
+                            or props.get("notes_last_contacted"))
             if last_act_raw:
                 try:
                     if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
@@ -1036,11 +1037,13 @@ def compute_book_coverage() -> dict:
                 except Exception:
                     pass
 
-            # Called within 120 days
-            last_contacted_raw = props.get("notes_last_contacted")
-            if last_contacted_raw:
+            # Called within 120 days — use hs_last_call_date (call-specific rollup);
+            # fall back to notes_last_contacted if not populated
+            last_call_raw = (props.get("hs_last_call_date")
+                             or props.get("notes_last_contacted"))
+            if last_call_raw:
                 try:
-                    if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
+                    if _parse_hs_datetime(last_call_raw) >= onetwenty_days_ago:
                         owner_data[oid]["called_120"] += 1
                 except Exception:
                     pass
@@ -1162,9 +1165,9 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
 
 
 @ttl_cache
-def compute_scorecard() -> dict:
-    """This-month scorecard: per-rep weighted grade across 8 KPIs."""
-    start, end = get_date_range("this_month")
+def compute_scorecard(period: str = "this_month") -> dict:
+    """Scorecard: per-rep weighted grade across 8 KPIs for the given period."""
+    start, end = get_date_range(period)
     period_bdays = max(
         sum(1 for i in range((end - start).days + 1)
             if (start + timedelta(days=i)).weekday() < 5),
@@ -1180,9 +1183,9 @@ def compute_scorecard() -> dict:
     book             = compute_book_coverage()
     book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
     rep_deal_stats   = _rep_trailing_deal_stats()
-    call_stats       = compute_call_stats("this_month")
+    call_stats       = compute_call_stats(period)
     call_stats_by_owner = {r["owner_id"]: r for r in call_stats["rows"]}
-    pipeline         = compute_pipeline_coverage("this_month")
+    pipeline         = compute_pipeline_coverage(period)
     pipeline_by_owner = {r["owner_id"]: r for r in pipeline["rows"]}
 
     # ── per-owner aggregations ────────────────────────────────────────────────

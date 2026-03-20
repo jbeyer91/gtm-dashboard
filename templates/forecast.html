@@ -39,7 +39,7 @@
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}text-indigo-600">
-    {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+    {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal text-xs">Not submitted</span>{% endif %}
   </td>
 </tr>
 {% endmacro %}
