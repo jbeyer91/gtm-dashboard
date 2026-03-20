@@ -814,8 +814,6 @@ def compute_book_coverage() -> dict:
         "overdue_tasks": 0,
     })
 
-    owners_with_custom_overdue: set = set()
-
     def _is_truthy(val) -> bool:
         return str(val).strip().lower() in ("true", "yes", "1")
 
@@ -833,32 +831,22 @@ def compute_book_coverage() -> dict:
             owner_data[oid]["ac_accounts"] += 1
 
             # Sales activity in last 30 days
-            custom_active = props.get("sales_activity_in_last_30_days")
-            if custom_active is not None and custom_active != "":
-                if _is_truthy(custom_active):
-                    owner_data[oid]["active_30"] += 1
-            else:
-                last_act_raw = props.get("notes_last_activity_date")
-                if last_act_raw:
-                    try:
-                        if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
-                            owner_data[oid]["active_30"] += 1
-                    except Exception:
-                        pass
+            last_act_raw = props.get("notes_last_activity_date")
+            if last_act_raw:
+                try:
+                    if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
+                        owner_data[oid]["active_30"] += 1
+                except Exception:
+                    pass
 
             # Called within 120 days
-            custom_called = props.get("called_within_120_days")
-            if custom_called is not None and custom_called != "":
-                if _is_truthy(custom_called):
-                    owner_data[oid]["called_120"] += 1
-            else:
-                last_contacted_raw = props.get("notes_last_contacted")
-                if last_contacted_raw:
-                    try:
-                        if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
-                            owner_data[oid]["called_120"] += 1
-                    except Exception:
-                        pass
+            last_contacted_raw = props.get("notes_last_contacted")
+            if last_contacted_raw:
+                try:
+                    if _parse_hs_datetime(last_contacted_raw) >= onetwenty_days_ago:
+                        owner_data[oid]["called_120"] += 1
+                except Exception:
+                    pass
 
             # In active sequence
             custom_seq = props.get("in_active_sequence")
@@ -869,19 +857,9 @@ def compute_book_coverage() -> dict:
                 if company["id"] in seq_company_ids:
                     owner_data[oid]["in_sequence"] += 1
 
-            # Overdue tasks (per company custom property)
-            custom_overdue = props.get("num_of_overdue_tasks")
-            if custom_overdue is not None and custom_overdue != "":
-                try:
-                    owner_data[oid]["overdue_tasks"] += int(float(custom_overdue))
-                    owners_with_custom_overdue.add(oid)
-                except (ValueError, TypeError):
-                    pass
-
-    # Fall back to task search for owners without custom overdue data
     for task in tasks:
         oid = task["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid) and oid not in owners_with_custom_overdue:
+        if oid and _owner_allowed(oid):
             owner_data[oid]["overdue_tasks"] += 1
 
     rows = []
