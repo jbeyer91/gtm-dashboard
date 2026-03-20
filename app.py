@@ -278,6 +278,42 @@ def debug_company_properties():
     return jsonify(matches)
 
 
+@app.route("/api/debug/inbound-funnel")
+@login_required
+def debug_inbound_funnel():
+    """Inspect inbound deals (deal_source=Inbound) and list-1082 contact properties."""
+    import requests as req
+    from hubspot import BASE_URL, HEADERS, get_date_range, get_deals
+    from collections import Counter
+
+    start, end = get_date_range("this_month")
+    deals = get_deals(start, end, "createdate")
+    inbound = [d for d in deals if (d["properties"].get("deal_source") or "").lower() == "inbound"]
+
+    # Show all property keys on first inbound deal so we can find "last touch channel"
+    sample_props = {}
+    if inbound:
+        sample_props = {k: v for k, v in inbound[0]["properties"].items() if v}
+
+    # Also show distinct deal_source values
+    source_counts = Counter((d["properties"].get("deal_source") or "(blank)") for d in deals)
+
+    # List 1082 — fetch first page of members
+    list_resp = req.get(
+        f"{BASE_URL}/crm/v3/lists/1082/memberships?limit=5",
+        headers=HEADERS,
+    )
+    list_sample = list_resp.json() if list_resp.ok else {"error": list_resp.text}
+
+    return jsonify({
+        "total_deals": len(deals),
+        "inbound_deals": len(inbound),
+        "source_counts": dict(source_counts.most_common()),
+        "sample_inbound_deal_props": sample_props,
+        "list_1082_sample": list_sample,
+    })
+
+
 @app.route("/api/debug/deal-sources")
 @login_required
 def debug_deal_sources():
