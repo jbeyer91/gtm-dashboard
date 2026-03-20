@@ -691,8 +691,20 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         "lost_amt": 0.0,
     })
 
+    CHANNEL_LABELS = {
+        "PAID_SEARCH": "Paid Search",
+        "ORGANIC_SEARCH": "Organic Search",
+        "SOCIAL_MEDIA": "Organic Social",
+        "PAID_SOCIAL": "Paid Social",
+        "DIRECT_TRAFFIC": "Direct Traffic",
+        "EMAIL_MARKETING": "Email Marketing",
+        "OFFLINE": "Offline Sources",
+        "REFERRALS": "Referrals",
+    }
+
     def _channel(props):
-        return (props.get("last_touch_channel") or "Unknown").strip() or "Unknown"
+        raw = (props.get("last_touch_channel") or "").strip().upper()
+        return CHANNEL_LABELS.get(raw, raw) if raw else "Unknown"
 
     for c in contacts:
         src = _channel(c["properties"])
