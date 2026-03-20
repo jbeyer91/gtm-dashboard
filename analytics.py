@@ -1014,8 +1014,9 @@ def compute_book_coverage() -> dict:
         if is_ac:
             owner_data[oid]["ac_accounts"] += 1
 
-            # Sales activity in last 30 days
-            last_act_raw = props.get("notes_last_activity_date")
+            # Sales activity in last 30 days — use notes_last_contacted since
+            # notes_last_activity_date is not populated at the company level in this HubSpot setup
+            last_act_raw = props.get("notes_last_contacted")
             if last_act_raw:
                 try:
                     if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
@@ -1104,12 +1105,12 @@ def compute_scorecard() -> dict:
     won_deals     = [d for d in get_deals(start, end, "closedate")
                      if d["properties"].get("hs_is_closed_won") == "true"]
     created_deals = get_deals(start, end, "createdate")
-    open_deals    = get_all_open_deals(start, _coverage_end("this_month", start, end))
-    calls         = get_calls(start, end)
-    contact_windows  = get_deal_contact_windows()
-    call_to_contact  = get_call_to_contact_map([c["id"] for c in calls])
     book             = compute_book_coverage()
     book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
+    call_stats       = compute_call_stats("this_month")
+    call_stats_by_owner = {r["owner_id"]: r for r in call_stats["rows"]}
+    pipeline         = compute_pipeline_coverage("this_month")
+    pipeline_by_owner = {r["owner_id"]: r for r in pipeline["rows"]}
 
     # ── per-owner aggregations ────────────────────────────────────────────────
     owner_won   = defaultdict(float)
@@ -1118,70 +1119,21 @@ def compute_scorecard() -> dict:
         if oid and _owner_allowed(oid):
             owner_won[oid] += _parse_amount(d["properties"].get("amount"))
 
-    # Deals created this month (cold outreach only)
+    # Deals created this month (all sources)
     owner_created = defaultdict(int)
     for d in created_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
-        if _deal_source(d) != "Cold outreach":
-            continue
         owner_created[oid] += 1
 
-    # $ to Stage 2: deals that advanced INTO stage 2 this month (any source)
-    # Use hs_date_entered_71300358 across open + created + won deal sets
-    _start_ms = int(start.timestamp() * 1000)
-    _end_ms   = int(end.timestamp() * 1000)
-    owner_s2_amt  = defaultdict(float)
-    _seen_s2_ids  = set()
-    for d in (*open_deals, *created_deals, *won_deals):
-        deal_id = d.get("id", "")
-        if not deal_id or deal_id in _seen_s2_ids:
-            continue
-        _seen_s2_ids.add(deal_id)
-        oid = d["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
-            continue
-        s2_raw = d["properties"].get("hs_date_entered_71300358")
-        if not s2_raw:
-            continue
-        try:
-            s2_ms = int(datetime.fromisoformat(
-                str(s2_raw).replace("Z", "+00:00")).timestamp() * 1000)
-            if _start_ms <= s2_ms <= _end_ms:
-                owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
-        except Exception:
-            pass
-
-    owner_open = defaultdict(float)
-    for d in open_deals:
-        oid = d["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid):
-            owner_open[oid] += _parse_amount(d["properties"].get("amount"))
-
-    owner_calls = defaultdict(lambda: {"dials": 0, "connects": 0})
-    for call in calls:
-        oid = call["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
-            continue
-        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
-            continue
-        contact_id = call_to_contact.get(call["id"])
-        if contact_id and contact_id in contact_windows:
-            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-            if ts_raw:
-                try:
-                    call_ts_ms = int(datetime.fromisoformat(
-                        str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
-                    if any(ws <= call_ts_ms and (we is None or call_ts_ms <= we)
-                           for ws, we in contact_windows[contact_id]):
-                        continue
-                except Exception:
-                    pass
-        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
-        owner_calls[oid]["dials"] += 1
-        if disposition in CALL_CONNECTED_GUIDS:
-            owner_calls[oid]["connects"] += 1
+    # $ in stage 2+ pipeline: use pipeline coverage data (same source as Pipeline tab)
+    # hs_date_entered_* fields are not available on this HubSpot plan
+    owner_s2_amt = defaultdict(float)
+    for r in pipeline["rows"]:
+        oid = r["owner_id"]
+        if _owner_allowed(oid):
+            owner_s2_amt[oid] = r["s2_amt"] + r["s3_amt"] + r["s4_amt"]
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
@@ -1198,7 +1150,7 @@ def compute_scorecard() -> dict:
 
     GRADE_ORDER = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-"]
 
-    all_oids = {oid for oid in (set(quotas) | set(owner_won) | set(owner_calls))
+    all_oids = {oid for oid in (set(quotas) | set(owner_won) | set(call_stats_by_owner))
                 if _owner_allowed(oid) and owners.get(oid)}
 
     rows = []
@@ -1207,15 +1159,12 @@ def compute_scorecard() -> dict:
         won       = owner_won.get(oid, 0.0)
         created   = owner_created.get(oid, 0)
         s2_amt    = owner_s2_amt.get(oid, 0.0)
-        open_amt  = owner_open.get(oid, 0.0)
-        dials     = owner_calls[oid]["dials"]
-        connects  = owner_calls[oid]["connects"]
-        avg_dials     = round(dials / period_bdays, 1)
-        connect_rate  = _pct(connects, dials)
+        cs            = call_stats_by_owner.get(oid, {})
+        dials         = cs.get("dials", 0)
+        connects      = cs.get("connects", 0)
+        avg_dials     = cs.get("avg_dials_per_day", 0.0)
+        connect_rate  = cs.get("pct_connect", 0.0)
         attain_pct    = round(won / quota * 100, 1) if quota else 0.0
-        quota_met     = quota > 0 and won >= quota
-        remaining     = max(quota - won, 0.0)
-        coverage      = round(open_amt / remaining, 2) if remaining > 0 else None
         s2_target     = quota * 4
 
         book_row    = book_by_owner.get(oid, {})
@@ -1258,8 +1207,8 @@ def compute_scorecard() -> dict:
     # ── team totals ───────────────────────────────────────────────────────────
     t_quota    = sum(r["quota_amt"] for r in rows)
     t_won      = sum(r["won_amt"] for r in rows)
-    t_dials    = sum(owner_calls[r["owner_id"]]["dials"] for r in rows)
-    t_connects = sum(owner_calls[r["owner_id"]]["connects"] for r in rows)
+    t_dials    = sum(call_stats_by_owner.get(r["owner_id"], {}).get("dials", 0) for r in rows)
+    t_connects = sum(call_stats_by_owner.get(r["owner_id"], {}).get("connects", 0) for r in rows)
 
     n_reps = len(rows)
     team = {
