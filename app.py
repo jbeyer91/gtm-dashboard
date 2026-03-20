@@ -54,7 +54,8 @@ COVERAGE_PERIODS = [
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
-    {"type": "link",  "endpoint": "call_stats",       "label": "Call Stats"},
+    {"type": "link",  "endpoint": "scorecard",         "label": "Scorecard"},
+    {"type": "link",  "endpoint": "call_stats",        "label": "Call Stats"},
     {"type": "group", "label": "Pipeline", "children": [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
         {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
@@ -114,7 +115,17 @@ def refresh_cache():
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("call_stats"))
+    return redirect(url_for("scorecard"))
+
+
+@app.route("/scorecard")
+@login_required
+def scorecard():
+    from datetime import datetime, timezone
+    data = analytics.compute_scorecard()
+    month_label = datetime.now(timezone.utc).strftime("%B %Y")
+    return render_template("scorecard.html", data=data, month_label=month_label,
+                           active="scorecard", nav=NAV)
 
 
 @app.route("/call-stats")
