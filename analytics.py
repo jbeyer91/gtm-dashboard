@@ -744,8 +744,8 @@ def compute_forecast(period: str) -> dict:
         weighted_amt = owner_weighted.get(oid, 0.0)
         submitted_amt = owner_submitted.get(oid)   # None = not submitted
         quota_amt    = quotas.get(oid, 0.0)
-        gap_amt      = (quota_amt - submitted_amt) if (quota_amt and submitted_amt is not None) else None
-        attain_pct   = round(submitted_amt / quota_amt * 100, 1) if (quota_amt and submitted_amt is not None) else None
+        gap_amt      = (quota_amt - won_amt) if quota_amt else None
+        attain_pct   = round(won_amt / quota_amt * 100, 1) if quota_amt else None
 
         rows.append({
             "ae":             owner["last_name"] or owner["name"],
@@ -779,8 +779,8 @@ def compute_forecast(period: str) -> dict:
             "bestcase_n":     _s("bestcase_n", src),
             "weighted_amt":   _s("weighted_amt", src),
             "quota_amt":      sub_quota,
-            "gap_amt":        (sub_quota - sub_submitted) if sub_quota else None,
-            "attain_pct":     round(sub_submitted / sub_quota * 100, 1) if sub_quota else None,
+            "gap_amt":        (sub_quota - _s("won_amt", src)) if sub_quota else None,
+            "attain_pct":     round(_s("won_amt", src) / sub_quota * 100, 1) if sub_quota else None,
         }
 
     # Build team groups (preserve TEAM_FILTER order)
@@ -809,8 +809,8 @@ def compute_forecast(period: str) -> dict:
         "bestcase_n":     _s("bestcase_n", rows),
         "weighted_amt":   _s("weighted_amt", rows),
         "quota_amt":      total_quota,
-        "gap_amt":        (total_quota - total_submitted) if total_quota else None,
-        "attain_pct":     round(total_submitted / total_quota * 100, 1) if total_quota else None,
+        "gap_amt":        (total_quota - _s("won_amt", rows)) if total_quota else None,
+        "attain_pct":     round(_s("won_amt", rows) / total_quota * 100, 1) if total_quota else None,
     }
 
     return {"rows": rows, "groups": groups, "totals": totals, "period": period}
