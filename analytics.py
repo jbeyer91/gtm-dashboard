@@ -702,15 +702,16 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
         "REFERRALS": "Referrals",
     }
 
-    def _channel(props):
+    def _contact_channel(props):
+        raw = (props.get("utm_source") or "").strip().upper()
+        return CHANNEL_LABELS.get(raw, raw) if raw else "Unknown"
+
+    def _deal_channel(props):
         raw = (props.get("last_touch_channel") or "").strip().upper()
-        if not raw:
-            # Fall back to hs_analytics_source for contacts that lack last_touch_channel
-            raw = (props.get("hs_analytics_source") or "").strip().upper()
         return CHANNEL_LABELS.get(raw, raw) if raw else "Unknown"
 
     for c in contacts:
-        src = _channel(c["properties"])
+        src = _contact_channel(c["properties"])
         src_data[src]["leads_created"] += 1
         status = (c["properties"].get("hs_lead_status") or "").upper()
         if status in ("UNQUALIFIED", "BAD TIMING", "DISQUALIFIED"):
@@ -719,19 +720,19 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
             src_data[src]["leads_contacted"] += 1
 
     for d in inbound_deals:
-        src = _channel(d["properties"])
+        src = _deal_channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_created"] += 1
         src_data[src]["pg_amt"] += amount
 
     for d in won_deals:
-        src = _channel(d["properties"])
+        src = _deal_channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_won"] += 1
         src_data[src]["won_amt"] += amount
 
     for d in lost_deals:
-        src = _channel(d["properties"])
+        src = _deal_channel(d["properties"])
         amount = _parse_amount(d["properties"].get("amount"))
         src_data[src]["deals_lost"] += 1
         src_data[src]["lost_amt"] += amount
