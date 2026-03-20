@@ -185,6 +185,38 @@ def book_coverage():
     return render_template("book_coverage.html", data=data, nav=NAV, active="book_coverage")
 
 
+@app.route("/api/cache/clear", methods=["POST"])
+@login_required
+def api_cache_clear():
+    """Bust the entire in-memory + disk cache so the next request fetches fresh data."""
+    clear_cache()
+    return jsonify({"status": "ok", "message": "Cache cleared. Fresh data will be fetched on next page load."})
+
+
+@app.route("/api/debug/deals-won")
+@login_required
+def debug_deals_won():
+    """Show the raw date range and deal counts used by the Deals Won view."""
+    from hubspot import get_date_range, get_deals
+    period = request.args.get("period", "last_quarter")
+    start, end = get_date_range(period, _force=True)
+    raw_deals = get_deals(start, end, "closedate", _force=True)
+    won = [d for d in raw_deals if d["properties"].get("hs_is_closed_won") == "true"]
+    lost = [d for d in raw_deals if d["properties"].get("hs_is_closed_lost") == "true"]
+    return jsonify({
+        "period": period,
+        "window_start": start.isoformat(),
+        "window_end": end.isoformat(),
+        "total_deals_in_range": len(raw_deals),
+        "won_deals": len(won),
+        "lost_deals": len(lost),
+        "sample_won": [
+            {"id": d["id"], "closedate": d["properties"].get("closedate"), "amount": d["properties"].get("amount")}
+            for d in won[:5]
+        ],
+    })
+
+
 @app.route("/api/debug/company-properties")
 @login_required
 def debug_company_properties():
