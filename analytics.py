@@ -704,6 +704,9 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
 
     def _channel(props):
         raw = (props.get("last_touch_channel") or "").strip().upper()
+        if not raw:
+            # Fall back to hs_analytics_source for contacts that lack last_touch_channel
+            raw = (props.get("hs_analytics_source") or "").strip().upper()
         return CHANNEL_LABELS.get(raw, raw) if raw else "Unknown"
 
     for c in contacts:
