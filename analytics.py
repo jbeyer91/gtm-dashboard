@@ -1014,8 +1014,9 @@ def compute_book_coverage() -> dict:
         if is_ac:
             owner_data[oid]["ac_accounts"] += 1
 
-            # Sales activity in last 30 days
-            last_act_raw = props.get("notes_last_activity_date")
+            # Sales activity in last 30 days — use notes_last_contacted since
+            # notes_last_activity_date is not populated at the company level in this HubSpot setup
+            last_act_raw = props.get("notes_last_contacted")
             if last_act_raw:
                 try:
                     if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
