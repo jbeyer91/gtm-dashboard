@@ -25,13 +25,13 @@
     <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold" rowspan="2">AE</th>
-        {% if source == "All" or source == "Cold outreach" %}
+        {% if source == "Cold outreach" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Cold Outreach</th>
         {% endif %}
-        {% if source == "All" or source == "Inbound" %}
+        {% if source == "Inbound" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Inbound</th>
         {% endif %}
-        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% if source == "Conference" or source == "Referral" %}
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Other</th>
         {% endif %}
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200">Won $</th>
@@ -43,15 +43,15 @@
         <th class="px-4 py-2 text-right font-semibold" rowspan="2">Attain %</th>
       </tr>
       <tr class="text-xs">
-        {% if source == "All" or source == "Cold outreach" %}
+        {% if source == "Cold outreach" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
-        {% if source == "All" or source == "Inbound" %}
+        {% if source == "Inbound" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
-        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% if source == "Conference" or source == "Referral" %}
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
@@ -62,15 +62,15 @@
       {% for row in data.rows %}
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
-        {% if source == "All" or source == "Cold outreach" %}
+        {% if source == "Cold outreach" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.cold_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.cold_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Inbound" %}
+        {% if source == "Inbound" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.inbound_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% if source == "Conference" or source == "Referral" %}
         {% set other_amt = row.conf_amt + row.ref_amt %}
         {% set other_n   = row.conf_n   + row.ref_n %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
@@ -105,15 +105,15 @@
       {% set t = data.totals %}
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
-        {% if source == "All" or source == "Cold outreach" %}
+        {% if source == "Cold outreach" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.cold_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.cold_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Inbound" %}
+        {% if source == "Inbound" %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.inbound_n }}</td>
         {% endif %}
-        {% if source == "All" or source == "Conference" or source == "Referral" %}
+        {% if source == "Conference" or source == "Referral" %}
         {% set other_amt = t.conf_amt + t.ref_amt %}
         {% set other_n   = t.conf_n   + t.ref_n %}
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
