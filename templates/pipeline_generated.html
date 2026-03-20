@@ -2,11 +2,9 @@
 {% from "macros.html" import period_filter, stat_card, fmt_pct, fmt_money %}
 {% block title %} — Pipeline Generated{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Pipeline Generated</h1>
-    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">New Business Pipeline · by Source</p>
-  </div>
+<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Pipeline Generated</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">New Business Pipeline · by Source</p>
 </div>
 
 {{ period_filter(period, periods) }}
