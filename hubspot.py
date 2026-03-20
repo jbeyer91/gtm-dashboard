@@ -154,7 +154,7 @@ def get_date_range(period: str):
         return start, now
     elif period == "last_quarter":
         q_month = ((now.month - 1) // 3) * 3 + 1
-        end = now.replace(month=q_month, day=1) - timedelta(seconds=1)
+        end = now.replace(month=q_month, day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
         prev_q_month = ((end.month - 1) // 3) * 3 + 1
         start = end.replace(month=prev_q_month, day=1, hour=0, minute=0, second=0, microsecond=0)
         return start, end
