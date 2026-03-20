@@ -5,7 +5,7 @@
 <div class="flex items-center justify-between mb-6">
   <div>
     <h1 class="text-2xl font-bold tracking-tight">Forecast</h1>
-    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">New Business Pipeline · Won + Committed Deals</p>
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mt-0.5">HubSpot Submitted Forecast vs Quota</p>
   </div>
 </div>
 
@@ -14,13 +14,9 @@
 {% set t = data.totals %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Won Revenue", fmt_money(t.won_amt)) }}
-  {{ stat_card("Commit", fmt_money(t.commit_amt), t.commit_n | string ~ " deals") }}
-  {{ stat_card("Forecast (Won + Commit)", fmt_money(t.forecast_amt)) }}
-  {% if data.has_submissions %}
-  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt), "from HubSpot forecast tool") }}
-  {% else %}
-  {{ stat_card("Weighted Pipeline", fmt_money(t.weighted_amt), "open deals × stage probability") }}
-  {% endif %}
+  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool") }}
+  {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
+  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", ("$" ~ fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -29,13 +25,7 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Won $</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Commit $</th>
-        <th class="px-3 py-3 text-right font-semibold"># Commit</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Forecast $</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Best Case $</th>
-        <th class="px-3 py-3 text-right font-semibold"># Open</th>
-        {% if data.has_submissions %}<th class="px-4 py-3 text-right font-semibold border-l border-gray-200">HS Submitted $</th>{% endif %}
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Weighted $</th>
+        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">HS Submitted $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Quota $</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
@@ -46,17 +36,9 @@
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold">{{ fmt_money(row.commit_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ row.commit_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold">{{ fmt_money(row.forecast_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.bestcase_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ row.bestcase_n }}</td>
-        {% if data.has_submissions %}
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold text-indigo-600">
           {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
         </td>
-        {% endif %}
-        <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
           {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
         </td>
@@ -80,17 +62,9 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.won_amt) }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.commit_amt) }}</td>
-        <td class="px-3 py-3 text-right text-gray-500">{{ t.commit_n }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.forecast_amt) }}</td>
-        <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.bestcase_amt) }}</td>
-        <td class="px-3 py-3 text-right text-gray-500">{{ t.bestcase_n }}</td>
-        {% if data.has_submissions %}
         <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
         </td>
-        {% endif %}
-        <td class="px-4 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.weighted_amt) }}</td>
         <td class="px-4 py-3 text-right border-l border-gray-100">
           {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}
         </td>

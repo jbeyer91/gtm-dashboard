@@ -715,16 +715,14 @@ def compute_forecast(period: str) -> dict:
         weighted_amt = owner_weighted.get(oid, 0.0)
         submitted_amt = owner_submitted.get(oid)   # None = not submitted
         quota_amt    = quotas.get(oid, 0.0)
-        forecast_amt = won_amt + commit_amt   # Won + Commit
-        gap_amt      = (quota_amt - forecast_amt) if quota_amt else None
-        attain_pct   = round(forecast_amt / quota_amt * 100, 1) if quota_amt else None
+        gap_amt      = (quota_amt - submitted_amt) if (quota_amt and submitted_amt is not None) else None
+        attain_pct   = round(submitted_amt / quota_amt * 100, 1) if (quota_amt and submitted_amt is not None) else None
 
         rows.append({
             "ae":             owner["last_name"] or owner["name"],
             "won_amt":        won_amt,
             "commit_amt":     commit_amt,
             "commit_n":       commit_n,
-            "forecast_amt":   forecast_amt,
             "submitted_amt":  submitted_amt,
             "bestcase_amt":   bestcase_amt,
             "bestcase_n":     bestcase_n,
@@ -734,29 +732,26 @@ def compute_forecast(period: str) -> dict:
             "attain_pct":     attain_pct,
         })
 
-    rows.sort(key=lambda r: r["forecast_amt"], reverse=True)
+    rows.sort(key=lambda r: r["submitted_amt"] or 0, reverse=True)
 
     def _s(k): return sum(r[k] for r in rows if r[k] is not None)
-    any_submitted = any(r["submitted_amt"] is not None for r in rows)
-    total_submitted = _s("submitted_amt") if any_submitted else None
-    total_forecast = _s("forecast_amt")
-    total_quota    = _s("quota_amt")
+    total_submitted = _s("submitted_amt")
+    total_quota     = _s("quota_amt")
     totals = {
         "ae":             "TOTAL",
         "won_amt":        _s("won_amt"),
         "commit_amt":     _s("commit_amt"),
         "commit_n":       _s("commit_n"),
-        "forecast_amt":   total_forecast,
         "submitted_amt":  total_submitted,
         "bestcase_amt":   _s("bestcase_amt"),
         "bestcase_n":     _s("bestcase_n"),
         "weighted_amt":   _s("weighted_amt"),
         "quota_amt":      total_quota,
-        "gap_amt":        (total_quota - total_forecast) if total_quota else None,
-        "attain_pct":     round(total_forecast / total_quota * 100, 1) if total_quota else None,
+        "gap_amt":        (total_quota - total_submitted) if total_quota else None,
+        "attain_pct":     round(total_submitted / total_quota * 100, 1) if total_quota else None,
     }
 
-    return {"rows": rows, "totals": totals, "period": period, "has_submissions": any_submitted}
+    return {"rows": rows, "totals": totals, "period": period}
 
 
 @ttl_cache
