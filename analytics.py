@@ -179,7 +179,7 @@ def compute_call_stats(period: str) -> dict:
             continue
         if not _owner_allowed(oid):
             continue
-        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         # Exclude calls where a deal was open for that contact at the time of the call
         contact_id = call_to_contact.get(call["id"])
@@ -1080,8 +1080,8 @@ def compute_scorecard() -> dict:
         if oid and _owner_allowed(oid):
             owner_won[oid] += _parse_amount(d["properties"].get("amount"))
 
+    # Deals created this month (cold outreach only)
     owner_created = defaultdict(int)
-    owner_s2_amt  = defaultdict(float)
     for d in created_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
@@ -1089,10 +1089,31 @@ def compute_scorecard() -> dict:
         if _deal_source(d) != "Cold outreach":
             continue
         owner_created[oid] += 1
-        stage = d["properties"].get("dealstage", "")
-        if stage in (NB_STAGES["stage2"], NB_STAGES["stage3"],
-                     NB_STAGES["stage4"], NB_STAGES["won"]):
-            owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+
+    # $ to Stage 2: deals that advanced INTO stage 2 this month (any source)
+    # Use hs_date_entered_71300358 across open + created + won deal sets
+    _start_ms = int(start.timestamp() * 1000)
+    _end_ms   = int(end.timestamp() * 1000)
+    owner_s2_amt  = defaultdict(float)
+    _seen_s2_ids  = set()
+    for d in (*open_deals, *created_deals, *won_deals):
+        deal_id = d.get("id", "")
+        if not deal_id or deal_id in _seen_s2_ids:
+            continue
+        _seen_s2_ids.add(deal_id)
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        s2_raw = d["properties"].get("hs_date_entered_71300358")
+        if not s2_raw:
+            continue
+        try:
+            s2_ms = int(datetime.fromisoformat(
+                str(s2_raw).replace("Z", "+00:00")).timestamp() * 1000)
+            if _start_ms <= s2_ms <= _end_ms:
+                owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+        except Exception:
+            pass
 
     owner_open = defaultdict(float)
     for d in open_deals:
@@ -1105,7 +1126,7 @@ def compute_scorecard() -> dict:
         oid = call["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
-        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         contact_id = call_to_contact.get(call["id"])
         if contact_id and contact_id in contact_windows:
@@ -1126,12 +1147,12 @@ def compute_scorecard() -> dict:
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
-        "quota_attainment": 0.25,
-        "stage2":           0.15,
-        "coverage":         0.15,
-        "deals_created":    0.10,
-        "active_30":        0.15,
-        "called_120":       0.15,
+        "quota_attainment": 0.50,
+        "stage2":           0.10,
+        "coverage":         0.10,
+        "deals_created":    0.05,
+        "active_30":        0.10,
+        "called_120":       0.10,
         "avg_dials":        0.03,
         "connect_rate":     0.02,
     }
@@ -1213,11 +1234,13 @@ def compute_scorecard() -> dict:
     t_dials    = sum(owner_calls[r["owner_id"]]["dials"] for r in rows)
     t_connects = sum(owner_calls[r["owner_id"]]["connects"] for r in rows)
 
+    n_reps = len(rows)
     team = {
         "attain_pct":     round(t_won / t_quota * 100, 1) if t_quota else 0.0,
         "won_amt":        t_won,
         "quota_amt":      t_quota,
         "deals_created":  sum(r["deals_created"] for r in rows),
+        "deals_target":   15 * n_reps,
         "s2_amt":         sum(r["s2_amt"] for r in rows),
         "s2_target":      t_quota * 4,
         "coverage":       round(t_open / t_remaining, 2) if t_remaining > 0 else None,
