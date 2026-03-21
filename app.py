@@ -148,19 +148,22 @@ def _d(cur, pri, key, scale=1):
 @login_required
 def scorecard():
     from datetime import datetime, timezone
-    data  = analytics.compute_scorecard("this_month")
-    t     = data["team"]
-    _, _, prior_label = get_prior_range("this_month")
-    prior_data, _ = _prior("this_month", analytics.compute_scorecard)
-    lt = prior_data["team"] if prior_data else {}
-    def _delta(key): return round((t[key] or 0) - (lt.get(key) or 0), 1)
-    deltas = {
-        "attain_pct":    _delta("attain_pct"),
-        "deals_created": _delta("deals_created"),
-        "avg_dials":     _delta("avg_dials"),
-        "connect_rate":  _delta("connect_rate"),
-        "stale_count":   _delta("stale_count"),
-    }
+    try:
+        data  = analytics.compute_scorecard("this_month")
+        t     = data["team"]
+        _, _, prior_label = get_prior_range("this_month")
+        prior_data, _ = _prior("this_month", analytics.compute_scorecard)
+        lt = (prior_data or {}).get("team") or {}
+        def _delta(key): return round((t.get(key) or 0) - (lt.get(key) or 0), 1)
+        deltas = {
+            "attain_pct":    _delta("attain_pct"),
+            "deals_created": _delta("deals_created"),
+            "avg_dials":     _delta("avg_dials"),
+            "connect_rate":  _delta("connect_rate"),
+            "stale_count":   _delta("stale_count"),
+        }
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
     return render_template("scorecard.html", data=data, month_label=month_label,
                            deltas=deltas, prior_label=prior_label,
@@ -174,17 +177,17 @@ def call_stats():
     try:
         data = analytics.compute_call_stats(period)
         prior_data, prior_label = _prior(period, analytics.compute_call_stats)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "dials":            _d(t, pt, "dials"),
+            "pct_connect":      _d(t, pt, "pct_connect"),
+            "pct_conversation": _d(t, pt, "pct_conversation"),
+            "ob_deals":         _d(t, pt, "outbound_deals_created"),
+            "deals_s2":         _d(t, pt, "outbound_deals_to_s2"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="call_stats")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "dials":      _d(t, pt, "dials"),
-        "pct_connect":      _d(t, pt, "pct_connect"),
-        "pct_conversation": _d(t, pt, "pct_conversation"),
-        "ob_deals":         _d(t, pt, "outbound_deals_created"),
-        "deals_s2":         _d(t, pt, "outbound_deals_to_s2"),
-    }
     return render_template("call_stats.html", data=data, periods=CALL_STATS_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="call_stats")
@@ -197,17 +200,17 @@ def pipeline_generated():
     try:
         data = analytics.compute_pipeline_generated(period)
         prior_data, prior_label = _prior(period, analytics.compute_pipeline_generated)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "total_amt":         _d(t, pt, "total_amt"),
+            "total_n":           _d(t, pt, "total_n"),
+            "total_acv":         _d(t, pt, "total_acv"),
+            "cold_outreach_amt": _d(t, pt, "cold_outreach_amt"),
+            "inbound_amt":       _d(t, pt, "inbound_amt"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_generated")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "total_amt":        _d(t, pt, "total_amt"),
-        "total_n":          _d(t, pt, "total_n"),
-        "total_acv":        _d(t, pt, "total_acv"),
-        "cold_outreach_amt": _d(t, pt, "cold_outreach_amt"),
-        "inbound_amt":      _d(t, pt, "inbound_amt"),
-    }
     return render_template("pipeline_generated.html", data=data, periods=PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="pipeline_generated")
@@ -220,17 +223,17 @@ def pipeline_coverage():
     try:
         data = analytics.compute_pipeline_coverage(period)
         prior_data, prior_label = _prior(period, analytics.compute_pipeline_coverage)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "s1_amt":  _d(t, pt, "s1_amt"),
+            "s2_amt":  _d(t, pt, "s2_amt"),
+            "s3_amt":  _d(t, pt, "s3_amt"),
+            "s4_amt":  _d(t, pt, "s4_amt"),
+            "won_amt": _d(t, pt, "won_amt"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_coverage")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "s1_amt": _d(t, pt, "s1_amt"),
-        "s2_amt": _d(t, pt, "s2_amt"),
-        "s3_amt": _d(t, pt, "s3_amt"),
-        "s4_amt": _d(t, pt, "s4_amt"),
-        "won_amt": _d(t, pt, "won_amt"),
-    }
     return render_template("pipeline_coverage.html", data=data, periods=COVERAGE_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="pipeline_coverage")
@@ -244,18 +247,18 @@ def deal_advancement():
     try:
         data = analytics.compute_deal_advancement(period, source)
         prior_data, prior_label = _prior(period, analytics.compute_deal_advancement, source)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "created": _d(t, pt, "created"),
+            "to_s2":   _d(t, pt, "to_s2"),
+            "to_s3":   _d(t, pt, "to_s3"),
+            "to_s4":   _d(t, pt, "to_s4"),
+            "won":     _d(t, pt, "won"),
+            "lost":    _d(t, pt, "lost"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deal_advancement")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "created": _d(t, pt, "created"),
-        "to_s2":   _d(t, pt, "to_s2"),
-        "to_s3":   _d(t, pt, "to_s3"),
-        "to_s4":   _d(t, pt, "to_s4"),
-        "won":     _d(t, pt, "won"),
-        "lost":    _d(t, pt, "lost"),
-    }
     return render_template("deal_advancement.html", data=data, periods=PERIODS,
                            period=period, sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
@@ -270,16 +273,16 @@ def deals_won():
     try:
         data = analytics.compute_deals_won(period, source)
         prior_data, prior_label = _prior(period, analytics.compute_deals_won, source)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "total_won_amt": _d(t, pt, "total_won_amt"),
+            "total_won_n":   _d(t, pt, "total_won_n"),
+            "acv":           _d(t, pt, "acv"),
+            "win_rate":      _d(t, pt, "win_rate"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "total_won_amt": _d(t, pt, "total_won_amt"),
-        "total_won_n":   _d(t, pt, "total_won_n"),
-        "acv":           _d(t, pt, "acv"),
-        "win_rate":      _d(t, pt, "win_rate"),
-    }
     return render_template("deals_won.html", data=data, periods=PERIODS,
                            period=period, sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
@@ -293,16 +296,16 @@ def deals_lost():
     try:
         data = analytics.compute_deals_lost(period)
         prior_data, prior_label = _prior(period, analytics.compute_deals_lost)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "total":        _d(t, pt, "total"),
+            "cost":         _d(t, pt, "cost"),
+            "never_demoed": _d(t, pt, "never_demoed"),
+            "timeline":     _d(t, pt, "timeline"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_lost")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "total":        _d(t, pt, "total"),
-        "cost":         _d(t, pt, "cost"),
-        "never_demoed": _d(t, pt, "never_demoed"),
-        "timeline":     _d(t, pt, "timeline"),
-    }
     return render_template("deals_lost.html", data=data, periods=PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deals_lost")
@@ -315,15 +318,15 @@ def forecast():
     try:
         data = analytics.compute_forecast(period)
         prior_data, prior_label = _prior(period, analytics.compute_forecast)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "won_amt":       _d(t, pt, "won_amt"),
+            "attain_pct":    _d(t, pt, "attain_pct"),
+            "submitted_amt": _d(t, pt, "submitted_amt"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="forecast")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "won_amt":    _d(t, pt, "won_amt"),
-        "attain_pct": _d(t, pt, "attain_pct"),
-        "submitted_amt": _d(t, pt, "submitted_amt"),
-    }
     return render_template("forecast.html", data=data, periods=FORECAST_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="forecast")
@@ -336,17 +339,17 @@ def inbound_funnel():
     try:
         data = analytics.compute_inbound_funnel(period)
         prior_data, prior_label = _prior(period, analytics.compute_inbound_funnel)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "leads_created":     _d(t, pt, "leads_created"),
+            "deal_creation_pct": _d(t, pt, "deal_creation_pct"),
+            "deals_created":     _d(t, pt, "deals_created"),
+            "win_rate_pct":      _d(t, pt, "win_rate_pct"),
+            "won_amt":           _d(t, pt, "won_amt"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="inbound_funnel")
-    t  = data["totals"]
-    pt = prior_data["totals"] if prior_data else None
-    deltas = {
-        "leads_created":    _d(t, pt, "leads_created"),
-        "deal_creation_pct": _d(t, pt, "deal_creation_pct"),
-        "deals_created":    _d(t, pt, "deals_created"),
-        "win_rate_pct":     _d(t, pt, "win_rate_pct"),
-        "won_amt":          _d(t, pt, "won_amt"),
-    }
     return render_template("inbound_funnel.html", data=data, periods=PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="inbound_funnel")

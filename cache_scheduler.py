@@ -44,6 +44,12 @@ ALL_PERIODS = [
     "next_month",
 ]
 
+# Prior-period comparison variants (all selectable periods except next_month,
+# which has no meaningful prior period).  Historical data never changes so we
+# don't force-refresh the underlying raw API calls, but we DO pre-warm the
+# analytics results so page loads never trigger a live HubSpot request.
+PRIOR_PERIODS = ["prior_" + p for p in ALL_PERIODS if p not in ("next_month",)]
+
 # All compute views to warm — most-visited first
 _VIEWS = [
     analytics.compute_call_stats,
@@ -144,6 +150,18 @@ def _sync():
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
         gc.collect()                          # release temporaries before next period
+
+    # Step 3: warm prior-period analytics.  Historical data is stable so we
+    # skip _refresh_period_data and let the analytics cache handle misses.
+    for period in PRIOR_PERIODS:
+        for fn in _VIEWS:
+            try:
+                fn(period, _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
+                failed += 1
+        gc.collect()
 
     log.info(
         "Cache sync complete (%d ok, %d failed). Next sync in %.0f min.",
