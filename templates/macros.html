@@ -54,7 +54,7 @@
         <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ absv|int }}</p>
       {% endif %}
     {% elif delta_fmt == 'pct' %}
-      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|round(1) }}pp</p>
+      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|round(1) }}%</p>
     {% else %}
       <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|int }}</p>
     {% endif %}

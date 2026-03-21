@@ -44,6 +44,16 @@ ALL_PERIODS = [
     "next_month",
 ]
 
+# Prior-period comparison variants (all selectable periods except next_month,
+# which has no meaningful prior period).  Historical data never changes so we
+# don't force-refresh the underlying raw API calls, but we DO pre-warm the
+# analytics results so page loads never trigger a live HubSpot request.
+PRIOR_PERIODS = ["prior_" + p for p in ALL_PERIODS if p not in ("next_month",)]
+
+# today / this_week are call-stats-only periods (not in ALL_PERIODS) but still
+# need warming so the Call Stats tab never triggers a live HubSpot request.
+CALL_STATS_EXTRA = ["today", "this_week", "prior_today", "prior_this_week"]
+
 # All compute views to warm — most-visited first
 _VIEWS = [
     analytics.compute_call_stats,
@@ -144,6 +154,36 @@ def _sync():
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
         gc.collect()                          # release temporaries before next period
+
+    # Step 3: warm prior-period analytics.  Historical data is stable so we
+    # skip _refresh_period_data and let the analytics cache handle misses.
+    for period in PRIOR_PERIODS:
+        for fn in _VIEWS:
+            try:
+                fn(period, _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
+                failed += 1
+        gc.collect()
+
+    # Step 4: call-stats-only periods (today, this_week) + their priors.
+    for period in CALL_STATS_EXTRA:
+        try:
+            analytics.compute_call_stats(period, _force=True)
+            total += 1
+        except Exception as exc:
+            log.warning("  ✗ compute_call_stats(%s): %s", period, exc)
+            failed += 1
+
+    # Step 5: scorecard (always this_month) + its prior.
+    for period in ("this_month", "prior_this_month"):
+        try:
+            analytics.compute_scorecard(period, _force=True)
+            total += 1
+        except Exception as exc:
+            log.warning("  ✗ compute_scorecard(%s): %s", period, exc)
+            failed += 1
 
     log.info(
         "Cache sync complete (%d ok, %d failed). Next sync in %.0f min.",
