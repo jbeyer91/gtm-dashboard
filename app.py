@@ -971,7 +971,7 @@ def abm_deal_backfill_csv():
     from hubspot import BASE_URL, HEADERS, _search_all, _batch_associations, _parse_hs_datetime, get_owners
 
     owners = get_owners()
-    owner_map = {o["id"]: f"{o['firstName']} {o['lastName']}" for o in owners}
+    owner_map = {oid: o["name"] for oid, o in owners.items()}
 
     # 1. All NB pipeline deals (no date filter)
     payload = {
