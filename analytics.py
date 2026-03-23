@@ -1390,7 +1390,7 @@ def compute_abm_coverage() -> dict:
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
     owners = get_owners()
-    owner_map = {o["id"]: o for o in owners}
+    owner_map = owners  # already keyed by owner_id
 
     companies = get_target_account_companies()
 
@@ -1448,7 +1448,7 @@ def compute_abm_coverage() -> dict:
         total = d["total"]
         active = d["active_30"]
         rows.append({
-            "ae": f"{o['firstName']} {o['lastName']}",
+            "ae": f"{o['first_name']} {o['last_name']}".strip() or o["name"],
             "total": total,
             "active_30": active,
             "active_pct": round(active / total * 100) if total else 0,
