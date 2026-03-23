@@ -968,6 +968,7 @@ def abm_deal_backfill_csv():
       - Import column 'Target Account at Creation' as the property value to set
     """
     import requests as req
+    from datetime import datetime, timezone
     from hubspot import BASE_URL, HEADERS, _search_all, _batch_associations, _parse_hs_datetime, get_owners
 
     owners = get_owners()
@@ -994,42 +995,32 @@ def abm_deal_backfill_csv():
     co_names   = {}
     co_history = {}  # company_id -> [(datetime, value), ...] sorted ascending
 
-    # Step 3a: batch-fetch company names
+    # Batch-fetch company name + current hs_is_target_account.
+    # propertiesWithHistory via batch/read returns 400 from HubSpot for this
+    # property, and per-company GETs are too slow for large datasets.
+    # We use the current value as a best-effort approximation.
+    _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
     for i in range(0, len(all_co_ids), 100):
         batch = all_co_ids[i:i + 100]
         resp = req.post(
             f"{BASE_URL}/crm/v3/objects/companies/batch/read",
             headers=HEADERS,
             json={
-                "properties": ["name"],
+                "properties": ["name", "hs_is_target_account"],
                 "inputs": [{"id": cid} for cid in batch],
             },
         )
         if not resp.ok:
+            app.logger.warning("company batch/read failed %s: %s", resp.status_code, resp.text[:300])
             continue
         for obj in resp.json().get("results", []):
-            co_names[obj["id"]] = (obj.get("properties") or {}).get("name", "")
-
-    # Step 3b: fetch hs_is_target_account history per company individually
-    # (batch/read doesn't reliably support propertiesWithHistory)
-    for cid in all_co_ids:
-        resp = req.get(
-            f"{BASE_URL}/crm/v3/objects/companies/{cid}",
-            headers=HEADERS,
-            params={"propertiesWithHistory": "hs_is_target_account"},
-        )
-        if not resp.ok:
-            co_history[cid] = []
-            continue
-        raw_history = (resp.json().get("propertiesWithHistory") or {}).get("hs_is_target_account", [])
-        entries = []
-        for entry in raw_history:
-            try:
-                entries.append((_parse_hs_datetime(entry["timestamp"]), entry.get("value") or "false"))
-            except Exception:
-                pass
-        entries.sort(key=lambda x: x[0])
-        co_history[cid] = entries
+            cid = obj["id"]
+            props_c = obj.get("properties") or {}
+            co_names[cid] = props_c.get("name", "")
+            cur_val = props_c.get("hs_is_target_account") or "false"
+            # Represent current value as a single history entry at epoch so
+            # _ta_at_creation always returns it for any deal creation date.
+            co_history[cid] = [(_EPOCH, cur_val)]
 
     def _ta_at_creation(company_id, deal_dt):
         """Return the hs_is_target_account value active at deal_dt for this company."""
@@ -1055,8 +1046,6 @@ def abm_deal_backfill_csv():
         "AE",
         "Company Name",
         "Company ID",
-        "TA First Marked True",        # reference: when company became a target account
-        "TA First Marked False",       # reference: when company was removed (if ever)
         "Current TA Value",
     ])
 
@@ -1074,7 +1063,7 @@ def abm_deal_backfill_csv():
 
         co_ids = deal_to_co.get(did, [])
         if not co_ids:
-            w.writerow([did, "false", props.get("dealname", ""), cd_str, ae, "", "", "", "", ""])
+            w.writerow([did, "false", props.get("dealname", ""), cd_str, ae, "", "", ""])
             continue
 
         # If deal has multiple companies, use "true" if ANY was a target account at creation
@@ -1087,9 +1076,7 @@ def abm_deal_backfill_csv():
                 break
 
         entries = co_history.get(cid_used, [])
-        ta_true_on  = next((ts.strftime("%Y-%m-%d") for ts, v in entries if v == "true"),  "")
-        ta_false_on = next((ts.strftime("%Y-%m-%d") for ts, v in entries if v == "false"), "")
-        current     = entries[-1][1] if entries else ""
+        current = entries[-1][1] if entries else ""
 
         w.writerow([
             did,
@@ -1099,8 +1086,6 @@ def abm_deal_backfill_csv():
             ae,
             co_names.get(cid_used, ""),
             cid_used,
-            ta_true_on,
-            ta_false_on,
             current,
         ])
 
