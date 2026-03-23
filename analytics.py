@@ -8,7 +8,7 @@ from hubspot import (
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
-    get_target_account_companies, _batch_associations,
+    get_target_account_companies, _search_all,
 )
 
 # ── Business model constants ──────────────────────────────────────────────────
@@ -1390,33 +1390,36 @@ def compute_abm_coverage() -> dict:
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
     owners = get_owners()
-    owner_map = {o["id"]: o for o in owners}
+    owner_map = owners  # already keyed by owner_id
 
     companies = get_target_account_companies()
-    ta_ids = {c["id"] for c in companies}
 
-    # Deals created this quarter on NB pipeline → resolve company associations
-    quarter_deals = get_deals(quarter_start, now, date_field="createdate")
-    if quarter_deals:
-        deal_ids = [d["id"] for d in quarter_deals]
-        deal_to_co = _batch_associations("deals", "companies", deal_ids)
-    else:
-        deal_to_co = {}
-
-    co_has_deal_month: set = set()
-    co_has_deal_quarter: set = set()
-    for deal in quarter_deals:
-        did = deal["id"]
-        raw_cd = (deal.get("properties") or {}).get("createdate", "")
+    # ABM deals this quarter/month: filter directly on target_account = true
+    quarter_start_ts = int(quarter_start.timestamp() * 1000)
+    now_ts = int(now.timestamp() * 1000)
+    abm_deals = _search_all("deals", {
+        "filterGroups": [{"filters": [
+            {"propertyName": "pipeline",       "operator": "EQ",  "value": "31544320"},
+            {"propertyName": "createdate",     "operator": "GTE", "value": str(quarter_start_ts)},
+            {"propertyName": "createdate",     "operator": "LTE", "value": str(now_ts)},
+            {"propertyName": "target_account", "operator": "EQ",  "value": "true"},
+        ]}],
+        "properties": ["createdate", "hubspot_owner_id"],
+    })
+    owner_deal_month: dict = defaultdict(int)
+    owner_deal_quarter: dict = defaultdict(int)
+    for deal in abm_deals:
+        props_d = deal.get("properties") or {}
+        oid = props_d.get("hubspot_owner_id", "")
+        if not oid:
+            continue
         try:
-            cd = _parse_hs_datetime(raw_cd)
+            cd = _parse_hs_datetime(props_d.get("createdate", ""))
         except Exception:
             continue
-        for cid in deal_to_co.get(did, []):
-            if cid in ta_ids:
-                co_has_deal_quarter.add(cid)
-                if cd >= month_start:
-                    co_has_deal_month.add(cid)
+        owner_deal_quarter[oid] += 1
+        if cd >= month_start:
+            owner_deal_month[oid] += 1
 
     owner_data = defaultdict(lambda: {"total": 0, "active_30": 0, "deal_month": 0, "deal_quarter": 0})
 
@@ -1425,7 +1428,6 @@ def compute_abm_coverage() -> dict:
         oid = props.get("hubspot_owner_id")
         if not oid or oid not in owner_map:
             continue
-        cid = company["id"]
         owner_data[oid]["total"] += 1
 
         last_act_raw = props.get("notes_last_activity_date") or props.get("notes_last_contacted")
@@ -1436,10 +1438,9 @@ def compute_abm_coverage() -> dict:
             except Exception:
                 pass
 
-        if cid in co_has_deal_month:
-            owner_data[oid]["deal_month"] += 1
-        if cid in co_has_deal_quarter:
-            owner_data[oid]["deal_quarter"] += 1
+    for oid in set(list(owner_deal_quarter) + list(owner_data)):
+        owner_data[oid]["deal_month"]   = owner_deal_month[oid]
+        owner_data[oid]["deal_quarter"] = owner_deal_quarter[oid]
 
     rows = []
     for oid, d in owner_data.items():
@@ -1447,7 +1448,7 @@ def compute_abm_coverage() -> dict:
         total = d["total"]
         active = d["active_30"]
         rows.append({
-            "ae": f"{o['firstName']} {o['lastName']}",
+            "ae": f"{o['first_name']} {o['last_name']}".strip() or o["name"],
             "total": total,
             "active_30": active,
             "active_pct": round(active / total * 100) if total else 0,
@@ -1468,5 +1469,3 @@ def compute_abm_coverage() -> dict:
     }
 
     return {"rows": rows, "totals": totals}
-
-    return {"rows": rows, "totals": totals, "period": period}

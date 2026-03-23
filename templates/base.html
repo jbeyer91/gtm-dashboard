@@ -275,7 +275,7 @@
   var loader = document.getElementById('page-loader');
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[href]');
-    if (link) {
+    if (link && !link.hasAttribute('download')) {
       var href = link.getAttribute('href');
       if (href && !href.startsWith('#') && !href.startsWith('http') && !href.startsWith('mailto')) {
         loader.style.display = 'flex';

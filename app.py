@@ -31,10 +31,6 @@ PERIODS = [
 
 FORECAST_PERIODS = [
     ("this_month", "This Month"),
-    ("last_month", "Last Month"),
-    ("this_quarter", "This Quarter"),
-    ("last_quarter", "Last Quarter"),
-    ("ytd", "Year to Date"),
 ]
 
 CALL_STATS_PERIODS = [
@@ -318,7 +314,7 @@ def deals_lost():
 @app.route("/forecast")
 @login_required
 def forecast():
-    period = request.args.get("period", "this_quarter")
+    period = request.args.get("period", "this_month")
     try:
         data = analytics.compute_forecast(period)
         prior_data, prior_label = _prior(period, analytics.compute_forecast)
@@ -889,7 +885,7 @@ def deals_lost_csv():
 @app.route("/forecast/export.csv")
 @login_required
 def forecast_csv():
-    period = request.args.get("period", "this_quarter")
+    period = request.args.get("period", "this_month")
     data = analytics.compute_forecast(period)
     out = io.StringIO()
     w = csv.writer(out)
@@ -960,134 +956,41 @@ def inbound_funnel_csv():
 @app.route("/api/export/abm-deal-backfill.csv")
 @login_required
 def abm_deal_backfill_csv():
-    """One-time export: all NB pipeline deals with the correct target account value
-    at the time each deal was created, derived from HubSpot property history.
+    """Export all NB pipeline deals with their target_account flag and create date.
 
     Use this CSV to backfill the target account deal property in HubSpot:
       - Import column 'Record ID' as the deal identifier
-      - Import column 'Target Account at Creation' as the property value to set
+      - Import column 'Target Account' as the property value to set
     """
-    import requests as req
-    from datetime import datetime, timezone
-    from hubspot import BASE_URL, HEADERS, _search_all, _batch_associations, _parse_hs_datetime, get_owners
+    from hubspot import _search_all, _parse_hs_datetime, get_owners
 
     owners = get_owners()
     owner_map = {oid: o["name"] for oid, o in owners.items()}
 
-    # 1. All NB pipeline deals (no date filter)
     payload = {
         "filterGroups": [{"filters": [
             {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
         ]}],
-        "properties": ["dealname", "createdate", "hubspot_owner_id"],
+        "properties": ["dealname", "createdate", "hubspot_owner_id", "target_account"],
         "sorts": [{"propertyName": "createdate", "direction": "ASCENDING"}],
     }
     deals = _search_all("deals", payload)
     if not deals:
         return Response("No deals found", mimetype="text/plain")
 
-    # 2. Resolve deal → company associations
-    deal_ids = [d["id"] for d in deals]
-    deal_to_co = _batch_associations("deals", "companies", deal_ids)
-
-    # 3. Batch-fetch hs_is_target_account property history for every associated company
-    all_co_ids = list({cid for cids in deal_to_co.values() for cid in cids})
-    co_names   = {}
-    co_history = {}  # company_id -> [(datetime, value), ...] sorted ascending
-
-    # Batch-fetch company name + current hs_is_target_account.
-    # propertiesWithHistory via batch/read returns 400 from HubSpot for this
-    # property, and per-company GETs are too slow for large datasets.
-    # We use the current value as a best-effort approximation.
-    _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    for i in range(0, len(all_co_ids), 100):
-        batch = all_co_ids[i:i + 100]
-        resp = req.post(
-            f"{BASE_URL}/crm/v3/objects/companies/batch/read",
-            headers=HEADERS,
-            json={
-                "properties": ["name", "hs_is_target_account"],
-                "inputs": [{"id": cid} for cid in batch],
-            },
-        )
-        if not resp.ok:
-            app.logger.warning("company batch/read failed %s: %s", resp.status_code, resp.text[:300])
-            continue
-        for obj in resp.json().get("results", []):
-            cid = obj["id"]
-            props_c = obj.get("properties") or {}
-            co_names[cid] = props_c.get("name", "")
-            cur_val = props_c.get("hs_is_target_account") or "false"
-            # Represent current value as a single history entry at epoch so
-            # _ta_at_creation always returns it for any deal creation date.
-            co_history[cid] = [(_EPOCH, cur_val)]
-
-    def _ta_at_creation(company_id, deal_dt):
-        """Return the hs_is_target_account value active at deal_dt for this company."""
-        entries = co_history.get(company_id, [])
-        if not entries:
-            return "false"   # property unset = was not a target account
-        value = "false"
-        for ts, v in entries:
-            if ts <= deal_dt:
-                value = v
-            else:
-                break
-        return value
-
-    # 4. Build CSV
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow([
-        "Record ID",                   # required for HubSpot import
-        "Target Account at Creation",  # property value to stamp
-        "Deal Name",
-        "Create Date",
-        "AE",
-        "Company Name",
-        "Company ID",
-        "Current TA Value",
-    ])
+    w.writerow(["Record ID", "Target Account", "Deal Name", "Create Date", "AE"])
 
     for deal in deals:
-        props  = deal.get("properties") or {}
-        did    = deal["id"]
-        raw_cd = props.get("createdate", "")
-        ae     = owner_map.get(props.get("hubspot_owner_id", ""), "")
+        props = deal.get("properties") or {}
         try:
-            deal_dt = _parse_hs_datetime(raw_cd)
-            cd_str  = deal_dt.strftime("%Y-%m-%d")
+            cd_str = _parse_hs_datetime(props.get("createdate", "")).strftime("%Y-%m-%d")
         except Exception:
-            deal_dt = None
-            cd_str  = raw_cd
-
-        co_ids = deal_to_co.get(did, [])
-        if not co_ids:
-            w.writerow([did, "false", props.get("dealname", ""), cd_str, ae, "", "", ""])
-            continue
-
-        # If deal has multiple companies, use "true" if ANY was a target account at creation
-        at_creation = "false"
-        cid_used    = co_ids[0]
-        for cid in co_ids:
-            if deal_dt and _ta_at_creation(cid, deal_dt) == "true":
-                at_creation = "true"
-                cid_used    = cid
-                break
-
-        entries = co_history.get(cid_used, [])
-        current = entries[-1][1] if entries else ""
-
-        w.writerow([
-            did,
-            at_creation,
-            props.get("dealname", ""),
-            cd_str,
-            ae,
-            co_names.get(cid_used, ""),
-            cid_used,
-            current,
-        ])
+            cd_str = props.get("createdate", "")
+        ta = props.get("target_account") or "false"
+        ae = owner_map.get(props.get("hubspot_owner_id", ""), "")
+        w.writerow([deal["id"], ta, props.get("dealname", ""), cd_str, ae])
 
     return Response(
         out.getvalue(),
