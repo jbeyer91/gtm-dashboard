@@ -994,30 +994,42 @@ def abm_deal_backfill_csv():
     co_names   = {}
     co_history = {}  # company_id -> [(datetime, value), ...] sorted ascending
 
+    # Step 3a: batch-fetch company names
     for i in range(0, len(all_co_ids), 100):
         batch = all_co_ids[i:i + 100]
         resp = req.post(
             f"{BASE_URL}/crm/v3/objects/companies/batch/read",
             headers=HEADERS,
             json={
-                "propertiesWithHistory": ["hs_is_target_account"],
                 "properties": ["name"],
                 "inputs": [{"id": cid} for cid in batch],
             },
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            continue
         for obj in resp.json().get("results", []):
-            cid = obj["id"]
-            co_names[cid] = (obj.get("properties") or {}).get("name", "")
-            raw_history = (obj.get("propertiesWithHistory") or {}).get("hs_is_target_account", [])
-            entries = []
-            for entry in raw_history:
-                try:
-                    entries.append((_parse_hs_datetime(entry["timestamp"]), entry.get("value") or "false"))
-                except Exception:
-                    pass
-            entries.sort(key=lambda x: x[0])
-            co_history[cid] = entries
+            co_names[obj["id"]] = (obj.get("properties") or {}).get("name", "")
+
+    # Step 3b: fetch hs_is_target_account history per company individually
+    # (batch/read doesn't reliably support propertiesWithHistory)
+    for cid in all_co_ids:
+        resp = req.get(
+            f"{BASE_URL}/crm/v3/objects/companies/{cid}",
+            headers=HEADERS,
+            params={"propertiesWithHistory": "hs_is_target_account"},
+        )
+        if not resp.ok:
+            co_history[cid] = []
+            continue
+        raw_history = (resp.json().get("propertiesWithHistory") or {}).get("hs_is_target_account", [])
+        entries = []
+        for entry in raw_history:
+            try:
+                entries.append((_parse_hs_datetime(entry["timestamp"]), entry.get("value") or "false"))
+            except Exception:
+                pass
+        entries.sort(key=lambda x: x[0])
+        co_history[cid] = entries
 
     def _ta_at_creation(company_id, deal_dt):
         """Return the hs_is_target_account value active at deal_dt for this company."""
