@@ -38,6 +38,10 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+# Request timeout (connect, read) in seconds. Keeps individual HubSpot calls
+# well under gunicorn's 30s worker timeout.
+_TIMEOUT = (5, 20)
+
 PIPELINES = {
     "31544320": "New Business Pipeline",
     "32114559": "Renewal Pipeline",
@@ -121,6 +125,7 @@ def get_lifecyclestage_value(label: str) -> str:
         resp = requests.get(
             f"{BASE_URL}/crm/v3/properties/contacts/lifecyclestage",
             headers=HEADERS,
+            timeout=_TIMEOUT,
         )
         if not resp.ok:
             logger.warning("lifecyclestage property fetch failed: %s", resp.text)
@@ -153,6 +158,7 @@ def get_team_owner_ids() -> frozenset:
     resp = requests.get(
         f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
         headers=HEADERS,
+        timeout=_TIMEOUT,
     )
     if not resp.ok:
         return frozenset()
@@ -176,6 +182,7 @@ def get_owner_team_map() -> dict:
     resp = requests.get(
         f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
         headers=HEADERS,
+        timeout=_TIMEOUT,
     )
     if not resp.ok:
         return {}
@@ -324,6 +331,7 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
             f"{BASE_URL}/crm/v3/objects/{object_type}/search",
             headers=HEADERS,
             json=payload,
+            timeout=_TIMEOUT,
         )
         if not resp.ok:
             break  # hit the 10k limit or other error — return what we have
@@ -345,7 +353,7 @@ def get_lost_reason_labels() -> dict:
     keys → labels before classifying lost reasons.
     Returns {} if the property is free-text (no options) or on any error.
     """
-    resp = requests.get(f"{BASE_URL}/crm/v3/properties/deals/hs_closed_lost_reason", headers=HEADERS)
+    resp = requests.get(f"{BASE_URL}/crm/v3/properties/deals/hs_closed_lost_reason", headers=HEADERS, timeout=_TIMEOUT)
     if not resp.ok:
         return {}
     return {opt["value"]: opt["label"] for opt in resp.json().get("options", [])}
@@ -353,7 +361,7 @@ def get_lost_reason_labels() -> dict:
 
 @ttl_cache
 def get_owners() -> dict:
-    resp = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS)
+    resp = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS, timeout=_TIMEOUT)
     resp.raise_for_status()
     owners = {}
     for o in resp.json().get("results", []):
@@ -409,6 +417,7 @@ def get_quotas(start: datetime, end: datetime) -> dict:
             f"{BASE_URL}/crm/v3/objects/goal_targets/search",
             headers=HEADERS,
             json=payload,
+            timeout=_TIMEOUT,
         )
         if resp.status_code == 403:
             return {}   # scope not enabled — degrade gracefully
@@ -616,7 +625,7 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
         url = f"{BASE_URL}/crm/v3/lists/{list_id}/memberships?limit=100"
         if after:
             url += f"&after={after}"
-        resp = requests.get(url, headers=HEADERS)
+        resp = requests.get(url, headers=HEADERS, timeout=_TIMEOUT)
         if not resp.ok:
             logger.warning("List %s memberships error: %s", list_id, resp.text)
             break
@@ -638,6 +647,7 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
             f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
             headers=HEADERS,
             json={"inputs": [{"id": cid} for cid in batch], "properties": props},
+            timeout=_TIMEOUT,
         )
         if not resp.ok:
             continue
@@ -661,6 +671,7 @@ def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
             f"{BASE_URL}/crm/v4/associations/{from_type}/{to_type}/batch/read",
             headers=HEADERS,
             json={"inputs": [{"id": str(fid)} for fid in batch]},
+            timeout=_TIMEOUT,
         )
         if not resp.ok:
             continue
