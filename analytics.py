@@ -8,6 +8,7 @@ from hubspot import (
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
+    get_target_account_companies, _batch_associations,
 )
 
 # ── Business model constants ──────────────────────────────────────────────────
@@ -1368,5 +1369,104 @@ def compute_win_rate_by_source(period: str) -> dict:
         "revenue": sum(r["revenue"] for r in rows),
         "acv": sum(r["revenue"] for r in rows) / tot_won if tot_won else 0,
     }
+
+
+@ttl_cache
+def compute_abm_coverage() -> dict:
+    """ABM account coverage: target accounts per AE with activity and deal signals.
+
+    Metrics (always point-in-time, no period selector):
+      - Total ABM accounts   : companies owned by AE with hs_is_target_account = true
+      - Active (30d)         : accounts with any logged activity in the last 30 days
+      - Activity %           : active_30 / total (goal: 90%)
+      - Deals this month     : target account companies with a NB deal created this calendar month
+      - Deals this quarter   : target account companies with a NB deal created this calendar quarter
+    """
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = now - timedelta(days=30)
+
+    qm = ((now.month - 1) // 3) * 3 + 1
+    quarter_start = datetime(now.year, qm, 1, tzinfo=timezone.utc)
+    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+    owners = get_owners()
+    owner_map = {o["id"]: o for o in owners}
+
+    companies = get_target_account_companies()
+    ta_ids = {c["id"] for c in companies}
+
+    # Deals created this quarter on NB pipeline → resolve company associations
+    quarter_deals = get_deals(quarter_start, now, date_field="createdate")
+    if quarter_deals:
+        deal_ids = [d["id"] for d in quarter_deals]
+        deal_to_co = _batch_associations("deals", "companies", deal_ids)
+    else:
+        deal_to_co = {}
+
+    co_has_deal_month: set = set()
+    co_has_deal_quarter: set = set()
+    for deal in quarter_deals:
+        did = deal["id"]
+        raw_cd = (deal.get("properties") or {}).get("createdate", "")
+        try:
+            cd = _parse_hs_datetime(raw_cd)
+        except Exception:
+            continue
+        for cid in deal_to_co.get(did, []):
+            if cid in ta_ids:
+                co_has_deal_quarter.add(cid)
+                if cd >= month_start:
+                    co_has_deal_month.add(cid)
+
+    owner_data = defaultdict(lambda: {"total": 0, "active_30": 0, "deal_month": 0, "deal_quarter": 0})
+
+    for company in companies:
+        props = company.get("properties") or {}
+        oid = props.get("hubspot_owner_id")
+        if not oid or oid not in owner_map:
+            continue
+        cid = company["id"]
+        owner_data[oid]["total"] += 1
+
+        last_act_raw = props.get("notes_last_activity_date") or props.get("notes_last_contacted")
+        if last_act_raw:
+            try:
+                if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
+                    owner_data[oid]["active_30"] += 1
+            except Exception:
+                pass
+
+        if cid in co_has_deal_month:
+            owner_data[oid]["deal_month"] += 1
+        if cid in co_has_deal_quarter:
+            owner_data[oid]["deal_quarter"] += 1
+
+    rows = []
+    for oid, d in owner_data.items():
+        o = owner_map[oid]
+        total = d["total"]
+        active = d["active_30"]
+        rows.append({
+            "ae": f"{o['firstName']} {o['lastName']}",
+            "total": total,
+            "active_30": active,
+            "active_pct": round(active / total * 100) if total else 0,
+            "deal_month": d["deal_month"],
+            "deal_quarter": d["deal_quarter"],
+        })
+
+    rows.sort(key=lambda r: (-r["total"], r["ae"]))
+
+    tot_total = sum(r["total"] for r in rows)
+    tot_active = sum(r["active_30"] for r in rows)
+    totals = {
+        "total": tot_total,
+        "active_30": tot_active,
+        "active_pct": round(tot_active / tot_total * 100) if tot_total else 0,
+        "deal_month": sum(r["deal_month"] for r in rows),
+        "deal_quarter": sum(r["deal_quarter"] for r in rows),
+    }
+
+    return {"rows": rows, "totals": totals}
 
     return {"rows": rows, "totals": totals, "period": period}

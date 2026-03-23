@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "macros.html" import stat_card, fmt_pct %}
+{% block title %} — ABM Coverage{% endblock %}
+{% block content %}
+<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">ABM Coverage</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Target Accounts · Activity &amp; Pipeline Signal</p>
+</div>
+
+{% set t = data.totals %}
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+  {{ stat_card("ABM Accounts", t.total, tip="Companies marked as Target Account = true, assigned to team AEs.") }}
+  {{ stat_card("Active (30d)", t.active_30, tip="Accounts with any logged activity (call, meeting, or email) in the last 30 days.") }}
+  {{ stat_card("Activity Coverage", fmt_pct(t.active_pct), tip="% of ABM accounts touched in the last 30 days. Goal: 90%.") }}
+  {{ stat_card("Deals This Month", t.deal_month, tip="ABM accounts with at least one new-business deal created this calendar month.") }}
+  {{ stat_card("Deals This Quarter", t.deal_quarter, tip="ABM accounts with at least one new-business deal created this calendar quarter.") }}
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <tr>
+        <th class="px-4 py-3 text-left font-semibold">AE</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Total companies with Target Account = true assigned to this rep.">ABM Accounts</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Accounts with any logged activity (call, meeting, or email) in the last 30 days.">Active (30d)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of ABM accounts touched in the last 30 days. Goal: 90%.">Activity %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="ABM accounts with a new-business deal created this calendar month.">Deals This Month</th>
+        <th class="px-4 py-3 text-right font-semibold" title="ABM accounts with a new-business deal created this calendar quarter.">Deals This Qtr</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in data.rows %}
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ row.total }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ row.active_30 }}</td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
+          {% if row.active_pct >= 90 %}text-green-600
+          {% elif row.active_pct >= 70 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ fmt_pct(row.active_pct) }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if row.deal_month > 0 %}
+            <span class="text-green-600 font-semibold">{{ row.deal_month }}</span>
+          {% else %}
+            <span class="text-gray-400">—</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if row.deal_quarter > 0 %}
+            <span class="text-green-600 font-semibold">{{ row.deal_quarter }}</span>
+          {% else %}
+            <span class="text-gray-400">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+      {% set t = data.totals %}
+      <tr>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.total }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.active_30 }}</td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
+          {% if t.active_pct >= 90 %}text-green-600
+          {% elif t.active_pct >= 70 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ fmt_pct(t.active_pct) }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.deal_month if t.deal_month else '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.deal_quarter if t.deal_quarter else '—' }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<p class="text-xs text-gray-400 mt-4">Activity = any call, meeting, or email logged in HubSpot against the account in the last 30 days. Deals = new-business pipeline deals created for this account in the current month / quarter.</p>
+{% endblock %}

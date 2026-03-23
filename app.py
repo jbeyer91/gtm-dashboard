@@ -70,7 +70,10 @@ NAV = [
     ]},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
     {"type": "link",  "endpoint": "call_stats",        "label": "Calls"},
-    {"type": "link",  "endpoint": "inbound_funnel",    "label": "Inbound Funnel"},
+    {"type": "group", "label": "Marketing", "children": [
+        {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
+        {"endpoint": "abm",             "label": "ABM"},
+    ]},
 ]
 
 
@@ -356,6 +359,16 @@ def inbound_funnel():
     return render_template("inbound_funnel.html", data=data, periods=PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="inbound_funnel")
+
+
+@app.route("/abm")
+@login_required
+def abm():
+    try:
+        data = analytics.compute_abm_coverage()
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="abm")
+    return render_template("abm.html", data=data, nav=NAV, active="abm")
 
 
 @app.route("/book-coverage")
