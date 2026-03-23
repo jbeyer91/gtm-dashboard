@@ -1,4 +1,5 @@
 import os
+from datetime import date
 from functools import wraps
 from dotenv import load_dotenv
 
@@ -327,8 +328,10 @@ def forecast():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="forecast")
+    this_month_label = date.today().strftime("%B %Y")
     return render_template("forecast.html", data=data, periods=FORECAST_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
+                           this_month_label=this_month_label,
                            nav=NAV, active="forecast")
 
 
