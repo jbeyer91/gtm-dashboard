@@ -1200,33 +1200,16 @@ def compute_scorecard(period: str = "this_month") -> dict:
             continue
         owner_created[oid] += 1
 
-    # $ advanced to Stage 2 this period: use hs_v2_date_entered_71300358 (exact
-    # date the deal entered Stage 2) across open deals + won deals this period.
-    open_deals   = get_all_open_deals()
-    # Combine open + won + created (covers lost deals); dedup by deal id
-    _seen_s2 = set()
-    all_deals_for_s2 = []
-    for d in list(open_deals) + list(won_deals) + list(created_deals):
-        did = d.get("id")
-        if did not in _seen_s2:
-            _seen_s2.add(did)
-            all_deals_for_s2.append(d)
+    # $ advanced to Stage 2 this period: use deals created in the period whose
+    # current stage is S2+ (hs_date_entered_* is null on this HubSpot plan).
     owner_s2_amt = defaultdict(float)
-    start_ms = int(start.timestamp() * 1000)
-    end_ms   = int(end.timestamp() * 1000)
-    for d in all_deals_for_s2:
+    _s2_stages = (NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"], NB_STAGES["won"])
+    for d in created_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
-        raw = (d["properties"].get("hs_v2_date_entered_71300358")
-               or d["properties"].get("hs_date_entered_71300358"))
-        if not raw:
-            continue
-        try:
-            ts = int(float(raw))
-        except (ValueError, TypeError):
-            continue
-        if start_ms <= ts <= end_ms:
+        stage = d["properties"].get("dealstage", "")
+        if stage in _s2_stages:
             owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
 
     # ── grade weights ─────────────────────────────────────────────────────────
