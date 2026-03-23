@@ -31,10 +31,6 @@ PERIODS = [
 
 FORECAST_PERIODS = [
     ("this_month", "This Month"),
-    ("last_month", "Last Month"),
-    ("this_quarter", "This Quarter"),
-    ("last_quarter", "Last Quarter"),
-    ("ytd", "Year to Date"),
 ]
 
 CALL_STATS_PERIODS = [
@@ -318,7 +314,7 @@ def deals_lost():
 @app.route("/forecast")
 @login_required
 def forecast():
-    period = request.args.get("period", "this_quarter")
+    period = request.args.get("period", "this_month")
     try:
         data = analytics.compute_forecast(period)
         prior_data, prior_label = _prior(period, analytics.compute_forecast)
@@ -889,7 +885,7 @@ def deals_lost_csv():
 @app.route("/forecast/export.csv")
 @login_required
 def forecast_csv():
-    period = request.args.get("period", "this_quarter")
+    period = request.args.get("period", "this_month")
     data = analytics.compute_forecast(period)
     out = io.StringIO()
     w = csv.writer(out)
