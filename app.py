@@ -957,6 +957,148 @@ def inbound_funnel_csv():
                     headers={"Content-Disposition": f"attachment; filename=inbound-funnel-{period}.csv"})
 
 
+@app.route("/api/export/abm-deal-backfill.csv")
+@login_required
+def abm_deal_backfill_csv():
+    """One-time export: all NB pipeline deals with the correct target account value
+    at the time each deal was created, derived from HubSpot property history.
+
+    Use this CSV to backfill the target account deal property in HubSpot:
+      - Import column 'Record ID' as the deal identifier
+      - Import column 'Target Account at Creation' as the property value to set
+    """
+    import requests as req
+    from hubspot import BASE_URL, HEADERS, _search_all, _batch_associations, _parse_hs_datetime, get_owners
+
+    owners = get_owners()
+    owner_map = {o["id"]: f"{o['firstName']} {o['lastName']}" for o in owners}
+
+    # 1. All NB pipeline deals (no date filter)
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "pipeline", "operator": "EQ", "value": "31544320"},
+        ]}],
+        "properties": ["dealname", "createdate", "hubspot_owner_id"],
+        "sorts": [{"propertyName": "createdate", "direction": "ASCENDING"}],
+    }
+    deals = _search_all("deals", payload)
+    if not deals:
+        return Response("No deals found", mimetype="text/plain")
+
+    # 2. Resolve deal → company associations
+    deal_ids = [d["id"] for d in deals]
+    deal_to_co = _batch_associations("deals", "companies", deal_ids)
+
+    # 3. Batch-fetch hs_is_target_account property history for every associated company
+    all_co_ids = list({cid for cids in deal_to_co.values() for cid in cids})
+    co_names   = {}
+    co_history = {}  # company_id -> [(datetime, value), ...] sorted ascending
+
+    for i in range(0, len(all_co_ids), 100):
+        batch = all_co_ids[i:i + 100]
+        resp = req.post(
+            f"{BASE_URL}/crm/v3/objects/companies/batch/read",
+            headers=HEADERS,
+            json={
+                "propertiesWithHistory": ["hs_is_target_account"],
+                "properties": ["name"],
+                "inputs": [{"id": cid} for cid in batch],
+            },
+        )
+        resp.raise_for_status()
+        for obj in resp.json().get("results", []):
+            cid = obj["id"]
+            co_names[cid] = (obj.get("properties") or {}).get("name", "")
+            raw_history = (obj.get("propertiesWithHistory") or {}).get("hs_is_target_account", [])
+            entries = []
+            for entry in raw_history:
+                try:
+                    entries.append((_parse_hs_datetime(entry["timestamp"]), entry.get("value") or "false"))
+                except Exception:
+                    pass
+            entries.sort(key=lambda x: x[0])
+            co_history[cid] = entries
+
+    def _ta_at_creation(company_id, deal_dt):
+        """Return the hs_is_target_account value active at deal_dt for this company."""
+        entries = co_history.get(company_id, [])
+        if not entries:
+            return "false"   # property unset = was not a target account
+        value = "false"
+        for ts, v in entries:
+            if ts <= deal_dt:
+                value = v
+            else:
+                break
+        return value
+
+    # 4. Build CSV
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow([
+        "Record ID",                   # required for HubSpot import
+        "Target Account at Creation",  # property value to stamp
+        "Deal Name",
+        "Create Date",
+        "AE",
+        "Company Name",
+        "Company ID",
+        "TA First Marked True",        # reference: when company became a target account
+        "TA First Marked False",       # reference: when company was removed (if ever)
+        "Current TA Value",
+    ])
+
+    for deal in deals:
+        props  = deal.get("properties") or {}
+        did    = deal["id"]
+        raw_cd = props.get("createdate", "")
+        ae     = owner_map.get(props.get("hubspot_owner_id", ""), "")
+        try:
+            deal_dt = _parse_hs_datetime(raw_cd)
+            cd_str  = deal_dt.strftime("%Y-%m-%d")
+        except Exception:
+            deal_dt = None
+            cd_str  = raw_cd
+
+        co_ids = deal_to_co.get(did, [])
+        if not co_ids:
+            w.writerow([did, "false", props.get("dealname", ""), cd_str, ae, "", "", "", "", ""])
+            continue
+
+        # If deal has multiple companies, use "true" if ANY was a target account at creation
+        at_creation = "false"
+        cid_used    = co_ids[0]
+        for cid in co_ids:
+            if deal_dt and _ta_at_creation(cid, deal_dt) == "true":
+                at_creation = "true"
+                cid_used    = cid
+                break
+
+        entries = co_history.get(cid_used, [])
+        ta_true_on  = next((ts.strftime("%Y-%m-%d") for ts, v in entries if v == "true"),  "")
+        ta_false_on = next((ts.strftime("%Y-%m-%d") for ts, v in entries if v == "false"), "")
+        current     = entries[-1][1] if entries else ""
+
+        w.writerow([
+            did,
+            at_creation,
+            props.get("dealname", ""),
+            cd_str,
+            ae,
+            co_names.get(cid_used, ""),
+            cid_used,
+            ta_true_on,
+            ta_false_on,
+            current,
+        ])
+
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=abm-deal-backfill.csv"},
+    )
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.
