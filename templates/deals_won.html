@@ -38,9 +38,11 @@
         <th class="px-4 py-2 text-right font-semibold"># Won</th>
         <th class="px-4 py-2 text-right font-semibold">ACV</th>
         <th class="px-4 py-2 text-right font-semibold">Win Rate</th>
+        {% if source == "All" %}
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200" rowspan="2">Quota $</th>
         <th class="px-4 py-2 text-right font-semibold" rowspan="2">Delta $</th>
         <th class="px-4 py-2 text-right font-semibold" rowspan="2">Attain %</th>
+        {% endif %}
       </tr>
       <tr class="text-xs">
         {% if source == "Cold outreach" %}
@@ -82,6 +84,7 @@
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate >= 25 %}text-green-600{% elif row.win_rate >= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
           {{ fmt_pct(row.win_rate) }}</td>
+        {% if source == "All" %}
         <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
           {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
         </td>
@@ -98,6 +101,7 @@
           {% else %}text-red-500{% endif %}">
           {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
         </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -123,6 +127,7 @@
         <td class="px-4 py-3 text-right text-green-600">{{ t.total_won_n }}</td>
         <td class="px-4 py-3 text-right text-gray-500">{{ fmt_money(t.acv) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.win_rate) }}</td>
+        {% if source == "All" %}
         <td class="px-4 py-3 text-right border-l border-gray-100">
           {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}
         </td>
@@ -139,6 +144,7 @@
           {% else %}text-red-500{% endif %}">
           {% if t.attain_pct is not none %}{{ fmt_pct(t.attain_pct) }}{% else %}—{% endif %}
         </td>
+        {% endif %}
       </tr>
     </tfoot>
   </table>

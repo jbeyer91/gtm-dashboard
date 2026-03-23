@@ -783,6 +783,34 @@ def get_companies_for_coverage() -> list:
 
 
 @ttl_cache
+def get_target_account_companies() -> list:
+    """Fetch companies marked as target accounts (hs_is_target_account = true) for team members."""
+    owner_ids = list(get_team_owner_ids())
+    if not owner_ids:
+        return []
+    all_companies = []
+    for i in range(0, len(owner_ids), 5):
+        batch = owner_ids[i:i + 5]
+        payload = {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                    {"propertyName": "hs_is_target_account", "operator": "EQ", "value": "true"},
+                ]}
+                for oid in batch
+            ],
+            "properties": [
+                "hubspot_owner_id",
+                "name",
+                "notes_last_activity_date",
+                "notes_last_contacted",
+            ],
+        }
+        all_companies.extend(_search_all("companies", payload))
+    return all_companies
+
+
+@ttl_cache
 def get_sequence_enrolled_company_ids() -> set:
     """Return the set of company IDs that have at least one contact in a sequence.
 

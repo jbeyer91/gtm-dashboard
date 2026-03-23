@@ -27,7 +27,8 @@
         <th class="px-4 py-3 text-left font-semibold" rowspan="2">AE</th>
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="3">Cold Outreach</th>
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="3">Inbound</th>
-        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Other</th>
+        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Referral</th>
+        <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="2">Conference</th>
         <th class="px-3 py-2 text-center font-semibold border-l border-gray-200" colspan="3">Total</th>
       </tr>
       <tr class="text-xs">
@@ -39,6 +40,8 @@
         <th class="px-3 py-2 text-right">ACV</th>
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
+        <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
+        <th class="px-3 py-2 text-right">#</th>
         <th class="px-3 py-2 text-right border-l border-gray-200">ACV</th>
         <th class="px-3 py-2 text-right">$</th>
         <th class="px-3 py-2 text-right">#</th>
@@ -46,8 +49,6 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      {% set other_amt = row.referral_amt + row.conference_amt %}
-      {% set other_n   = row.referral_n   + row.conference_n %}
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.cold_outreach_amt) }}</td>
@@ -56,8 +57,10 @@
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.inbound_n }}</td>
         <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.inbound_acv) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
-        <td class="px-3 py-3 text-right tabular-nums">{{ other_n }}</td>
+        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.referral_amt) }}</td>
+        <td class="px-3 py-3 text-right tabular-nums">{{ row.referral_n }}</td>
+        <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.conference_amt) }}</td>
+        <td class="px-3 py-3 text-right tabular-nums">{{ row.conference_n }}</td>
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100 text-gray-500">{{ fmt_money(row.total_acv) }}</td>
         <td class="px-3 py-3 text-right tabular-nums font-semibold">{{ fmt_money(row.total_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums font-semibold">{{ row.total_n }}</td>
@@ -66,8 +69,6 @@
     </tbody>
     <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
       {% set t = data.totals %}
-      {% set other_amt = t.referral_amt + t.conference_amt %}
-      {% set other_n   = t.referral_n   + t.conference_n %}
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.cold_outreach_amt) }}</td>
@@ -76,8 +77,10 @@
         <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.inbound_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.inbound_n }}</td>
         <td class="px-3 py-3 text-right text-gray-500">—</td>
-        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(other_amt) }}</td>
-        <td class="px-3 py-3 text-right">{{ other_n }}</td>
+        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.referral_amt) }}</td>
+        <td class="px-3 py-3 text-right">{{ t.referral_n }}</td>
+        <td class="px-3 py-3 text-right border-l border-gray-100">{{ fmt_money(t.conference_amt) }}</td>
+        <td class="px-3 py-3 text-right">{{ t.conference_n }}</td>
         <td class="px-3 py-3 text-right border-l border-gray-100 text-gray-500">{{ fmt_money(t.total_acv) }}</td>
         <td class="px-3 py-3 text-right">{{ fmt_money(t.total_amt) }}</td>
         <td class="px-3 py-3 text-right">{{ t.total_n }}</td>

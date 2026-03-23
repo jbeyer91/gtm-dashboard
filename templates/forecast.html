@@ -16,11 +16,13 @@
   {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
   {{ stat_card("Won Revenue", fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
   {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "", delta=deltas.attain_pct, delta_fmt='pct') }}
-  {{ stat_card("HS Submitted", fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool", delta=deltas.submitted_amt, delta_fmt='money') }}
+  {% if period == "this_month" %}
+  {{ stat_card("HS Submitted · " ~ this_month_label, fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool", delta=deltas.submitted_amt, delta_fmt='money') }}
+  {% endif %}
 </div>
 
 {# ── reusable row macro ───────────────────────────────────────────────────── #}
-{% macro forecast_row(row, is_subtotal=false) %}
+{% macro forecast_row(row, is_subtotal=false, period="") %}
 <tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-blue-50/60 transition-colors duration-100{% endif %}">
   <td class="px-4 py-3 {% if is_subtotal %}text-xs uppercase tracking-wider{% else %}font-medium{% endif %}">{{ row.ae }}</td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
@@ -40,9 +42,11 @@
     {% else %}text-red-500{% endif %}">
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
+  {% if period == "this_month" %}
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}text-indigo-600">
     {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal text-xs">Not submitted</span>{% endif %}
   </td>
+  {% endif %}
 </tr>
 {% endmacro %}
 
@@ -55,7 +59,12 @@
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">HS Submitted $</th>
+        {% if period == "this_month" %}
+        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">
+          Forecast Submission
+          <span class="block text-indigo-400 font-normal normal-case tracking-normal">{{ this_month_label }}</span>
+        </th>
+        {% endif %}
       </tr>
     </thead>
 
@@ -63,7 +72,7 @@
     {# Team header #}
     <tbody>
       <tr class="bg-indigo-50 border-t border-indigo-100">
-        <td colspan="6" class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-700">
+        <td colspan="{{ 6 if period == 'this_month' else 5 }}" class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-700">
           {{ group.team }} — {{ group.manager }}
         </td>
       </tr>
@@ -71,9 +80,9 @@
     {# Rep rows #}
     <tbody class="divide-y divide-gray-100">
       {% for row in group.rows %}
-        {{ forecast_row(row) }}
+        {{ forecast_row(row, period=period) }}
       {% endfor %}
-      {{ forecast_row(group.subtotal, is_subtotal=true) }}
+      {{ forecast_row(group.subtotal, is_subtotal=true, period=period) }}
     </tbody>
     {% endfor %}
 
@@ -97,9 +106,11 @@
           {% else %}text-red-500{% endif %}">
           {% if t.gap_amt is not none %}{{ fmt_money(t.gap_amt) }}{% else %}—{% endif %}
         </td>
+        {% if period == "this_month" %}
         <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
         </td>
+        {% endif %}
       </tr>
     </tfoot>
   </table>
