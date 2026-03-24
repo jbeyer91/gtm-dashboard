@@ -12,8 +12,8 @@
   {{ stat_card("ABM Accounts", t.total, tip="Companies marked as Target Account = true, assigned to team AEs.") }}
   {{ stat_card("Active (30d)", t.active_30, tip="Accounts with any logged activity (call, meeting, or email) in the last 30 days.") }}
   {{ stat_card("Activity Coverage", fmt_pct(t.active_pct), tip="% of ABM accounts touched in the last 30 days. Goal: 90%.") }}
-  {{ stat_card("Deals This Month", t.deal_month, tip="ABM accounts with at least one new-business deal created this calendar month.") }}
-  {{ stat_card("Deals This Quarter", t.deal_quarter, tip="ABM accounts with at least one new-business deal created this calendar quarter.") }}
+  {{ stat_card("Deals This Month", t.deal_month, tip="New-business deals created by ABM reps this calendar month (NB &amp; Enterprise NB pipelines).") }}
+  {{ stat_card("Deals This Quarter", t.deal_quarter, tip="New-business deals created by ABM reps this calendar quarter (NB &amp; Enterprise NB pipelines).") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -24,8 +24,8 @@
         <th class="px-4 py-3 text-right font-semibold" title="Total companies with Target Account = true assigned to this rep.">ABM Accounts</th>
         <th class="px-4 py-3 text-right font-semibold" title="Accounts with any logged activity (call, meeting, or email) in the last 30 days.">Active (30d)</th>
         <th class="px-4 py-3 text-right font-semibold" title="% of ABM accounts touched in the last 30 days. Goal: 90%.">Activity %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="ABM accounts with a new-business deal created this calendar month.">Deals This Month</th>
-        <th class="px-4 py-3 text-right font-semibold" title="ABM accounts with a new-business deal created this calendar quarter.">Deals This Qtr</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created by this rep this calendar month.">Deals This Month</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created by this rep this calendar quarter.">Deals This Qtr</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
