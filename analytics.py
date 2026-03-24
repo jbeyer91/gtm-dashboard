@@ -825,8 +825,7 @@ def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
 
-    lost_deals = get_deals(start, end, "closedate")
-    lost_deals = [d for d in lost_deals if d["properties"].get("hs_is_closed_lost") == "true"]
+    lost_deals = get_deals(start, end, "hs_v2_date_entered_71300363")
 
     REASONS = ["Cost", "Never Demo'ed", "Timeline", "Stakeholder Issue", "Competitor", "Product", "Other", "Value"]
 

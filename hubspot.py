@@ -498,8 +498,9 @@ def get_quotas(start: datetime, end: datetime) -> dict:
 def get_deals(start: datetime, end: datetime, date_field: str = "createdate") -> list:
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
-    # Only filter on createdate or closedate — hs_date_entered_* are not filterable
-    safe_field = date_field if date_field in ("createdate", "closedate") else "createdate"
+    # hs_v2_date_entered_* are filterable; hs_date_entered_* (v1) are not
+    _FILTERABLE = {"createdate", "closedate", "hs_v2_date_entered_71300363"}
+    safe_field = date_field if date_field in _FILTERABLE else "createdate"
     payload = {
         "filterGroups": [
             {
@@ -519,7 +520,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",
-            "hs_v2_date_entered_71300358",
+            "hs_v2_date_entered_71300358", "hs_v2_date_entered_71300363",
         ],
     }
     return _search_all("deals", payload)
