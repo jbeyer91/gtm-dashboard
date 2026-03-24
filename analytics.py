@@ -1394,18 +1394,25 @@ def compute_abm_coverage() -> dict:
 
     companies = get_target_account_companies()
 
-    # ABM deals this quarter/month: filter directly on target_account = true
+    # ABM deals this quarter/month: deals created by team owners in the window.
+    # target_account lives on companies, not deals, so we filter by owner instead.
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
     now_ts = int(now.timestamp() * 1000)
-    abm_deals = _search_all("deals", {
-        "filterGroups": [{"filters": [
-            {"propertyName": "pipeline",       "operator": "EQ",  "value": "31544320"},
-            {"propertyName": "createdate",     "operator": "GTE", "value": str(quarter_start_ts)},
-            {"propertyName": "createdate",     "operator": "LTE", "value": str(now_ts)},
-            {"propertyName": "target_account", "operator": "EQ",  "value": "true"},
-        ]}],
-        "properties": ["createdate", "hubspot_owner_id"],
-    })
+    team_owner_ids = list(get_team_owner_ids())
+    abm_deals = []
+    for i in range(0, len(team_owner_ids), 5):
+        batch = team_owner_ids[i:i + 5]
+        abm_deals.extend(_search_all("deals", {
+            "filterGroups": [
+                {"filters": [
+                    {"propertyName": "hubspot_owner_id", "operator": "EQ",  "value": oid},
+                    {"propertyName": "createdate",       "operator": "GTE", "value": str(quarter_start_ts)},
+                    {"propertyName": "createdate",       "operator": "LTE", "value": str(now_ts)},
+                ]}
+                for oid in batch
+            ],
+            "properties": ["createdate", "hubspot_owner_id"],
+        }))
     owner_deal_month: dict = defaultdict(int)
     owner_deal_quarter: dict = defaultdict(int)
     for deal in abm_deals:
