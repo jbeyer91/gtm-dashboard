@@ -9,15 +9,25 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     session, jsonify, abort, Response
 )
+from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
-from hubspot import get_prior_range
+from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE
+
+ALLOWED_DOMAIN = "belfrysoftware.com"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
-DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "belfry2026")
+oauth = OAuth(app)
+oauth.register(
+    name="google",
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 PERIODS = [
     ("this_month", "This Month"),
@@ -91,16 +101,37 @@ def login_required(f):
     return decorated
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login")
 def login():
-    error = None
-    if request.method == "POST":
-        if request.form.get("password") == DASHBOARD_PASSWORD:
-            session["authenticated"] = True
-            next_url = request.args.get("next") or url_for("index")
-            return redirect(next_url)
-        error = "Incorrect password."
-    return render_template("login.html", error=error)
+    redirect_uri = url_for("auth_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    token = oauth.google.authorize_access_token()
+    user_info = token.get("userinfo") or oauth.google.userinfo()
+    email = (user_info.get("email") or "").lower()
+
+    if not email.endswith(f"@{ALLOWED_DOMAIN}"):
+        return render_template("login_error.html",
+                               message="Sign-in requires a @belfrysoftware.com account.")
+
+    # Map email → HubSpot owner; determine admin status
+    owners = get_owners()
+    owner = next((o for o in owners.values() if (o.get("email") or "").lower() == email), None)
+
+    if owner is None:
+        return render_template("login_error.html",
+                               message="Your account isn't linked to a HubSpot owner. Contact your admin.")
+
+    session["authenticated"] = True
+    session["email"] = email
+    session["owner_id"] = owner["id"]
+    session["is_admin"] = owner["id"] in OWNER_EXCLUDE
+
+    next_url = request.args.get("next") or url_for("index")
+    return redirect(next_url)
 
 
 @app.route("/logout")
@@ -162,11 +193,18 @@ def scorecard():
             "connect_rate":  _delta("connect_rate"),
             "stale_count":   _delta("stale_count"),
         }
+        # AEs see only their own row; admins see everyone
+        is_admin = session.get("is_admin", False)
+        if not is_admin:
+            my_id = session.get("owner_id")
+            data = dict(data)
+            data["rows"] = [r for r in data["rows"] if r.get("owner_id") == my_id]
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
     return render_template("scorecard.html", data=data, month_label=month_label,
                            deltas=deltas, prior_label=prior_label,
+                           is_admin=is_admin,
                            active="scorecard", nav=NAV)
 
 
