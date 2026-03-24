@@ -1383,7 +1383,6 @@ def compute_abm_coverage() -> dict:
     owners    = get_owners()
     companies = get_target_account_companies()
 
-    _NB_PIPELINES    = ("31544320", "752708198")
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
     now_ts           = int(now.timestamp() * 1000)
     team_owner_ids   = list(get_team_owner_ids())
@@ -1395,8 +1394,8 @@ def compute_abm_coverage() -> dict:
             results.extend(_search_all("deals", {
                 "filterGroups": [
                     {"filters": [
-                        {"propertyName": "hubspot_owner_id", "operator": "EQ",  "value": oid},
-                        {"propertyName": "pipeline",         "operator": "IN",  "values": list(_NB_PIPELINES)},
+                        {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
+                        {"propertyName": "pipeline",         "operator": "EQ", "value": "31544320"},
                     ] + filter_extra}
                     for oid in batch
                 ],
