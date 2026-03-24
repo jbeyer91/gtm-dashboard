@@ -8,12 +8,22 @@
 </div>
 
 {% set t = data.totals %}
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-  {{ stat_card("ABM Accounts", t.total, tip="Companies marked as Target Account = true, assigned to team AEs.") }}
-  {{ stat_card("Active (30d)", t.active_30, tip="Accounts with any logged activity (call, meeting, or email) in the last 30 days.") }}
-  {{ stat_card("Activity Coverage", fmt_pct(t.active_pct), tip="% of ABM accounts touched in the last 30 days. Goal: 90%.") }}
-  {{ stat_card("Deals This Month", t.deal_month, tip="New-business deals created by ABM reps this calendar month (NB &amp; Enterprise NB pipelines).") }}
-  {{ stat_card("Deals This Quarter", t.deal_quarter, tip="New-business deals created by ABM reps this calendar quarter (NB &amp; Enterprise NB pipelines).") }}
+
+{# ── Helper macro: format dollar amounts compactly ── #}
+{% macro fmt_amt(v) %}
+  {%- if v >= 1000000 -%}${{ "%.1f"|format(v / 1000000) }}M
+  {%- elif v >= 1000 -%}${{ (v // 1000)|int }}k
+  {%- elif v > 0 -%}${{ v|int }}
+  {%- else -%}—{%- endif -%}
+{% endmacro %}
+
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+  {{ stat_card("ABM Accounts",    t.total,           tip="Companies marked as Target Account = true, assigned to team AEs.") }}
+  {{ stat_card("Activity (30d)",  fmt_pct(t.active_pct), tip="% of ABM accounts with any logged activity in the last 30 days. Goal: 90%.") }}
+  {{ stat_card("Created (Mo)",    t.created_month_n, tip="New-business deals created by ABM reps this calendar month.") }}
+  {{ stat_card("Won (Mo)",        t.won_month_n,     tip="New-business deals closed won by ABM reps this calendar month.") }}
+  {{ stat_card("Created (Qtr)",   t.created_qtr_n,   sub=fmt_amt(t.created_qtr_amt), tip="New-business deals created this quarter — count and total pipeline value.") }}
+  {{ stat_card("Won (Qtr)",       t.won_qtr_n,       sub=fmt_amt(t.won_qtr_amt),     tip="New-business deals closed won this quarter — count and total value.") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -22,10 +32,11 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold" title="Total companies with Target Account = true assigned to this rep.">ABM Accounts</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Accounts with any logged activity (call, meeting, or email) in the last 30 days.">Active (30d)</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of ABM accounts touched in the last 30 days. Goal: 90%.">Activity %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created by this rep this calendar month.">Deals This Month</th>
-        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created by this rep this calendar quarter.">Deals This Qtr</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of ABM accounts with any logged activity in the last 30 days. Goal: 90%.">Activity %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created this calendar month.">Created (Mo)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals closed won this calendar month.">Won (Mo)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals created this calendar quarter — count / pipeline $.">Created (Qtr)</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New-business deals closed won this calendar quarter — count / closed $.">Won (Qtr)</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -33,7 +44,6 @@
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.total }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ row.active_30 }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.active_pct >= 90 %}text-green-600
           {% elif row.active_pct >= 70 %}text-yellow-600
@@ -41,18 +51,24 @@
           {{ fmt_pct(row.active_pct) }}
         </td>
         <td class="px-4 py-3 text-right tabular-nums">
-          {% if row.deal_month > 0 %}
-            <span class="text-green-600 font-semibold">{{ row.deal_month }}</span>
-          {% else %}
-            <span class="text-gray-400">—</span>
-          {% endif %}
+          {% if row.created_month_n > 0 %}<span class="text-blue-600 font-semibold">{{ row.created_month_n }}</span>
+          {% else %}<span class="text-gray-300">—</span>{% endif %}
         </td>
         <td class="px-4 py-3 text-right tabular-nums">
-          {% if row.deal_quarter > 0 %}
-            <span class="text-green-600 font-semibold">{{ row.deal_quarter }}</span>
-          {% else %}
-            <span class="text-gray-400">—</span>
-          {% endif %}
+          {% if row.won_month_n > 0 %}<span class="text-green-600 font-semibold">{{ row.won_month_n }}</span>
+          {% else %}<span class="text-gray-300">—</span>{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if row.created_qtr_n > 0 %}
+            <span class="text-blue-600 font-semibold">{{ row.created_qtr_n }}</span>
+            <span class="text-gray-400 text-xs ml-1">{{ fmt_amt(row.created_qtr_amt) }}</span>
+          {% else %}<span class="text-gray-300">—</span>{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if row.won_qtr_n > 0 %}
+            <span class="text-green-600 font-semibold">{{ row.won_qtr_n }}</span>
+            <span class="text-gray-400 text-xs ml-1">{{ fmt_amt(row.won_qtr_amt) }}</span>
+          {% else %}<span class="text-gray-300">—</span>{% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -62,19 +78,24 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ t.total }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ t.active_30 }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-semibold
+        <td class="px-4 py-3 text-right tabular-nums
           {% if t.active_pct >= 90 %}text-green-600
           {% elif t.active_pct >= 70 %}text-yellow-600
           {% else %}text-red-500{% endif %}">
           {{ fmt_pct(t.active_pct) }}
         </td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ t.deal_month if t.deal_month else '—' }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ t.deal_quarter if t.deal_quarter else '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.created_month_n or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.won_month_n or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.created_qtr_n %}{{ t.created_qtr_n }} <span class="text-gray-400 text-xs">{{ fmt_amt(t.created_qtr_amt) }}</span>{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.won_qtr_n %}{{ t.won_qtr_n }} <span class="text-gray-400 text-xs">{{ fmt_amt(t.won_qtr_amt) }}</span>{% else %}—{% endif %}
+        </td>
       </tr>
     </tfoot>
   </table>
 </div>
 
-<p class="text-xs text-gray-400 mt-4">Activity = any call, meeting, or email logged in HubSpot against the account in the last 30 days. Deals = new-business pipeline deals created for this account in the current month / quarter.</p>
+<p class="text-xs text-gray-400 mt-4">Activity = any call, meeting, or email logged in HubSpot against the account in the last 30 days. Deals = new-business pipeline deals owned by this rep (NB &amp; Enterprise NB pipelines).</p>
 {% endblock %}

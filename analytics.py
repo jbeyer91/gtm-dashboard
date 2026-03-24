@@ -1372,73 +1372,101 @@ def compute_win_rate_by_source(period: str) -> dict:
 
 @ttl_cache
 def compute_abm_coverage() -> dict:
-    """ABM account coverage: target accounts per AE with activity and deal signals.
-
-    Metrics (always point-in-time, no period selector):
-      - Total ABM accounts   : companies owned by AE with hs_is_target_account = true
-      - Active (30d)         : accounts with any logged activity in the last 30 days
-      - Activity %           : active_30 / total (goal: 90%)
-      - Deals this month     : target account companies with a NB deal created this calendar month
-      - Deals this quarter   : target account companies with a NB deal created this calendar quarter
-    """
+    """ABM account coverage: target accounts per AE with activity and deal signals."""
     now = datetime.now(timezone.utc)
     thirty_days_ago = now - timedelta(days=30)
 
     qm = ((now.month - 1) // 3) * 3 + 1
     quarter_start = datetime(now.year, qm, 1, tzinfo=timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    month_start   = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
-    owners = get_owners()
-    owner_map = owners  # already keyed by owner_id
-
+    owners    = get_owners()
     companies = get_target_account_companies()
 
-    # ABM deals this quarter/month: NB deals created by team owners in the window.
-    # target_account lives on companies, not deals, so we filter by owner instead.
-    # Pipelines: 31544320 = New Business, 752708198 = Enterprise New Business.
-    _NB_PIPELINES = ("31544320", "752708198")
+    _NB_PIPELINES    = ("31544320", "752708198")
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
-    now_ts = int(now.timestamp() * 1000)
-    team_owner_ids = list(get_team_owner_ids())
-    abm_deals = []
-    for i in range(0, len(team_owner_ids), 5):
-        batch = team_owner_ids[i:i + 5]
-        abm_deals.extend(_search_all("deals", {
-            "filterGroups": [
-                {"filters": [
-                    {"propertyName": "hubspot_owner_id", "operator": "EQ",  "value": oid},
-                    {"propertyName": "createdate",       "operator": "GTE", "value": str(quarter_start_ts)},
-                    {"propertyName": "createdate",       "operator": "LTE", "value": str(now_ts)},
-                    {"propertyName": "pipeline",         "operator": "IN",  "values": list(_NB_PIPELINES)},
-                ]}
-                for oid in batch
-            ],
-            "properties": ["createdate", "hubspot_owner_id"],
-        }))
-    owner_deal_month: dict = defaultdict(int)
-    owner_deal_quarter: dict = defaultdict(int)
-    for deal in abm_deals:
-        props_d = deal.get("properties") or {}
-        oid = props_d.get("hubspot_owner_id", "")
+    now_ts           = int(now.timestamp() * 1000)
+    team_owner_ids   = list(get_team_owner_ids())
+
+    def _batch_query(filter_extra: list, properties: list) -> list:
+        results = []
+        for i in range(0, len(team_owner_ids), 5):
+            batch = team_owner_ids[i:i + 5]
+            results.extend(_search_all("deals", {
+                "filterGroups": [
+                    {"filters": [
+                        {"propertyName": "hubspot_owner_id", "operator": "EQ",  "value": oid},
+                        {"propertyName": "pipeline",         "operator": "IN",  "values": list(_NB_PIPELINES)},
+                    ] + filter_extra}
+                    for oid in batch
+                ],
+                "properties": properties,
+            }))
+        return results
+
+    # Deals created this quarter
+    created_deals = _batch_query(
+        [{"propertyName": "createdate", "operator": "GTE", "value": str(quarter_start_ts)},
+         {"propertyName": "createdate", "operator": "LTE", "value": str(now_ts)}],
+        ["createdate", "hubspot_owner_id", "amount"],
+    )
+
+    # Deals won this quarter (by close date)
+    won_deals = _batch_query(
+        [{"propertyName": "closedate",        "operator": "GTE", "value": str(quarter_start_ts)},
+         {"propertyName": "closedate",        "operator": "LTE", "value": str(now_ts)},
+         {"propertyName": "hs_is_closed_won", "operator": "EQ",  "value": "true"}],
+        ["closedate", "hubspot_owner_id", "amount"],
+    )
+
+    owner_created_month_n: dict  = defaultdict(int)
+    owner_created_qtr_n: dict    = defaultdict(int)
+    owner_created_qtr_amt: dict  = defaultdict(float)
+    for deal in created_deals:
+        p   = deal.get("properties") or {}
+        oid = p.get("hubspot_owner_id", "")
         if not oid:
             continue
         try:
-            cd = _parse_hs_datetime(props_d.get("createdate", ""))
+            cd = _parse_hs_datetime(p.get("createdate", ""))
         except Exception:
             continue
-        owner_deal_quarter[oid] += 1
+        amt = float(p.get("amount") or 0)
+        owner_created_qtr_n[oid]   += 1
+        owner_created_qtr_amt[oid] += amt
         if cd >= month_start:
-            owner_deal_month[oid] += 1
+            owner_created_month_n[oid] += 1
 
-    owner_data = defaultdict(lambda: {"total": 0, "active_30": 0, "deal_month": 0, "deal_quarter": 0})
+    owner_won_month_n: dict = defaultdict(int)
+    owner_won_qtr_n: dict   = defaultdict(int)
+    owner_won_qtr_amt: dict = defaultdict(float)
+    for deal in won_deals:
+        p   = deal.get("properties") or {}
+        oid = p.get("hubspot_owner_id", "")
+        if not oid:
+            continue
+        try:
+            cd = _parse_hs_datetime(p.get("closedate", ""))
+        except Exception:
+            continue
+        amt = float(p.get("amount") or 0)
+        owner_won_qtr_n[oid]   += 1
+        owner_won_qtr_amt[oid] += amt
+        if cd >= month_start:
+            owner_won_month_n[oid] += 1
+
+    owner_data = defaultdict(lambda: {
+        "total": 0, "active_30": 0,
+        "created_month_n": 0, "created_qtr_n": 0, "created_qtr_amt": 0.0,
+        "won_month_n": 0, "won_qtr_n": 0, "won_qtr_amt": 0.0,
+    })
 
     for company in companies:
         props = company.get("properties") or {}
-        oid = props.get("hubspot_owner_id")
-        if not oid or oid not in owner_map:
+        oid   = props.get("hubspot_owner_id")
+        if not oid or oid not in owners:
             continue
         owner_data[oid]["total"] += 1
-
         last_act_raw = props.get("notes_last_activity_date") or props.get("notes_last_contacted")
         if last_act_raw:
             try:
@@ -1447,34 +1475,48 @@ def compute_abm_coverage() -> dict:
             except Exception:
                 pass
 
-    for oid in set(list(owner_deal_quarter) + list(owner_data)):
-        owner_data[oid]["deal_month"]   = owner_deal_month[oid]
-        owner_data[oid]["deal_quarter"] = owner_deal_quarter[oid]
+    for oid in set(list(owner_created_qtr_n) + list(owner_won_qtr_n) + list(owner_data)):
+        owner_data[oid]["created_month_n"] = owner_created_month_n[oid]
+        owner_data[oid]["created_qtr_n"]   = owner_created_qtr_n[oid]
+        owner_data[oid]["created_qtr_amt"] = owner_created_qtr_amt[oid]
+        owner_data[oid]["won_month_n"]     = owner_won_month_n[oid]
+        owner_data[oid]["won_qtr_n"]       = owner_won_qtr_n[oid]
+        owner_data[oid]["won_qtr_amt"]     = owner_won_qtr_amt[oid]
 
     rows = []
     for oid, d in owner_data.items():
-        o = owner_map[oid]
-        total = d["total"]
+        o = owners.get(oid)
+        if not o:
+            continue
+        total  = d["total"]
         active = d["active_30"]
         rows.append({
-            "ae": f"{o['first_name']} {o['last_name']}".strip() or o["name"],
-            "total": total,
-            "active_30": active,
-            "active_pct": round(active / total * 100) if total else 0,
-            "deal_month": d["deal_month"],
-            "deal_quarter": d["deal_quarter"],
+            "ae":              f"{o['first_name']} {o['last_name']}".strip() or o["name"],
+            "total":           total,
+            "active_30":       active,
+            "active_pct":      round(active / total * 100) if total else 0,
+            "created_month_n": d["created_month_n"],
+            "created_qtr_n":   d["created_qtr_n"],
+            "created_qtr_amt": d["created_qtr_amt"],
+            "won_month_n":     d["won_month_n"],
+            "won_qtr_n":       d["won_qtr_n"],
+            "won_qtr_amt":     d["won_qtr_amt"],
         })
 
     rows.sort(key=lambda r: (-r["total"], r["ae"]))
 
-    tot_total = sum(r["total"] for r in rows)
+    tot_total  = sum(r["total"] for r in rows)
     tot_active = sum(r["active_30"] for r in rows)
     totals = {
-        "total": tot_total,
-        "active_30": tot_active,
-        "active_pct": round(tot_active / tot_total * 100) if tot_total else 0,
-        "deal_month": sum(r["deal_month"] for r in rows),
-        "deal_quarter": sum(r["deal_quarter"] for r in rows),
+        "total":           tot_total,
+        "active_30":       tot_active,
+        "active_pct":      round(tot_active / tot_total * 100) if tot_total else 0,
+        "created_month_n": sum(r["created_month_n"] for r in rows),
+        "created_qtr_n":   sum(r["created_qtr_n"]   for r in rows),
+        "created_qtr_amt": sum(r["created_qtr_amt"]  for r in rows),
+        "won_month_n":     sum(r["won_month_n"]      for r in rows),
+        "won_qtr_n":       sum(r["won_qtr_n"]        for r in rows),
+        "won_qtr_amt":     sum(r["won_qtr_amt"]       for r in rows),
     }
 
     return {"rows": rows, "totals": totals}
