@@ -1396,6 +1396,7 @@ def compute_abm_coverage() -> dict:
                     {"filters": [
                         {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
                         {"propertyName": "pipeline",         "operator": "EQ", "value": "31544320"},
+                        {"propertyName": "target_account",   "operator": "EQ", "value": "true"},
                     ] + filter_extra}
                     for oid in batch
                 ],
