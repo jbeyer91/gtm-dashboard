@@ -155,16 +155,20 @@ def clear_cache() -> None:
     """Invalidate all cached results (memory and disk)."""
     _store.clear()
     _last_refreshed[0] = 0.0
-    try:
-        with _disk_lock:
-            for fname in os.listdir(CACHE_DIR):
-                if fname.endswith(".pkl"):
-                    try:
-                        os.remove(os.path.join(CACHE_DIR, fname))
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+    # Delete disk files in a background thread so the HTTP response isn't
+    # blocked by slow Render disk I/O.
+    def _delete_disk():
+        try:
+            with _disk_lock:
+                for fname in os.listdir(CACHE_DIR):
+                    if fname.endswith(".pkl"):
+                        try:
+                            os.remove(os.path.join(CACHE_DIR, fname))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+    threading.Thread(target=_delete_disk, daemon=True).start()
 
 
 def last_refreshed_str() -> str:
