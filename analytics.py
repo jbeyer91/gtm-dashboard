@@ -1394,8 +1394,10 @@ def compute_abm_coverage() -> dict:
 
     companies = get_target_account_companies()
 
-    # ABM deals this quarter/month: deals created by team owners in the window.
+    # ABM deals this quarter/month: NB deals created by team owners in the window.
     # target_account lives on companies, not deals, so we filter by owner instead.
+    # Pipelines: 31544320 = New Business, 752708198 = Enterprise New Business.
+    _NB_PIPELINES = ("31544320", "752708198")
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
     now_ts = int(now.timestamp() * 1000)
     team_owner_ids = list(get_team_owner_ids())
@@ -1408,6 +1410,7 @@ def compute_abm_coverage() -> dict:
                     {"propertyName": "hubspot_owner_id", "operator": "EQ",  "value": oid},
                     {"propertyName": "createdate",       "operator": "GTE", "value": str(quarter_start_ts)},
                     {"propertyName": "createdate",       "operator": "LTE", "value": str(now_ts)},
+                    {"propertyName": "pipeline",         "operator": "IN",  "values": list(_NB_PIPELINES)},
                 ]}
                 for oid in batch
             ],
