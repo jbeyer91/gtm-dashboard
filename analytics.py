@@ -1227,7 +1227,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
 
     GRADE_ORDER = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-"]
 
-    all_oids = {oid for oid in (set(quotas) | set(owner_won) | set(call_stats_by_owner))
+    all_oids = {oid for oid in (set(owners) | set(quotas) | set(owner_won) | set(call_stats_by_owner))
                 if _owner_allowed(oid) and owners.get(oid)}
 
     rows = []
