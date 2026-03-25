@@ -61,8 +61,37 @@
 
 {{ csv_link(url_for('scorecard_csv')) }}
 
-{# ── Team overview cards ──────────────────────────────────────────────────── #}
+{# ── Pace indicator ───────────────────────────────────────────────────────── #}
 {% set t = data.team %}
+{% set attain_clamped = [t.attain_pct, 100]|min %}
+{% if t.attain_pct >= pace_pct + 2 %}
+  {% set pace_color = "bg-green-500" %}
+  {% set pace_label_color = "text-green-600" %}
+  {% set pace_word = "ahead of pace" %}
+{% elif t.attain_pct >= pace_pct - 2 %}
+  {% set pace_color = "bg-amber-400" %}
+  {% set pace_label_color = "text-amber-600" %}
+  {% set pace_word = "on pace" %}
+{% else %}
+  {% set pace_color = "bg-red-500" %}
+  {% set pace_label_color = "text-red-500" %}
+  {% set pace_word = "behind pace" %}
+{% endif %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mb-4">
+  <div class="flex items-center justify-between mb-2">
+    <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Monthly Pace</span>
+    <span class="text-xs font-semibold {{ pace_label_color }}">{{ "%.1f"|format(t.attain_pct) }}% attained · {{ pace_word }}</span>
+  </div>
+  <div class="relative w-full h-3 bg-gray-100 rounded-full">
+    <div class="{{ pace_color }} h-3 rounded-full" style="width: {{ attain_clamped }}%"></div>
+    <div class="absolute top-0 h-3 w-0.5 bg-gray-500 rounded"
+         style="left: {{ pace_pct }}%; transform: translateX(-50%);"
+         title="Expected at {{ "%.0f"|format(pace_pct) }}% of month"></div>
+  </div>
+  <p class="text-xs text-gray-400 mt-1.5">{{ bdays_elapsed }} of {{ bdays_total }} business days elapsed ({{ "%.0f"|format(pace_pct) }}% of month)</p>
+</div>
+
+{# ── Team overview cards ──────────────────────────────────────────────────── #}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Overview</h2>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
