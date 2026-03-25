@@ -289,10 +289,40 @@ def home():
     import calendar
     team = request.args.get("team", "all")
     try:
-        data   = analytics.compute_scorecard("this_month")
-        n_reps = len(data["rows"])          # capture before filtering for consistent deals_target
-        data   = _filter_by_team(data, team)
+        data = analytics.compute_scorecard("this_month")
+        data = _filter_by_team(data, team)
+        # Recompute team-level KPIs from filtered rows so the KPI cards reflect
+        # the selected team. _filter_by_team only filters data["rows"]; the
+        # pre-aggregated data["team"] is unaware of the team param otherwise.
+        if team != "all":
+            rows = data["rows"]
+            if rows:
+                t_quota = sum(r["quota_amt"] for r in rows)
+                t_won   = sum(r["won_amt"]   for r in rows)
+                active  = [r for r in rows if r.get("avg_dials", 0) > 0]
+                dial_sum = sum(r["avg_dials"] for r in active)
+                data = dict(data)
+                data["team"] = {
+                    **data["team"],
+                    "attain_pct":    round(t_won / t_quota * 100, 1) if t_quota else 0.0,
+                    "won_amt":       t_won,
+                    "quota_amt":     t_quota,
+                    "deals_created": sum(r["deals_created"] for r in rows),
+                    "s2_amt":        sum(r["s2_amt"]        for r in rows),
+                    "s2_target":     sum(r["s2_target"]     for r in rows),
+                    "avg_dials":     round(dial_sum / len(active), 1) if active else 0.0,
+                    "connect_rate":  round(
+                        sum(r["connect_rate"] * r["avg_dials"] for r in active) / dial_sum, 1
+                    ) if dial_sum else 0.0,
+                    "stale_count":   sum(r["stale_count"]   for r in rows),
+                    "ac_accounts":   sum(r["ac_accounts"]   for r in rows),
+                }
+            else:
+                data = dict(data)
+                data["team"] = {k: (0 if isinstance(v, (int, float)) else v)
+                                for k, v in data["team"].items()}
         t      = data["team"]
+        n_reps = len(data["rows"])   # reflects filtered team for deals_target
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="home")
 
