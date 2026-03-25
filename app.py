@@ -102,6 +102,7 @@ COVERAGE_PERIODS = [
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
+    {"type": "link",  "endpoint": "home",               "label": "Home"},
     {"type": "link",  "endpoint": "scorecard",         "label": "Scorecard"},
     {"type": "group", "label": "Deals", "children": [
         {"endpoint": "deals_won",       "label": "Won"},
@@ -284,6 +285,46 @@ def _filter_by_team(data: dict, team: str) -> dict:
         return {**data, "rows": rows, "totals": totals, "groups": filtered_groups}
 
     return {**data, "rows": rows, "totals": totals}
+
+
+@app.route("/")
+@login_required
+def home():
+    from datetime import datetime, timezone, date, timedelta
+    import calendar
+    team = request.args.get("team", "all")
+    try:
+        data   = analytics.compute_scorecard("this_month")
+        n_reps = len(data["rows"])          # capture before filtering for consistent deals_target
+        data   = _filter_by_team(data, team)
+        t      = data["team"]
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="home")
+
+    month_label = datetime.now(timezone.utc).strftime("%B %Y")
+
+    # Business-day pace indicator (same logic as scorecard route — not refactored per scope)
+    today          = date.today()
+    first_of_month = today.replace(day=1)
+    last_day       = calendar.monthrange(today.year, today.month)[1]
+    last_of_month  = today.replace(day=last_day)
+
+    def _count_bdays(start, end):
+        n, cur = 0, start
+        while cur <= end:
+            if cur.weekday() < 5:
+                n += 1
+            cur += timedelta(days=1)
+        return n
+
+    bdays_total   = _count_bdays(first_of_month, last_of_month)
+    bdays_elapsed = _count_bdays(first_of_month, today)
+    pace_pct      = round(bdays_elapsed / bdays_total * 100, 1) if bdays_total else 0
+
+    return render_template("home.html", data=data, t=t, month_label=month_label,
+                           pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
+                           n_reps=n_reps, team=team, teams=TEAMS,
+                           active="home", nav=NAV)
 
 
 @app.route("/scorecard")
