@@ -1306,6 +1306,9 @@ def compute_scorecard(period: str = "this_month") -> dict:
     t_connects = sum(call_stats_by_owner.get(r["owner_id"], {}).get("connects", 0) for r in rows)
 
     n_reps = len(rows)
+    # Only count reps with call data for avg_dials denominator so inactive/new
+    # owners added via set(owners) don't dilute the team average.
+    n_reps_with_calls = sum(1 for r in rows if call_stats_by_owner.get(r["owner_id"], {}).get("dials", 0) > 0)
     team = {
         "attain_pct":    round(t_won / t_quota * 100, 1) if t_quota else 0.0,
         "won_amt":       t_won,
@@ -1314,7 +1317,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
         "deals_target":  sum(r["deals_target"] for r in rows),
         "s2_amt":        sum(r["s2_amt"] for r in rows),
         "s2_target":     sum(r["s2_target"] for r in rows),
-        "avg_dials":     round(t_dials / period_bdays / n_reps, 1) if n_reps else 0.0,
+        "avg_dials":     round(t_dials / period_bdays / n_reps_with_calls, 1) if n_reps_with_calls else 0.0,
         "connect_rate":  _pct(t_connects, t_dials),
         "stale_count":   sum(r["stale_count"] for r in rows),
         "ac_accounts":   sum(r["ac_accounts"] for r in rows),

@@ -13,7 +13,7 @@ from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
-from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE
+from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
 
@@ -128,7 +128,9 @@ def auth_callback():
     session["authenticated"] = True
     session["email"] = email
     session["owner_id"] = owner["id"]
-    session["is_admin"] = owner["id"] in OWNER_EXCLUDE
+    # Admin = either explicitly excluded non-AE, or not on any sales team
+    team_oids = get_team_owner_ids()
+    session["is_admin"] = owner["id"] in OWNER_EXCLUDE or bool(team_oids and owner["id"] not in team_oids)
 
     next_url = request.args.get("next") or url_for("index")
     return redirect(next_url)
