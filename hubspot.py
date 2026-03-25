@@ -1,11 +1,13 @@
 import logging
 import os
 import requests
+
+log = logging.getLogger(__name__)
+logger = log
+
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from cache_utils import ttl_cache
-
-logger = logging.getLogger(__name__)
 
 
 def _parse_hs_datetime(raw: str) -> datetime:
@@ -344,6 +346,10 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
             timeout=_TIMEOUT,
         )
         if not resp.ok:
+            log.warning(
+                "HubSpot search API error %s for %s: %s",
+                resp.status_code, object_type, resp.text[:400],
+            )
             break  # hit the 10k limit or other error — return what we have
         data = resp.json()
         results.extend(data.get("results", []))
