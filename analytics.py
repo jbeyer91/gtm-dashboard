@@ -1214,12 +1214,12 @@ def compute_scorecard(period: str = "this_month") -> dict:
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
-        "quota_attainment": 0.75,
-        "stage2":           0.08,
-        "deals_created":    0.06,
-        "stale_accounts":   0.08,
-        "avg_dials":        0.02,
-        "connect_rate":     0.01,
+        "quota_attainment": 0.50,
+        "stage2":           0.15,
+        "deals_created":    0.12,
+        "stale_accounts":   0.10,
+        "avg_dials":        0.08,
+        "connect_rate":     0.05,
     }
 
     def _score(actual, target):
@@ -1275,6 +1275,8 @@ def compute_scorecard(period: str = "this_month") -> dict:
             weighted = max(weighted, 65.0)   # floor at B
         elif attain_pct >= 60:
             weighted = max(weighted, 42.0)   # floor at C
+        elif won > 0:
+            weighted = max(weighted, 27.0)   # floor at D+: closed something vs zero
         grade    = _letter_grade(weighted)
 
         rows.append({
