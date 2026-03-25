@@ -195,12 +195,15 @@ def scorecard():
             "connect_rate":  _delta("connect_rate"),
             "stale_count":   _delta("stale_count"),
         }
-        # AEs see only their own row; admins see everyone
-        is_admin = session.get("is_admin", False)
+        # AEs see only their own row; admins see everyone.
+        # Re-evaluate at request time so session values from before a deploy don't stick.
+        owner_id = session.get("owner_id", "")
+        team_oids = get_team_owner_ids()
+        is_admin = (owner_id in OWNER_EXCLUDE or
+                    bool(team_oids and owner_id not in team_oids))
         if not is_admin:
-            my_id = session.get("owner_id")
             data = dict(data)
-            data["rows"] = [r for r in data["rows"] if r.get("owner_id") == my_id]
+            data["rows"] = [r for r in data["rows"] if r.get("owner_id") == owner_id]
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
