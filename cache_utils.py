@@ -15,11 +15,14 @@ No external dependencies — stdlib only (pickle, hashlib, threading).
 
 import gc
 import hashlib
+import logging
 import os
 import pickle
 import threading
 import time
 from functools import wraps
+
+log = logging.getLogger(__name__)
 
 TTL       = int(os.environ.get("CACHE_TTL_SECONDS", 3600))   # default: 1 hour
 CACHE_DIR = os.environ.get("CACHE_DIR", "/tmp/gtm_cache")
@@ -100,6 +103,13 @@ def _restore_last_refreshed() -> None:
 _restore_last_refreshed()
 
 
+# ── Logging helpers ───────────────────────────────────────────────────────────
+
+def _log_key(args) -> str:
+    """Compact representation of positional args for log lines, e.g. '(this_month)'."""
+    return f"({', '.join(repr(a) for a in args)})" if args else ""
+
+
 # ── Public decorator ──────────────────────────────────────────────────────────
 
 def ttl_cache(func):
@@ -110,6 +120,10 @@ def ttl_cache(func):
 
     Read path  : memory → disk → live fetch
     Write path : memory + disk (every time fresh data is fetched)
+
+    ``_last_refreshed`` is updated **only** on ``_force=True`` writes so that
+    the "last refreshed" badge reflects the most recent scheduled sync, not
+    incidental user-triggered cache misses.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -125,6 +139,7 @@ def ttl_cache(func):
             if entry is not None:
                 result, expires_at = entry
                 if now < expires_at:
+                    log.debug("cache HIT  mem  %s%s", func.__name__, _log_key(args))
                     return result
 
             # 2. Disk hit — promote to memory so subsequent requests are instant
@@ -133,17 +148,26 @@ def ttl_cache(func):
                 result, expires_at = disk_entry
                 if now < expires_at:
                     _store[key] = (result, expires_at)
+                    log.debug("cache HIT  disk %s%s", func.__name__, _log_key(args))
                     # Restore last_refreshed if this is the first hit after restart
                     if not _last_refreshed[0]:
                         _last_refreshed[0] = expires_at - TTL
                     return result
 
         # 3. Cache miss (or _force=True) — call the real function
-        result     = func(*args, **kwargs)
+        reason = "forced" if force else "cold  "
+        log.info("cache MISS %s %s%s", reason, func.__name__, _log_key(args))
+        t0     = time.monotonic()
+        result = func(*args, **kwargs)
+        log.info("cache FILL %s %s%s  %.1fs", reason, func.__name__, _log_key(args),
+                 time.monotonic() - t0)
         expires_at = now + TTL
         _store[key] = (result, expires_at)
         _write_disk(key, result, expires_at)
-        _last_refreshed[0] = now
+        # Only the scheduler uses _force=True; user-triggered TTL misses must
+        # not reset the badge — it should always reflect the last scheduled sync.
+        if force:
+            _last_refreshed[0] = now
         return result
 
     return wrapper

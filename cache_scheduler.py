@@ -50,9 +50,17 @@ ALL_PERIODS = [
 # analytics results so page loads never trigger a live HubSpot request.
 PRIOR_PERIODS = ["prior_" + p for p in ALL_PERIODS if p not in ("next_month",)]
 
-# today / this_week are call-stats-only periods (not in ALL_PERIODS) but still
-# need warming so the Call Stats tab never triggers a live HubSpot request.
-CALL_STATS_EXTRA = ["today", "this_week", "prior_today", "prior_this_week"]
+# today / this_week / last_week are call-stats-only short periods that need
+# warming so the Call Stats tab never triggers a live HubSpot request.
+CALL_STATS_EXTRA = [
+    "today",       "this_week",       "last_week",
+    "prior_today", "prior_this_week", "prior_last_week",
+]
+
+# this_week / last_week are also selectable on deal pages (DEAL_PERIODS in
+# app.py).  They're too short to belong in ALL_PERIODS but must be pre-warmed
+# so clicking "This Week" / "Last Week" never hits HubSpot live.
+DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 
 # All compute views to warm — most-visited first
 _VIEWS = [
@@ -63,6 +71,15 @@ _VIEWS = [
     analytics.compute_deals_lost,
     analytics.compute_deal_advancement,
     analytics.compute_inbound_funnel,
+]
+
+# Subset of _VIEWS relevant for weekly deal periods (pipeline_coverage and
+# inbound_funnel don't expose week-level period selectors).
+_DEAL_WEEK_VIEWS = [
+    analytics.compute_pipeline_generated,
+    analytics.compute_deals_won,
+    analytics.compute_deals_lost,
+    analytics.compute_deal_advancement,
 ]
 
 _timer: threading.Timer = None
@@ -129,7 +146,10 @@ def _sync():
     Using _force=True on every call bypasses TTL checks while leaving existing
     cache entries readable — users never land on a cold cache mid-sync.
     """
-    log.info("Cache sync starting — %d periods × %d views…", len(ALL_PERIODS), len(_VIEWS))
+    log.info(
+        "Cache sync starting — %d periods × %d views + %d week periods…",
+        len(ALL_PERIODS), len(_VIEWS), len(DEAL_WEEK_PERIODS),
+    )
     total, failed = 0, 0
 
     # Step 1: refresh period-agnostic data (owners, deal-contact graph, book coverage)
@@ -168,7 +188,7 @@ def _sync():
                 failed += 1
         gc.collect()
 
-    # Step 4: call-stats-only periods (today, this_week) + their priors.
+    # Step 4: call-stats-only short periods (today, this_week, last_week) + priors.
     for period in CALL_STATS_EXTRA:
         try:
             analytics.compute_call_stats(period, _force=True)
@@ -176,6 +196,21 @@ def _sync():
         except Exception as exc:
             log.warning("  ✗ compute_call_stats(%s): %s", period, exc)
             failed += 1
+
+    # Step 4b: this_week / last_week for deal-page views.
+    # Raw API data is refreshed first so compute functions receive fresh data
+    # rather than hitting HubSpot live on the request thread.
+    for period in DEAL_WEEK_PERIODS:
+        log.info("  warming deal-week period: %s", period)
+        _refresh_period_data(period)
+        for fn in _DEAL_WEEK_VIEWS:
+            try:
+                fn(period, _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
+                failed += 1
+        gc.collect()
 
     # Step 5: scorecard (always this_month) + its prior.
     for period in ("this_month", "prior_this_month"):

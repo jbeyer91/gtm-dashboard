@@ -1,13 +1,17 @@
+import logging
 import os
+import time
 from datetime import date
 from functools import wraps
 from dotenv import load_dotenv
 
 load_dotenv()
 
+log = logging.getLogger(__name__)
+
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, abort, Response
+    session, jsonify, abort, Response, g
 )
 from authlib.integrations.flask_client import OAuth
 import csv, io
@@ -102,10 +106,22 @@ NAV = [
 @app.context_processor
 def inject_cache_info():
     """Make last_refreshed available in every template automatically."""
-    import time
     ts = last_refreshed_ts()
     stale = ts > 0 and (time.time() - ts) > 7200  # >2 hours = stale
     return {"last_refreshed": last_refreshed_str(), "cache_stale": stale}
+
+
+@app.before_request
+def _record_request_start():
+    g.t0 = time.monotonic()
+
+
+@app.after_request
+def _log_request_duration(response):
+    duration_ms = (time.monotonic() - g.t0) * 1000
+    endpoint = request.endpoint or request.path
+    log.info("%-30s  %s  %.0fms", endpoint, response.status_code, duration_ms)
+    return response
 
 
 def login_required(f):
