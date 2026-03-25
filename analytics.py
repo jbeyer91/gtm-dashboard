@@ -1388,34 +1388,31 @@ def compute_abm_coverage() -> dict:
 
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
     now_ts           = int(now.timestamp() * 1000)
-    team_owner_ids   = list(get_team_owner_ids())
+    allowed_oids     = get_team_owner_ids()  # frozenset; empty = no restriction
 
-    def _batch_query(filter_extra: list, properties: list) -> list:
-        results = []
-        for i in range(0, len(team_owner_ids), 5):
-            batch = team_owner_ids[i:i + 5]
-            results.extend(_search_all("deals", {
-                "filterGroups": [
-                    {"filters": [
-                        {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
-                        {"propertyName": "pipeline",         "operator": "EQ", "value": "31544320"},
-                        {"propertyName": "target_account",   "operator": "EQ", "value": "true"},
-                    ] + filter_extra}
-                    for oid in batch
-                ],
-                "properties": properties,
-            }))
+    def _deal_query(filters: list, properties: list) -> list:
+        """Fetch target-account NB deals matching filters, then restrict to allowed owners."""
+        results = _search_all("deals", {
+            "filterGroups": [{"filters": [
+                {"propertyName": "pipeline",       "operator": "EQ", "value": "31544320"},
+                {"propertyName": "target_account", "operator": "EQ", "value": "true"},
+            ] + filters}],
+            "properties": properties,
+        })
+        if allowed_oids:
+            results = [d for d in results
+                       if d.get("properties", {}).get("hubspot_owner_id") in allowed_oids]
         return results
 
     # Deals created this quarter
-    created_deals = _batch_query(
+    created_deals = _deal_query(
         [{"propertyName": "createdate", "operator": "GTE", "value": str(quarter_start_ts)},
          {"propertyName": "createdate", "operator": "LTE", "value": str(now_ts)}],
         ["createdate", "hubspot_owner_id", "amount"],
     )
 
     # Deals won this quarter (by close date)
-    won_deals = _batch_query(
+    won_deals = _deal_query(
         [{"propertyName": "closedate",        "operator": "GTE", "value": str(quarter_start_ts)},
          {"propertyName": "closedate",        "operator": "LTE", "value": str(now_ts)},
          {"propertyName": "hs_is_closed_won", "operator": "EQ",  "value": "true"}],
