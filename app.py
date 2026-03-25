@@ -202,11 +202,6 @@ def refresh_cache():
     return redirect(request.referrer or url_for("index"))
 
 
-@app.route("/")
-@login_required
-def index():
-    return redirect(url_for("scorecard"))
-
 
 def _prior(period, fn, *args):
     """Call analytics fn with 'prior_<period>' and return (prior_data, prior_label).
