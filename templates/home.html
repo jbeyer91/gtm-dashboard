@@ -89,6 +89,10 @@
       <div class="{{ b1 }} h-1.5 rounded-full" style="width: {{ f1 }}%;"></div>
     </div>
     <p class="text-xs text-gray-400 mt-1.5">{{ fmt_money(t.won_amt) }} / {{ fmt_money(t.quota_amt) }} · target 100%</p>
+    {% if t.attain_pct >= pace_pct + 2 %}{% set p1_cls = "text-green-500" %}{% set p1_word = "ahead" %}
+    {% elif t.attain_pct >= pace_pct - 2 %}{% set p1_cls = "text-amber-500" %}{% set p1_word = "on pace" %}
+    {% else %}{% set p1_cls = "text-red-400" %}{% set p1_word = "behind" %}{% endif %}
+    <p class="text-xs {{ p1_cls }} mt-1">pace expects {{ "%.0f"|format(pace_pct) }}% · {{ p1_word }}</p>
   </div>
 
   {# 2. Deals Created #}
@@ -107,6 +111,11 @@
       <div class="{{ b2 }} h-1.5 rounded-full" style="width: {{ f2 }}%;"></div>
     </div>
     <p class="text-xs text-gray-400 mt-1.5">target: {{ deals_target }}</p>
+    {% set expected_deals = (deals_target * pace_pct / 100) %}
+    {% if d_pct >= pace_pct + 2 %}{% set p2_cls = "text-green-500" %}{% set p2_word = "ahead" %}
+    {% elif d_pct >= pace_pct - 2 %}{% set p2_cls = "text-amber-500" %}{% set p2_word = "on pace" %}
+    {% else %}{% set p2_cls = "text-red-400" %}{% set p2_word = "behind" %}{% endif %}
+    <p class="text-xs {{ p2_cls }} mt-1">pace expects ~{{ expected_deals|round|int }} · {{ p2_word }}</p>
   </div>
 
   {# 3. $ to Stage 2 #}
@@ -125,6 +134,11 @@
       <div class="{{ b3 }} h-1.5 rounded-full" style="width: {{ f3 }}%;"></div>
     </div>
     <p class="text-xs text-gray-400 mt-1.5">target: {{ fmt_money(t.s2_target) }}</p>
+    {% set expected_s2 = (t.s2_target * pace_pct / 100) %}
+    {% if s2_pct >= pace_pct + 2 %}{% set p3_cls = "text-green-500" %}{% set p3_word = "ahead" %}
+    {% elif s2_pct >= pace_pct - 2 %}{% set p3_cls = "text-amber-500" %}{% set p3_word = "on pace" %}
+    {% else %}{% set p3_cls = "text-red-400" %}{% set p3_word = "behind" %}{% endif %}
+    <p class="text-xs {{ p3_cls }} mt-1">pace expects {{ fmt_money(expected_s2|int) }} · {{ p3_word }}</p>
   </div>
 
   {# 4. Avg Dials / Day #}
@@ -161,23 +175,6 @@
     <p class="text-xs text-gray-400 mt-1.5">target: 10%</p>
   </div>
 
-  {# 6. Month Progress (pace vs attainment) #}
-  {% if t.attain_pct >= pace_pct + 2 %}{% set c6 = "green" %}{% set b6 = "bg-green-500" %}
-  {% elif t.attain_pct >= pace_pct - 2 %}{% set c6 = "yellow" %}{% set b6 = "bg-amber-400" %}
-  {% else %}{% set c6 = "red" %}{% set b6 = "bg-red-500" %}{% endif %}
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Month Progress</p>
-    <div class="flex items-center">
-      {{ dot(c6) }}
-      <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.0f"|format(pace_pct) }}%</p>
-    </div>
-    <div class="w-full h-1.5 bg-gray-100 rounded-full mt-2">
-      <div class="{{ b6 }} h-1.5 rounded-full" style="width: {{ pace_pct }}%;"></div>
-    </div>
-    <p class="text-xs text-gray-400 mt-1.5">
-      {{ bdays_elapsed }} of {{ bdays_total }} biz days · attainment {{ "%.1f"|format(t.attain_pct) }}%
-    </p>
-  </div>
 
 </div>
 
