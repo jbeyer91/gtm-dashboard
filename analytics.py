@@ -1306,6 +1306,9 @@ def compute_scorecard(period: str = "this_month") -> dict:
     t_connects = sum(call_stats_by_owner.get(r["owner_id"], {}).get("connects", 0) for r in rows)
 
     n_reps = len(rows)
+    # Only count reps with call data for avg_dials denominator so inactive/new
+    # owners added via set(owners) don't dilute the team average.
+    n_reps_with_calls = sum(1 for r in rows if call_stats_by_owner.get(r["owner_id"], {}).get("dials", 0) > 0)
     team = {
         "attain_pct":    round(t_won / t_quota * 100, 1) if t_quota else 0.0,
         "won_amt":       t_won,
@@ -1314,7 +1317,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
         "deals_target":  sum(r["deals_target"] for r in rows),
         "s2_amt":        sum(r["s2_amt"] for r in rows),
         "s2_target":     sum(r["s2_target"] for r in rows),
-        "avg_dials":     round(t_dials / period_bdays / n_reps, 1) if n_reps else 0.0,
+        "avg_dials":     round(t_dials / period_bdays / n_reps_with_calls, 1) if n_reps_with_calls else 0.0,
         "connect_rate":  _pct(t_connects, t_dials),
         "stale_count":   sum(r["stale_count"] for r in rows),
         "ac_accounts":   sum(r["ac_accounts"] for r in rows),
@@ -1385,34 +1388,31 @@ def compute_abm_coverage() -> dict:
 
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
     now_ts           = int(now.timestamp() * 1000)
-    team_owner_ids   = list(get_team_owner_ids())
+    allowed_oids     = get_team_owner_ids()  # frozenset; empty = no restriction
 
-    def _batch_query(filter_extra: list, properties: list) -> list:
-        results = []
-        for i in range(0, len(team_owner_ids), 5):
-            batch = team_owner_ids[i:i + 5]
-            results.extend(_search_all("deals", {
-                "filterGroups": [
-                    {"filters": [
-                        {"propertyName": "hubspot_owner_id", "operator": "EQ", "value": oid},
-                        {"propertyName": "pipeline",         "operator": "EQ", "value": "31544320"},
-                        {"propertyName": "target_account",   "operator": "EQ", "value": "true"},
-                    ] + filter_extra}
-                    for oid in batch
-                ],
-                "properties": properties,
-            }))
+    def _deal_query(filters: list, properties: list) -> list:
+        """Fetch target-account NB deals matching filters, then restrict to allowed owners."""
+        results = _search_all("deals", {
+            "filterGroups": [{"filters": [
+                {"propertyName": "pipeline",       "operator": "EQ", "value": "31544320"},
+                {"propertyName": "target_account", "operator": "EQ", "value": "true"},
+            ] + filters}],
+            "properties": properties,
+        })
+        if allowed_oids:
+            results = [d for d in results
+                       if d.get("properties", {}).get("hubspot_owner_id") in allowed_oids]
         return results
 
     # Deals created this quarter
-    created_deals = _batch_query(
+    created_deals = _deal_query(
         [{"propertyName": "createdate", "operator": "GTE", "value": str(quarter_start_ts)},
          {"propertyName": "createdate", "operator": "LTE", "value": str(now_ts)}],
         ["createdate", "hubspot_owner_id", "amount"],
     )
 
     # Deals won this quarter (by close date)
-    won_deals = _batch_query(
+    won_deals = _deal_query(
         [{"propertyName": "closedate",        "operator": "GTE", "value": str(quarter_start_ts)},
          {"propertyName": "closedate",        "operator": "LTE", "value": str(now_ts)},
          {"propertyName": "hs_is_closed_won", "operator": "EQ",  "value": "true"}],
