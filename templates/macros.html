@@ -8,15 +8,16 @@
 {% endmacro %}
 
 {% macro period_filter(period, periods, extra_params={}) %}
-<div class="flex flex-wrap items-center gap-2 mb-3">
-  <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest self-center w-14 shrink-0">Period</span>
-  {% for val, label in periods %}
-  <a href="?period={{ val }}{% for k,v in extra_params.items() %}&{{ k }}={{ v }}{% endfor %}"
-     class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-150
-            {% if period == val %}bg-blue-600 text-white shadow-sm{% else %}bg-white text-gray-600 border border-gray-200 hover:border-blue-400 hover:text-blue-700{% endif %}">
-    {{ label }}
-  </a>
-  {% endfor %}
+<div class="flex items-center gap-2 mb-3">
+  <label for="period-select" class="text-xs font-semibold text-gray-400 uppercase tracking-widest shrink-0">Period</label>
+  <select id="period-select"
+          onchange="window.location.href=this.value"
+          class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer">
+    {% for val, label in periods %}
+    <option value="?period={{ val }}{% for k,v in extra_params.items() %}&{{ k }}={{ v }}{% endfor %}"
+            {% if period == val %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
 </div>
 {% endmacro %}
 

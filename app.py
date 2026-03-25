@@ -289,7 +289,8 @@ def _filter_by_team(data: dict, team: str) -> dict:
 @app.route("/scorecard")
 @login_required
 def scorecard():
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, date, timedelta
+    import calendar
     try:
         data  = analytics.compute_scorecard("this_month")
         t     = data["team"]
@@ -316,9 +317,29 @@ def scorecard():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
+
+    # Business-day pace indicator
+    today = date.today()
+    first_of_month = today.replace(day=1)
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    last_of_month = today.replace(day=last_day)
+
+    def _count_bdays(start, end):
+        n, cur = 0, start
+        while cur <= end:
+            if cur.weekday() < 5:
+                n += 1
+            cur += timedelta(days=1)
+        return n
+
+    bdays_total   = _count_bdays(first_of_month, last_of_month)
+    bdays_elapsed = _count_bdays(first_of_month, today)
+    pace_pct      = round(bdays_elapsed / bdays_total * 100, 1) if bdays_total else 0
+
     return render_template("scorecard.html", data=data, month_label=month_label,
                            deltas=deltas, prior_label=prior_label,
                            is_admin=is_admin,
+                           pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            active="scorecard", nav=NAV)
 
 
