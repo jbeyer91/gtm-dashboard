@@ -30,8 +30,27 @@ oauth.register(
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
     client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_kwargs={"scope": "openid email profile"},
+    # default_timeout caps every HTTP call made by the OAuth2Session (discovery
+    # fetch, token exchange, userinfo) at 10 seconds instead of blocking
+    # indefinitely.  Note: Authlib 1.x uses "default_timeout", not "timeout" —
+    # the latter is not a recognised OAuth2Session constructor parameter and
+    # would be silently ignored.
+    client_kwargs={"scope": "openid email profile", "default_timeout": 10},
 )
+
+# Pre-warm the OIDC discovery document so the first /login after a worker
+# restart is a fast local cache lookup, not a 10-30s blocking HTTP call.
+# load_server_metadata() sets server_metadata['_loaded_at']; all subsequent
+# calls inside authorize_redirect() and fetch_access_token() return instantly.
+# Wrapped in try/except: a network failure here is non-fatal — the app still
+# starts and Authlib will re-attempt the fetch on the first real login request.
+try:
+    with app.app_context():
+        oauth.google.load_server_metadata()
+    log.info("OAuth OIDC metadata pre-warmed successfully")
+except Exception as exc:
+    log.warning("OAuth OIDC metadata pre-warm failed — first login after this "
+                "restart may be slow: %s", exc)
 
 PERIODS = [
     ("this_month", "This Month"),
