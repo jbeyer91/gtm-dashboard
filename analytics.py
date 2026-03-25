@@ -1419,9 +1419,10 @@ def compute_abm_coverage() -> dict:
         ["closedate", "hubspot_owner_id", "amount"],
     )
 
-    owner_created_month_n: dict  = defaultdict(int)
-    owner_created_qtr_n: dict    = defaultdict(int)
-    owner_created_qtr_amt: dict  = defaultdict(float)
+    owner_created_month_n: dict   = defaultdict(int)
+    owner_created_month_amt: dict = defaultdict(float)
+    owner_created_qtr_n: dict     = defaultdict(int)
+    owner_created_qtr_amt: dict   = defaultdict(float)
     for deal in created_deals:
         p   = deal.get("properties") or {}
         oid = p.get("hubspot_owner_id", "")
@@ -1435,11 +1436,13 @@ def compute_abm_coverage() -> dict:
         owner_created_qtr_n[oid]   += 1
         owner_created_qtr_amt[oid] += amt
         if cd >= month_start:
-            owner_created_month_n[oid] += 1
+            owner_created_month_n[oid]   += 1
+            owner_created_month_amt[oid] += amt
 
-    owner_won_month_n: dict = defaultdict(int)
-    owner_won_qtr_n: dict   = defaultdict(int)
-    owner_won_qtr_amt: dict = defaultdict(float)
+    owner_won_month_n: dict   = defaultdict(int)
+    owner_won_month_amt: dict = defaultdict(float)
+    owner_won_qtr_n: dict     = defaultdict(int)
+    owner_won_qtr_amt: dict   = defaultdict(float)
     for deal in won_deals:
         p   = deal.get("properties") or {}
         oid = p.get("hubspot_owner_id", "")
@@ -1453,12 +1456,15 @@ def compute_abm_coverage() -> dict:
         owner_won_qtr_n[oid]   += 1
         owner_won_qtr_amt[oid] += amt
         if cd >= month_start:
-            owner_won_month_n[oid] += 1
+            owner_won_month_n[oid]   += 1
+            owner_won_month_amt[oid] += amt
 
     owner_data = defaultdict(lambda: {
         "total": 0, "active_30": 0,
-        "created_month_n": 0, "created_qtr_n": 0, "created_qtr_amt": 0.0,
-        "won_month_n": 0, "won_qtr_n": 0, "won_qtr_amt": 0.0,
+        "created_month_n": 0, "created_month_amt": 0.0,
+        "created_qtr_n": 0, "created_qtr_amt": 0.0,
+        "won_month_n": 0, "won_month_amt": 0.0,
+        "won_qtr_n": 0, "won_qtr_amt": 0.0,
     })
 
     for company in companies:
@@ -1476,12 +1482,14 @@ def compute_abm_coverage() -> dict:
                 pass
 
     for oid in set(list(owner_created_qtr_n) + list(owner_won_qtr_n) + list(owner_data)):
-        owner_data[oid]["created_month_n"] = owner_created_month_n[oid]
-        owner_data[oid]["created_qtr_n"]   = owner_created_qtr_n[oid]
-        owner_data[oid]["created_qtr_amt"] = owner_created_qtr_amt[oid]
-        owner_data[oid]["won_month_n"]     = owner_won_month_n[oid]
-        owner_data[oid]["won_qtr_n"]       = owner_won_qtr_n[oid]
-        owner_data[oid]["won_qtr_amt"]     = owner_won_qtr_amt[oid]
+        owner_data[oid]["created_month_n"]   = owner_created_month_n[oid]
+        owner_data[oid]["created_month_amt"] = owner_created_month_amt[oid]
+        owner_data[oid]["created_qtr_n"]     = owner_created_qtr_n[oid]
+        owner_data[oid]["created_qtr_amt"]   = owner_created_qtr_amt[oid]
+        owner_data[oid]["won_month_n"]       = owner_won_month_n[oid]
+        owner_data[oid]["won_month_amt"]     = owner_won_month_amt[oid]
+        owner_data[oid]["won_qtr_n"]         = owner_won_qtr_n[oid]
+        owner_data[oid]["won_qtr_amt"]       = owner_won_qtr_amt[oid]
 
     rows = []
     for oid, d in owner_data.items():
@@ -1495,12 +1503,14 @@ def compute_abm_coverage() -> dict:
             "total":           total,
             "active_30":       active,
             "active_pct":      round(active / total * 100) if total else 0,
-            "created_month_n": d["created_month_n"],
-            "created_qtr_n":   d["created_qtr_n"],
-            "created_qtr_amt": d["created_qtr_amt"],
-            "won_month_n":     d["won_month_n"],
-            "won_qtr_n":       d["won_qtr_n"],
-            "won_qtr_amt":     d["won_qtr_amt"],
+            "created_month_n":   d["created_month_n"],
+            "created_month_amt": d["created_month_amt"],
+            "created_qtr_n":     d["created_qtr_n"],
+            "created_qtr_amt":   d["created_qtr_amt"],
+            "won_month_n":       d["won_month_n"],
+            "won_month_amt":     d["won_month_amt"],
+            "won_qtr_n":         d["won_qtr_n"],
+            "won_qtr_amt":       d["won_qtr_amt"],
         })
 
     rows.sort(key=lambda r: (-r["total"], r["ae"]))
@@ -1511,12 +1521,14 @@ def compute_abm_coverage() -> dict:
         "total":           tot_total,
         "active_30":       tot_active,
         "active_pct":      round(tot_active / tot_total * 100) if tot_total else 0,
-        "created_month_n": sum(r["created_month_n"] for r in rows),
-        "created_qtr_n":   sum(r["created_qtr_n"]   for r in rows),
-        "created_qtr_amt": sum(r["created_qtr_amt"]  for r in rows),
-        "won_month_n":     sum(r["won_month_n"]      for r in rows),
-        "won_qtr_n":       sum(r["won_qtr_n"]        for r in rows),
-        "won_qtr_amt":     sum(r["won_qtr_amt"]       for r in rows),
+        "created_month_n":   sum(r["created_month_n"]   for r in rows),
+        "created_month_amt": sum(r["created_month_amt"] for r in rows),
+        "created_qtr_n":     sum(r["created_qtr_n"]     for r in rows),
+        "created_qtr_amt":   sum(r["created_qtr_amt"]   for r in rows),
+        "won_month_n":       sum(r["won_month_n"]        for r in rows),
+        "won_month_amt":     sum(r["won_month_amt"]      for r in rows),
+        "won_qtr_n":         sum(r["won_qtr_n"]          for r in rows),
+        "won_qtr_amt":       sum(r["won_qtr_amt"]        for r in rows),
     }
 
     return {"rows": rows, "totals": totals}
