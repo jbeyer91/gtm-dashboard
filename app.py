@@ -306,7 +306,7 @@ def scorecard():
 @app.route("/call-stats")
 @login_required
 def call_stats():
-    period = request.args.get("period", "last_90")
+    period = request.args.get("period", "today")
     team   = request.args.get("team", "all")
     try:
         data = analytics.compute_call_stats(period)
@@ -333,7 +333,7 @@ def call_stats():
 @app.route("/pipeline-generated")
 @login_required
 def pipeline_generated():
-    period = request.args.get("period", "this_month")
+    period = request.args.get("period", "this_week")
     team   = request.args.get("team", "all")
     try:
         data = analytics.compute_pipeline_generated(period)
@@ -387,7 +387,7 @@ def pipeline_coverage():
 @app.route("/deal-advancement")
 @login_required
 def deal_advancement():
-    period = request.args.get("period", "last_90")
+    period = request.args.get("period", "this_week")
     source = request.args.get("source", "All")
     team   = request.args.get("team", "all")
     try:
@@ -417,7 +417,7 @@ def deal_advancement():
 @app.route("/deals-won")
 @login_required
 def deals_won():
-    period = request.args.get("period", "this_month")
+    period = request.args.get("period", "this_week")
     source = request.args.get("source", "All")
     team   = request.args.get("team", "all")
     try:
@@ -445,7 +445,7 @@ def deals_won():
 @app.route("/deals-lost")
 @login_required
 def deals_lost():
-    period = request.args.get("period", "this_month")
+    period = request.args.get("period", "this_week")
     team   = request.args.get("team", "all")
     try:
         data = analytics.compute_deals_lost(period)
