@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, stat_card, fmt_money, csv_link %}
+{% from "macros.html" import period_filter, team_filter, stat_card, fmt_money, csv_link %}
 {% block title %} — Pipeline Coverage{% endblock %}
 {% block content %}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
@@ -7,8 +7,9 @@
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">New Business Pipeline · Open Deals by Expected Close Date</p>
 </div>
 
-{{ period_filter(period, periods) }}
-{{ csv_link(url_for('pipeline_coverage_csv') ~ '?period=' ~ period) }}
+{{ period_filter(period, periods, {"team": team}) }}
+{{ team_filter(team, teams, {"period": period}) }}
+{{ csv_link(url_for('pipeline_coverage_csv') ~ '?period=' ~ period ~ '&team=' ~ team) }}
 
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}

@@ -215,6 +215,11 @@ def get_date_range(period: str):
     elif period == "this_week":
         start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
         return start, now
+    elif period == "last_week":
+        this_monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = this_monday - timedelta(days=7)
+        end   = this_monday - timedelta(seconds=1)
+        return start, end
     elif period == "last_30":
         return now - timedelta(days=30), now
     elif period == "last_60":
@@ -309,6 +314,11 @@ def get_prior_range(period: str):
         prev_start = cur_start - timedelta(days=7)
         prev_end   = cur_end   - timedelta(days=7)
         label      = "last week"
+
+    elif period == "last_week":
+        prev_start = cur_start - timedelta(days=7)
+        prev_end   = cur_end   - timedelta(days=7)
+        label      = "week before"
 
     else:
         duration   = cur_end - cur_start

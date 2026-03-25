@@ -13,7 +13,7 @@ from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
-from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids
+from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
 
@@ -39,21 +39,37 @@ PERIODS = [
     ("ytd", "Year to Date"),
 ]
 
+# PERIODS + weekly options for pages where week-level granularity makes sense
+DEAL_PERIODS = [
+    ("this_week",  "This Week"),
+    ("last_week",  "Last Week"),
+    ("this_month", "This Month"),
+    ("last_month", "Last Month"),
+    ("last_30",    "Last 30 Days"),
+    ("last_90",    "Last 90 Days"),
+    ("this_quarter", "This Quarter"),
+    ("last_quarter", "Last Quarter"),
+    ("ytd", "Year to Date"),
+]
+
 FORECAST_PERIODS = [
     ("this_month", "This Month"),
 ]
 
 CALL_STATS_PERIODS = [
-    ("today", "Today"),
-    ("this_week", "This Week"),
+    ("today",      "Today"),
+    ("this_week",  "This Week"),
+    ("last_week",  "Last Week"),
     ("this_month", "This Month"),
     ("last_month", "Last Month"),
-    ("last_30", "Last 30 Days"),
-    ("last_90", "Last 90 Days"),
+    ("last_30",    "Last 30 Days"),
+    ("last_90",    "Last 90 Days"),
     ("this_quarter", "This Quarter"),
     ("last_quarter", "Last Quarter"),
     ("ytd", "Year to Date"),
 ]
+
+TEAMS = [("all", "All"), ("Veterans", "Veterans"), ("Rising", "Rising")]
 
 COVERAGE_PERIODS = [
     ("this_month", "This Month"),
@@ -177,6 +193,64 @@ def _d(cur, pri, key, scale=1):
     return round((cur.get(key, 0) or 0) - (pri.get(key, 0) or 0), 1) * scale
 
 
+def _filter_by_team(data: dict, team: str) -> dict:
+    """Filter rows to a specific team and recompute totals from the filtered set."""
+    if team == "all":
+        return data
+    team_map = get_owner_team_map()
+    rows = [r for r in data.get("rows", []) if team_map.get(r.get("owner_id")) == team]
+    orig = data.get("totals", {})
+
+    if not rows:
+        totals = {k: (0 if isinstance(v, (int, float)) else v) for k, v in orig.items()}
+        return {**data, "rows": rows, "totals": totals}
+
+    # Sum every raw numeric field that appears in row dicts
+    skip = {"acv", "win_rate", "attain_pct", "delta_amt", "pct_connect",
+            "pct_conversation", "pct_deals", "pct_active_30", "pct_called_120",
+            "pct_in_sequence", "cold_outreach_acv", "inbound_acv",
+            "referral_acv", "conference_acv", "total_acv"}
+    totals = dict(orig)
+    for k, v in orig.items():
+        if isinstance(v, (int, float)) and k not in skip:
+            totals[k] = sum(r.get(k, 0) for r in rows)
+
+    # Recompute derived ratios
+    def _pct(a, b): return round(a / b * 100, 1) if b else 0.0
+    if "connects" in totals:
+        totals["pct_connect"]      = _pct(totals["connects"], totals.get("dials", 0))
+    if "conversations" in totals:
+        totals["pct_conversation"] = _pct(totals["conversations"], totals.get("connects", 0))
+    if "outbound_deals_created" in totals:
+        totals["pct_deals"]        = _pct(totals["outbound_deals_created"], totals.get("dials", 0))
+    if "total_won_amt" in totals and "total_won_n" in totals:
+        totals["acv"]       = round(totals["total_won_amt"] / totals["total_won_n"]) if totals["total_won_n"] else 0
+        closed              = totals["total_won_n"] + totals.get("total_lost_n", 0)
+        totals["win_rate"]  = _pct(totals["total_won_n"], closed)
+        totals["delta_amt"] = totals["total_won_amt"] - totals.get("quota_amt", 0)
+        totals["attain_pct"]= _pct(totals["total_won_amt"], totals.get("quota_amt", 0))
+    if "active_30" in totals and "ac_accounts" in totals:
+        totals["pct_active_30"]   = _pct(totals["active_30"],   totals["ac_accounts"])
+        totals["pct_called_120"]  = _pct(totals.get("called_120", 0),  totals["ac_accounts"])
+        totals["pct_in_sequence"] = _pct(totals.get("in_sequence", 0), totals["ac_accounts"])
+    for src in ("cold_outreach", "inbound", "referral", "conference"):
+        n = totals.get(f"{src}_n", 0)
+        totals[f"{src}_acv"] = round(totals.get(f"{src}_amt", 0) / n) if n else 0
+    if "total_n" in totals:
+        totals["total_acv"] = round(totals.get("total_amt", 0) / totals["total_n"]) if totals["total_n"] else 0
+
+    # Also filter sub-groups (e.g. pipeline_generated "groups" key)
+    if "groups" in data:
+        filtered_groups = []
+        for g in data["groups"]:
+            g_rows = [r for r in g.get("rows", []) if team_map.get(r.get("owner_id")) == team]
+            if g_rows:
+                filtered_groups.append({**g, "rows": g_rows})
+        return {**data, "rows": rows, "totals": totals, "groups": filtered_groups}
+
+    return {**data, "rows": rows, "totals": totals}
+
+
 @app.route("/scorecard")
 @login_required
 def scorecard():
@@ -217,9 +291,12 @@ def scorecard():
 @login_required
 def call_stats():
     period = request.args.get("period", "last_90")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_call_stats(period)
         prior_data, prior_label = _prior(period, analytics.compute_call_stats)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -232,7 +309,8 @@ def call_stats():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="call_stats")
     return render_template("call_stats.html", data=data, periods=CALL_STATS_PERIODS,
-                           period=period, deltas=deltas, prior_label=prior_label,
+                           period=period, team=team, teams=TEAMS,
+                           deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="call_stats")
 
 
@@ -240,9 +318,12 @@ def call_stats():
 @login_required
 def pipeline_generated():
     period = request.args.get("period", "this_month")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_pipeline_generated(period)
         prior_data, prior_label = _prior(period, analytics.compute_pipeline_generated)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -254,8 +335,9 @@ def pipeline_generated():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_generated")
-    return render_template("pipeline_generated.html", data=data, periods=PERIODS,
-                           period=period, deltas=deltas, prior_label=prior_label,
+    return render_template("pipeline_generated.html", data=data, periods=DEAL_PERIODS,
+                           period=period, team=team, teams=TEAMS,
+                           deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="pipeline_generated")
 
 
@@ -263,9 +345,12 @@ def pipeline_generated():
 @login_required
 def pipeline_coverage():
     period = request.args.get("period", "this_month")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_pipeline_coverage(period)
         prior_data, prior_label = _prior(period, analytics.compute_pipeline_coverage)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -278,7 +363,8 @@ def pipeline_coverage():
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_coverage")
     return render_template("pipeline_coverage.html", data=data, periods=COVERAGE_PERIODS,
-                           period=period, deltas=deltas, prior_label=prior_label,
+                           period=period, team=team, teams=TEAMS,
+                           deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="pipeline_coverage")
 
 
@@ -287,9 +373,12 @@ def pipeline_coverage():
 def deal_advancement():
     period = request.args.get("period", "last_90")
     source = request.args.get("source", "All")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_deal_advancement(period, source)
         prior_data, prior_label = _prior(period, analytics.compute_deal_advancement, source)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -302,8 +391,9 @@ def deal_advancement():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deal_advancement")
-    return render_template("deal_advancement.html", data=data, periods=PERIODS,
-                           period=period, sources=SOURCES, source=source,
+    return render_template("deal_advancement.html", data=data, periods=DEAL_PERIODS,
+                           period=period, team=team, teams=TEAMS,
+                           sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deal_advancement")
 
@@ -313,9 +403,12 @@ def deal_advancement():
 def deals_won():
     period = request.args.get("period", "this_month")
     source = request.args.get("source", "All")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_deals_won(period, source)
         prior_data, prior_label = _prior(period, analytics.compute_deals_won, source)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -326,8 +419,9 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
-    return render_template("deals_won.html", data=data, periods=PERIODS,
-                           period=period, sources=SOURCES, source=source,
+    return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
+                           period=period, team=team, teams=TEAMS,
+                           sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deals_won")
 
@@ -336,9 +430,12 @@ def deals_won():
 @login_required
 def deals_lost():
     period = request.args.get("period", "this_month")
+    team   = request.args.get("team", "all")
     try:
         data = analytics.compute_deals_lost(period)
         prior_data, prior_label = _prior(period, analytics.compute_deals_lost)
+        data       = _filter_by_team(data, team)
+        prior_data = _filter_by_team(prior_data, team) if prior_data else prior_data
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
@@ -349,8 +446,9 @@ def deals_lost():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_lost")
-    return render_template("deals_lost.html", data=data, periods=PERIODS,
-                           period=period, deltas=deltas, prior_label=prior_label,
+    return render_template("deals_lost.html", data=data, periods=DEAL_PERIODS,
+                           period=period, team=team, teams=TEAMS,
+                           deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deals_lost")
 
 
@@ -413,11 +511,14 @@ def abm():
 @app.route("/book-coverage")
 @login_required
 def book_coverage():
+    team = request.args.get("team", "all")
     try:
         data = analytics.compute_book_coverage()
+        data = _filter_by_team(data, team)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="book_coverage")
-    return render_template("book_coverage.html", data=data, nav=NAV, active="book_coverage")
+    return render_template("book_coverage.html", data=data, team=team, teams=TEAMS,
+                           nav=NAV, active="book_coverage")
 
 
 @app.route("/api/cache/clear", methods=["POST"])
