@@ -184,7 +184,7 @@ def auth_callback():
     team_oids = get_team_owner_ids()
     session["is_admin"] = owner["id"] in OWNER_EXCLUDE or bool(team_oids and owner["id"] not in team_oids)
 
-    next_url = request.args.get("next") or url_for("index")
+    next_url = request.args.get("next") or url_for("home")
     return redirect(next_url)
 
 
@@ -200,7 +200,7 @@ def refresh_cache():
     """Bust cache and kick off a background re-warm so the next page load is instant."""
     clear_cache()
     cache_scheduler.trigger()
-    return redirect(request.referrer or url_for("index"))
+    return redirect(request.referrer or url_for("home"))
 
 
 
