@@ -32,6 +32,8 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 _store: dict = {}           # key → (result, expires_at)
 _last_refreshed: list = [0.0]
 _disk_lock = threading.Lock()
+_bg_refreshing: set = set()   # keys with a background refresh already in-flight
+_bg_lock = threading.Lock()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -142,19 +144,43 @@ def ttl_cache(func):
                     log.debug("cache HIT  mem  %s%s", func.__name__, _log_key(args))
                     return result
 
-            # 2. Disk hit — promote to memory so subsequent requests are instant
+            # 2. Disk hit — promote to memory; serve even if stale (revalidate in bg)
             disk_entry = _read_disk(key)
             if disk_entry is not None:
                 result, expires_at = disk_entry
+                _store[key] = (result, expires_at)
                 if now < expires_at:
-                    _store[key] = (result, expires_at)
                     log.debug("cache HIT  disk %s%s", func.__name__, _log_key(args))
-                    # Restore last_refreshed if this is the first hit after restart
                     if not _last_refreshed[0]:
                         _last_refreshed[0] = expires_at - TTL
                     return result
+                # Stale disk entry — return it immediately so the request thread
+                # never blocks on a live HubSpot fetch.  Queue a background refresh
+                # so the data gets updated without impacting the user.
+                log.info("cache STALE disk %s%s — serving stale, refreshing in bg",
+                         func.__name__, _log_key(args))
+                with _bg_lock:
+                    already = key in _bg_refreshing
+                    if not already:
+                        _bg_refreshing.add(key)
+                if not already:
+                    def _bg_refresh(k=key, f=func, a=args, kw=dict(kwargs)):
+                        try:
+                            t0 = time.monotonic()
+                            res = f(*a, **kw)
+                            exp = time.time() + TTL
+                            _store[k] = (res, exp)
+                            _write_disk(k, res, exp)
+                            log.info("cache BG   fill %s  %.1fs", f.__name__, time.monotonic() - t0)
+                        except Exception as exc:
+                            log.warning("cache BG   fail %s: %s", f.__name__, exc)
+                        finally:
+                            with _bg_lock:
+                                _bg_refreshing.discard(k)
+                    threading.Thread(target=_bg_refresh, daemon=True).start()
+                return result
 
-        # 3. Cache miss (or _force=True) — call the real function
+        # 3. Full cold miss (no disk data at all) or _force=True — fetch live
         reason = "forced" if force else "cold  "
         log.info("cache MISS %s %s%s", reason, func.__name__, _log_key(args))
         t0     = time.monotonic()
