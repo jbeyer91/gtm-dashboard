@@ -201,7 +201,10 @@ def get_owner_team_map() -> dict:
 
 
 def get_date_range(period: str):
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
     now = datetime.now(timezone.utc)
+    now_et = now.astimezone(ET)
     if period == "this_month":
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         return start, now
@@ -211,15 +214,20 @@ def get_date_range(period: str):
         end = first - timedelta(seconds=1)
         return start, end
     elif period == "today":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Anchor to ET midnight so "today" matches the team's business day
+        et_midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = et_midnight.astimezone(timezone.utc)
         return start, now
     elif period == "this_week":
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Monday 00:00 ET
+        et_monday = (now_et - timedelta(days=now_et.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = et_monday.astimezone(timezone.utc)
         return start, now
     elif period == "last_week":
-        this_monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        start = this_monday - timedelta(days=7)
-        end   = this_monday - timedelta(seconds=1)
+        et_this_monday = (now_et - timedelta(days=now_et.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        et_last_monday = et_this_monday - timedelta(days=7)
+        start = et_last_monday.astimezone(timezone.utc)
+        end   = et_this_monday.astimezone(timezone.utc) - timedelta(seconds=1)
         return start, end
     elif period == "last_30":
         return now - timedelta(days=30), now
