@@ -151,10 +151,10 @@ def _deal_source(deal: dict) -> str:
     return DEAL_SOURCE_MAP.get(src, "Cold outreach")
 
 
-@ttl_cache
 log = logging.getLogger(__name__)
 
 
+@ttl_cache
 def compute_call_stats(period: str) -> dict:
     start, end = get_date_range(period)
     # Business days (Mon–Fri) elapsed in the period — used as avg/day denominator
