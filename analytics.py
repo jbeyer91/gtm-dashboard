@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from cache_utils import ttl_cache
@@ -151,6 +152,9 @@ def _deal_source(deal: dict) -> str:
 
 
 @ttl_cache
+log = logging.getLogger(__name__)
+
+
 def compute_call_stats(period: str) -> dict:
     start, end = get_date_range(period)
     # Business days (Mon–Fri) elapsed in the period — used as avg/day denominator
@@ -161,6 +165,8 @@ def compute_call_stats(period: str) -> dict:
     period_bdays = max(period_bdays, 1)
     owners = get_owners()
     calls = get_calls(start, end)
+    log.info("compute_call_stats(%s): range %s → %s, raw calls=%d",
+             period, start.isoformat(), end.isoformat(), len(calls))
     deals_created = get_deals(start, end, "createdate")
 
     # Build time-aware exclusion: {contact_id: [(open_start_ms, open_end_ms_or_None), ...]}
@@ -228,6 +234,9 @@ def compute_call_stats(period: str) -> dict:
         if disposition in CALL_CONNECTED_GUIDS and duration_ms >= 60000:
             owner_calls[oid]["conversations"] += 1
 
+    total_counted = sum(v["dials"] for v in owner_calls.values())
+    log.info("compute_call_stats(%s): after filtering, counted dials=%d across %d owners",
+             period, total_counted, len(owner_calls))
     rows = []
     active_owners = set(owner_calls.keys()) | set(owner_deals_created.keys())
 
