@@ -11,8 +11,32 @@
 {{ team_filter(team, teams, {"period": period}) }}
 {{ csv_link(url_for('call_stats_csv') ~ '?period=' ~ period ~ '&team=' ~ team) }}
 
-<!-- Summary cards -->
 {% set t = data.totals %}
+
+{# ── Insight / empty-state strip ─────────────────────────────────────────── #}
+{% if t.dials == 0 %}
+<div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-5 flex items-start gap-3">
+  <svg class="w-4 h-4 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <p class="text-sm text-slate-500">
+    No outbound calls logged for this period.
+    {% if period == "today" %}HubSpot call data can lag a few minutes — try <strong class="text-slate-600">This Week</strong> for recent activity.{% endif %}
+  </p>
+</div>
+{% else %}
+<div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-5 flex items-start gap-3">
+  <svg class="w-4 h-4 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <p class="text-sm text-slate-600">
+    <strong class="text-slate-800">{{ "{:,}".format(t.dials) }} total dials</strong> · {{ t.avg_dials_per_day }}/day avg · {{ fmt_pct(t.pct_connect) }} connect rate · {{ fmt_pct(t.pct_conversation) }} conversation rate
+    {%- if t.outbound_deals_created > 0 %} · <strong class="text-slate-700">{{ t.outbound_deals_created }} outbound deal{{ "s" if t.outbound_deals_created != 1 else "" }} created</strong>{% endif %}
+  </p>
+</div>
+{% endif %}
+
+<!-- Summary cards -->
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
   {{ stat_card("Total Dials", "{:,}".format(t.dials), delta=deltas.dials) }}

@@ -28,7 +28,6 @@
 {% endmacro %}
 
 {% macro delta_badge(val, invert=false, money=false) %}
-  {# invert=true means lower is better (e.g. stale accounts) #}
   {% if val > 0 %}
     {% set good = not invert %}
   {% elif val < 0 %}
@@ -50,7 +49,7 @@
 
 {% block content %}
 {# ── Page header ──────────────────────────────────────────────────────────── #}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-5 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
   <div class="flex items-end justify-between">
     <div>
       <h1 class="text-2xl font-bold text-white tracking-tight">Team Scorecard</h1>
@@ -59,10 +58,32 @@
   </div>
 </div>
 
+{# ── Insight strip ────────────────────────────────────────────────────────── #}
+{% set t = data.team %}
+{% set reps_on_track = namespace(count=0) %}
+{% set reps_at_risk  = namespace(count=0) %}
+{% for row in data.rows %}
+  {% if row.attain_pct >= 80 %}{% set reps_on_track.count = reps_on_track.count + 1 %}{% endif %}
+  {% if row.attain_pct < 50  %}{% set reps_at_risk.count  = reps_at_risk.count  + 1 %}{% endif %}
+{% endfor %}
+{% set n_reps = data.rows|length %}
+<div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-5 flex items-start gap-3">
+  <svg class="w-4 h-4 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <p class="text-sm text-slate-600">
+    Team at <strong class="text-slate-800">{{ "%.1f"|format(t.attain_pct) }}% to quota</strong>
+    {%- if t.attain_pct >= 100 %} — quota hit
+    {%- elif t.attain_pct >= 80 %} — on track
+    {%- else %} — {{ "%.1f"|format(80 - t.attain_pct) }}pts below 80% mark{%- endif -%}
+    · {{ reps_on_track.count }} of {{ n_reps }} reps at 80%+
+    {%- if reps_at_risk.count > 0 %} · <span class="font-medium text-slate-700">{{ reps_at_risk.count }} below 50%</span>{% endif %}
+  </p>
+</div>
+
 {{ csv_link(url_for('scorecard_csv')) }}
 
 {# ── Team overview cards ──────────────────────────────────────────────────── #}
-{% set t = data.team %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Overview</h2>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -70,27 +91,27 @@
   {# Quota Attainment #}
   {% if t.attain_pct >= 80 %}{% set qc = "green" %}{% elif t.attain_pct >= 60 %}{% set qc = "yellow" %}{% else %}{% set qc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Revenue closed this month vs. monthly quota. Hitting 100% guarantees a minimum A grade.">Quota Attainment</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Revenue closed this month vs. monthly quota.">Quota Attainment</p>
     <div class="flex items-center">{{ dot(qc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.attain_pct) }}%</p></div>
     <p class="text-xs text-gray-400 mt-1">{{ fmt_money(t.won_amt) }} / {{ fmt_money(t.quota_amt) }} {{ delta_badge(deltas.attain_pct) }}</p>
   </div>
 
   {# Deals Created #}
   {% set deals_per_rep_avg = (t.deals_created / data.rows|length) if data.rows|length else 0 %}
-  {% if deals_per_rep_avg >= 12 %}{% set dc = "green" %}{% elif deals_per_rep_avg >= 8 %}{% set dc = "yellow" %}{% else %}{% set dc = "red" %}{% endif %}
+  {% if deals_per_rep_avg >= 10 %}{% set dc = "green" %}{% elif deals_per_rep_avg >= 7 %}{% set dc = "yellow" %}{% else %}{% set dc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="New deals entered in CRM this month from any source. Target is 15/rep (12 outbound + 3 inbound).">Deals Created</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="New deals entered in CRM this month. Target: 13/rep.">Deals Created</p>
     <div class="flex items-center">{{ dot(dc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.deals_created }}</p></div>
     {% set deals_per_rep = ((t.deals_created / data.rows|length)|round|int) if data.rows|length else 0 %}
-    {% set deals_remaining_per_rep = [15 - deals_per_rep, 0]|max %}
-    <p class="text-xs text-gray-400 mt-1">target: 15 / rep · {{ deals_per_rep }} avg created · {{ deals_remaining_per_rep }} remaining {{ delta_badge(deltas.deals_created) }}</p>
+    {% set deals_remaining_per_rep = [13 - deals_per_rep, 0]|max %}
+    <p class="text-xs text-gray-400 mt-1">target: 13 / rep · {{ deals_per_rep }} avg · {{ deals_remaining_per_rep }} remaining {{ delta_badge(deltas.deals_created) }}</p>
   </div>
 
   {# $ to Stage 2 #}
   {% set s2_pct = (t.s2_amt / t.s2_target * 100) if t.s2_target else 0 %}
   {% if s2_pct >= 80 %}{% set s2c = "green" %}{% elif s2_pct >= 60 %}{% set s2c = "yellow" %}{% else %}{% set s2c = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="$ value of deals that entered Stage 2 this month (open, won, or lost). Uses exact HubSpot stage-entry date. Stage 2 = qualified opportunity with a committed next step.">$ Advanced to S2</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="$ value of deals that entered Stage 2 this month. Stage 2 = qualified opportunity with a committed next step.">$ Advanced to S2</p>
     <div class="flex items-center">{{ dot(s2c) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.s2_amt) }}</p></div>
     <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }}</p>
   </div>
@@ -98,7 +119,7 @@
   {# Avg Dials #}
   {% if t.avg_dials >= 40 %}{% set adc = "green" %}{% elif t.avg_dials >= 30 %}{% set adc = "yellow" %}{% else %}{% set adc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Average outbound dials logged per working day this month. Target: 40/day.">Avg Dials / Day</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Average outbound dials per working day. Target: 40/day.">Avg Dials / Day</p>
     <div class="flex items-center">{{ dot(adc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.avg_dials }}</p></div>
     <p class="text-xs text-gray-400 mt-1">target: 40 {{ delta_badge(deltas.avg_dials) }}</p>
   </div>
@@ -106,7 +127,7 @@
   {# Connect Rate #}
   {% if t.connect_rate >= 10 %}{% set crc = "green" %}{% elif t.connect_rate >= 8 %}{% set crc = "yellow" %}{% else %}{% set crc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="% of outbound dials that reached a live person. Industry benchmark is 8–12%. Target: 10%.">Connect Rate</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="% of outbound dials that reached a live person. Target: 10%.">Connect Rate</p>
     <div class="flex items-center">{{ dot(crc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.connect_rate) }}%</p></div>
     <p class="text-xs text-gray-400 mt-1">target: 10% {{ delta_badge(deltas.connect_rate) }}</p>
   </div>
@@ -115,7 +136,7 @@
   {% set stale_pct = (t.stale_count / t.ac_accounts * 100) if t.ac_accounts else 0 %}
   {% if stale_pct <= 10 %}{% set sc = "green" %}{% elif stale_pct <= 25 %}{% set sc = "yellow" %}{% else %}{% set sc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="A+ through C-tier named accounts with no logged activity in the last 30 days. Lower is better.">Stale Accounts</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="A+–C tier named accounts with no logged activity in the last 30 days. Lower is better.">Stale Accounts</p>
     <div class="flex items-center">{{ dot(sc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.stale_count }}</p></div>
     <p class="text-xs text-gray-400 mt-1">{{ stale_pct|round|int }}% of A+–C accounts {{ delta_badge(deltas.stale_count, invert=true) }}</p>
   </div>
@@ -128,51 +149,41 @@
   <table class="w-full text-sm">
     <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
-        <th class="px-4 py-3 text-left font-semibold" title="Weighted grade: Quota 75% · $ to Stage 2 8% · Stale Accounts 8% · Deals Created 6% · Avg Dials 2% · Connect Rate 1%">Grade</th>
+        <th class="px-4 py-3 text-left font-semibold" title="Composite grade: Quota 50% · $ to S2 15% · Deals Created 12% · Stale Accounts 10% · Avg Dials 8% · Connect Rate 5%">Grade</th>
         <th class="px-4 py-3 text-left font-semibold">Rep</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Revenue closed this month as % of monthly quota. Hitting 100% guarantees a minimum A grade.">Quota %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="New deals entered into CRM this month (all sources). Target: 15/rep (12 outbound + 3 inbound).">Deals Created</th>
-        <th class="px-4 py-3 text-right font-semibold" title="$ value of deals that entered Stage 2 this month (open, won, or lost). Uses exact HubSpot stage-entry date.">$ Adv. to S2</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Average outbound dials per working day this month. Target: 40/day.">Avg Dials</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of outbound dials that connected to a live person. Target: 10%.">Connect %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="A+ through C-tier accounts with no logged activity in the last 30 days. Lower is better.">Stale Accounts</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Revenue closed this month as % of quota.">Quota %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="New deals entered into CRM this month. Target: 13/rep.">Deals Created</th>
+        <th class="px-4 py-3 text-right font-semibold" title="$ value of deals that entered Stage 2 this month.">$ Adv. to S2</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Average outbound dials per working day. Target: 40/day.">Avg Dials</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of outbound dials that connected. Target: 10%.">Connect %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="A+–C accounts with no activity in 30 days. Lower is better.">Stale Accounts</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
       <tr class="hover:bg-blue-50/40 transition-colors duration-100">
 
-        {# Grade #}
+        {# Grade badge #}
         <td class="px-4 py-3">{{ grade_badge(row.grade) }}</td>
 
         {# Rep name #}
         <td class="px-4 py-3 font-medium text-gray-900">{{ row.ae }}</td>
 
-        {# Quota attainment #}
-        {% if row.attain_pct >= 80 %}{% set qcls = "text-green-600" %}{% elif row.attain_pct >= 60 %}{% set qcls = "text-amber-600" %}{% else %}{% set qcls = "text-red-500" %}{% endif %}
+        {# Quota % — primary outcome, stays colored #}
+        {% if row.attain_pct >= 80 %}{% set qcls = "text-green-600" %}
+        {% elif row.attain_pct >= 60 %}{% set qcls = "text-amber-600" %}
+        {% else %}{% set qcls = "text-red-500" %}{% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ qcls }}">{{ "%.1f"|format(row.attain_pct) }}%</td>
 
-        {# Deals created #}
-        {% if row.deals_created >= 12 %}{% set dcls = "text-green-600" %}{% elif row.deals_created >= 8 %}{% set dcls = "text-amber-600" %}{% else %}{% set dcls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ dcls }}">{{ row.deals_created }}</td>
+        {# Remaining columns neutral — grade badge carries the composite signal #}
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ row.deals_created }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ fmt_money(row.s2_amt) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ row.avg_dials }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(row.connect_rate) }}%</td>
 
-        {# $ to Stage 2 #}
-        {% set rs2p = (row.s2_amt / row.s2_target * 100) if row.s2_target else 0 %}
-        {% if rs2p >= 80 %}{% set s2cls = "text-green-600" %}{% elif rs2p >= 60 %}{% set s2cls = "text-amber-600" %}{% else %}{% set s2cls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ s2cls }}">{{ fmt_money(row.s2_amt) }}</td>
-
-        {# Avg dials #}
-        {% if row.avg_dials >= 40 %}{% set adcls = "text-green-600" %}{% elif row.avg_dials >= 30 %}{% set adcls = "text-amber-600" %}{% else %}{% set adcls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ adcls }}">{{ row.avg_dials }}</td>
-
-        {# Connect rate #}
-        {% if row.connect_rate >= 10 %}{% set crcls = "text-green-600" %}{% elif row.connect_rate >= 8 %}{% set crcls = "text-amber-600" %}{% else %}{% set crcls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ crcls }}">{{ "%.1f"|format(row.connect_rate) }}%</td>
-
-        {# Stale accounts #}
+        {# Stale — color only at extreme levels (>40%) #}
         {% set row_stale_pct = (row.stale_count / row.ac_accounts * 100) if row.ac_accounts else 0 %}
-        {% if row_stale_pct <= 10 %}{% set sccls = "text-green-600" %}{% elif row_stale_pct <= 25 %}{% set sccls = "text-amber-600" %}{% else %}{% set sccls = "text-red-500" %}{% endif %}
-        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ sccls }}">{{ row.stale_count }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row_stale_pct > 40 %}text-red-500 font-semibold{% else %}text-gray-700{% endif %}">{{ row.stale_count }}</td>
 
       </tr>
       {% endfor %}

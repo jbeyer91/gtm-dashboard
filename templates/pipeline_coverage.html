@@ -13,13 +13,37 @@
 
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
-<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-5">
   {{ stat_card("Stage 1", t.s1_n ~ " deals · " ~ fmt_money(t.s1_amt), delta=deltas.s1_amt, delta_fmt='money') }}
   {{ stat_card("Stage 2", t.s2_n ~ " deals · " ~ fmt_money(t.s2_amt), delta=deltas.s2_amt, delta_fmt='money') }}
   {{ stat_card("Stage 3", t.s3_n ~ " deals · " ~ fmt_money(t.s3_amt), delta=deltas.s3_amt, delta_fmt='money') }}
   {{ stat_card("Stage 4", t.s4_n ~ " deals · " ~ fmt_money(t.s4_amt), delta=deltas.s4_amt, delta_fmt='money') }}
   {{ stat_card("Closed Won (MTD)", t.won_n ~ " deals · " ~ fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
 </div>
+
+{# ── Stage mix bar ─────────────────────────────────────────────────────────── #}
+{% set open_n = t.s1_n + t.s2_n + t.s3_n + t.s4_n %}
+{% if open_n > 0 %}
+{% set s1w = (t.s1_n / open_n * 100)|round|int %}
+{% set s2w = (t.s2_n / open_n * 100)|round|int %}
+{% set s3w = (t.s3_n / open_n * 100)|round|int %}
+{% set s4w = [100 - s1w - s2w - s3w, 0]|max %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mb-5">
+  <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Open Pipeline Mix · {{ open_n }} deals</p>
+  <div class="flex w-full h-3 rounded-full overflow-hidden gap-px">
+    {% if s1w > 0 %}<div class="h-3" style="width: {{ s1w }}%; background: #94a3b8;" title="Stage 1: {{ t.s1_n }} deals"></div>{% endif %}
+    {% if s2w > 0 %}<div class="h-3" style="width: {{ s2w }}%; background: #2C4FA3;" title="Stage 2: {{ t.s2_n }} deals"></div>{% endif %}
+    {% if s3w > 0 %}<div class="h-3" style="width: {{ s3w }}%; background: #4F72C4;" title="Stage 3: {{ t.s3_n }} deals"></div>{% endif %}
+    {% if s4w > 0 %}<div class="h-3" style="width: {{ s4w }}%; background: #7B5EA7;" title="Stage 4: {{ t.s4_n }} deals"></div>{% endif %}
+  </div>
+  <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2.5">
+    <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="w-2 h-2 rounded-sm inline-block shrink-0" style="background: #94a3b8;"></span>S1 · {{ t.s1_n }} ({{ s1w }}%)</span>
+    <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="w-2 h-2 rounded-sm inline-block shrink-0" style="background: #2C4FA3;"></span>S2 · {{ t.s2_n }} ({{ s2w }}%)</span>
+    <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="w-2 h-2 rounded-sm inline-block shrink-0" style="background: #4F72C4;"></span>S3 · {{ t.s3_n }} ({{ s3w }}%)</span>
+    <span class="flex items-center gap-1.5 text-xs text-slate-500"><span class="w-2 h-2 rounded-sm inline-block shrink-0" style="background: #7B5EA7;"></span>S4 · {{ t.s4_n }} ({{ s4w }}%)</span>
+  </div>
+</div>
+{% endif %}
 
 <!-- Deal count table -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-5">
