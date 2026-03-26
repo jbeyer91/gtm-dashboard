@@ -269,7 +269,7 @@ def compute_call_stats(period: str) -> dict:
     totals = {
         "ae": "TOTAL",
         "dials": sum(r["dials"] for r in rows),
-        "avg_dials_per_day": round(sum(r["dials"] for r in rows) / period_bdays, 1),
+        "avg_dials_per_day": round(sum(r["dials"] for r in rows) / period_bdays / len(rows), 1) if rows else 0.0,
         "pct_connect": _pct(sum(r["connects"] for r in rows), sum(r["dials"] for r in rows)),
         "connects": sum(r["connects"] for r in rows),
         "pct_conversation": _pct(sum(r["conversations"] for r in rows), sum(r["connects"] for r in rows)),

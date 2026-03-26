@@ -367,6 +367,7 @@ def scorecard():
         deltas = {
             "attain_pct":    _delta("attain_pct"),
             "deals_created": _delta("deals_created"),
+            "s2_amt":        _delta("s2_amt"),
             "avg_dials":     _delta("avg_dials"),
             "connect_rate":  _delta("connect_rate"),
             "stale_count":   _delta("stale_count"),

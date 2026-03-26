@@ -70,7 +70,7 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s2_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s3_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.s4_n }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.won_n }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.won_n > 0 %}text-green-600 font-semibold{% else %}text-gray-400{% endif %}">{{ row.won_n if row.won_n else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.s1_n + row.s2_n + row.s3_n + row.s4_n }}</td>
       </tr>
       {% endfor %}
@@ -83,7 +83,7 @@
         <td class="px-4 py-3 text-right">{{ t.s2_n }}</td>
         <td class="px-4 py-3 text-right">{{ t.s3_n }}</td>
         <td class="px-4 py-3 text-right">{{ t.s4_n }}</td>
-        <td class="px-4 py-3 text-right text-green-600">{{ t.won_n }}</td>
+        <td class="px-4 py-3 text-right {% if t.won_n > 0 %}text-green-600{% endif %}">{{ t.won_n }}</td>
         <td class="px-4 py-3 text-right">{{ t.s1_n + t.s2_n + t.s3_n + t.s4_n }}</td>
       </tr>
     </tfoot>
@@ -115,7 +115,7 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s2_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s3_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.s4_amt) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ fmt_money(row.won_amt) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.won_amt > 0 %}text-green-600 font-semibold{% else %}text-gray-400{% endif %}">{{ fmt_money(row.won_amt) if row.won_amt else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ fmt_money(row.s1_amt + row.s2_amt + row.s3_amt + row.s4_amt) }}</td>
       </tr>
       {% endfor %}
@@ -128,7 +128,7 @@
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s2_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s3_amt) }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s4_amt) }}</td>
-        <td class="px-4 py-3 text-right text-green-600">{{ fmt_money(t.won_amt) }}</td>
+        <td class="px-4 py-3 text-right {% if t.won_amt > 0 %}text-green-600{% endif %}">{{ fmt_money(t.won_amt) if t.won_amt else '—' }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.s1_amt + t.s2_amt + t.s3_amt + t.s4_amt) }}</td>
       </tr>
     </tfoot>

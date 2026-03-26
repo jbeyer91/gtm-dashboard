@@ -2,9 +2,11 @@
 {% from "macros.html" import period_filter, team_filter, stat_card, fmt_pct, fmt_num, csv_link %}
 {% block title %} — Call Stats{% endblock %}
 {% block content %}
+{% set ns_pl = namespace(label=period) %}
+{% for val, lbl in periods %}{% if val == period %}{% set ns_pl.label = lbl %}{% endif %}{% endfor %}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Call Stats</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">New Business Pipeline · AE Activity</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">New Business Pipeline · {{ ns_pl.label }}</p>
 </div>
 
 {{ period_filter(period, periods, {"team": team}) }}
@@ -87,7 +89,7 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(t.dials) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ t.avg_dials_per_day }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.avg_dials_per_day }}<span class="text-gray-400 font-normal text-xs ml-1">avg</span></td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_connect) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ t.connects }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_conversation) }}</td>
