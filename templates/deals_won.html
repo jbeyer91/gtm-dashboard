@@ -14,11 +14,12 @@
 
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
   {{ stat_card("Won Revenue", fmt_money(t.total_won_amt), delta=deltas.total_won_amt, delta_fmt='money') }}
   {{ stat_card("Deals Won", t.total_won_n, delta=deltas.total_won_n) }}
   {{ stat_card("Avg ACV", fmt_money(t.acv), delta=deltas.acv, delta_fmt='money') }}
   {{ stat_card("Win Rate", fmt_pct(t.win_rate), t.total_won_n ~ " won / " ~ (t.total_won_n + t.total_lost_n) ~ " closed", delta=deltas.win_rate, delta_fmt='pct') }}
+  {{ stat_card("Avg Days to Close", (t.avg_days_to_close ~ " days") if t.avg_days_to_close is not none else "—", delta=deltas.avg_days_to_close, tip="Average number of days from deal creation to close, for won deals.") }}
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -38,6 +39,7 @@
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-2 text-right font-semibold"># Won</th>
         <th class="px-4 py-2 text-right font-semibold" title="Average Contract Value — won revenue divided by number of deals won.">ACV</th>
+        <th class="px-4 py-2 text-right font-semibold" title="Average days from deal creation to close, for won deals.">Avg Days</th>
         <th class="px-4 py-2 text-right font-semibold">Win Rate</th>
         {% if source == "All" %}
         <th class="px-4 py-2 text-right font-semibold border-l border-gray-200" rowspan="2">Quota $</th>
@@ -58,7 +60,7 @@
         <th class="px-3 py-2 text-right border-l border-gray-200">$</th>
         <th class="px-3 py-2 text-right">#</th>
         {% endif %}
-        <th colspan="7"></th>
+        <th colspan="8"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -82,6 +84,7 @@
         <td class="px-4 py-3 text-right tabular-nums font-semibold border-l border-gray-100">{{ fmt_money(row.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.total_won_n }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ fmt_money(row.acv) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ row.avg_days_to_close if row.avg_days_to_close is not none else "—" }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.win_rate >= 25 %}text-green-600{% elif row.win_rate >= 15 %}text-yellow-600{% else %}text-red-500{% endif %}">
           {{ fmt_pct(row.win_rate) }}</td>
@@ -127,6 +130,7 @@
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.total_won_amt) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.total_won_n }}</td>
         <td class="px-4 py-3 text-right text-gray-500">{{ fmt_money(t.acv) }}</td>
+        <td class="px-4 py-3 text-right text-gray-500">{{ t.avg_days_to_close if t.avg_days_to_close is not none else "—" }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_pct(t.win_rate) }}</td>
         {% if source == "All" %}
         <td class="px-4 py-3 text-right border-l border-gray-100">
