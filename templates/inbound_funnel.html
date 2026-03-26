@@ -30,14 +30,14 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold">Source</th>
         <th class="px-4 py-3 text-right font-semibold">Leads</th>
-        <th class="px-4 py-3 text-right font-semibold">DQ'd</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Leads flagged as unqualified — not a fit, duplicate, or unresponsive.">DQ'd</th>
         <th class="px-4 py-3 text-right font-semibold">Contacted</th>
         <th class="px-4 py-3 text-right font-semibold">Deals</th>
         <th class="px-4 py-3 text-right font-semibold">Lost</th>
         <th class="px-4 py-3 text-right font-semibold">Won</th>
-        <th class="px-4 py-3 text-right font-semibold">PG $</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Pipeline Generated — total open deal value created from these leads.">PG $</th>
         <th class="px-4 py-3 text-right font-semibold">Won $</th>
-        <th class="px-4 py-3 text-right font-semibold">ACV Won</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Average Contract Value of closed-won deals sourced from these leads.">ACV Won</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -46,10 +46,10 @@
       <tr class="hover:bg-blue-50/60 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.source }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.leads_created }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.leads_disqualified or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.leads_disqualified %}text-red-500{% else %}text-gray-400{% endif %}">{{ row.leads_disqualified or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.leads_contacted or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.deals_created }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-red-500">{{ row.deals_lost or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.deals_lost %}text-red-500{% else %}text-gray-400{% endif %}">{{ row.deals_lost or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600 font-semibold">{{ row.deals_won or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_money(row.pg_amt) if row.pg_amt else '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-green-600">{{ fmt_money(row.won_amt) if row.won_amt else '—' }}</td>
@@ -63,10 +63,10 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right">{{ t.leads_created }}</td>
-        <td class="px-4 py-3 text-right text-red-500">{{ t.leads_disqualified }}</td>
+        <td class="px-4 py-3 text-right {% if t.leads_disqualified %}text-red-500{% else %}text-gray-400{% endif %}">{{ t.leads_disqualified or '—' }}</td>
         <td class="px-4 py-3 text-right">{{ t.leads_contacted }}</td>
         <td class="px-4 py-3 text-right">{{ t.deals_created }}</td>
-        <td class="px-4 py-3 text-right text-red-500">{{ t.deals_lost }}</td>
+        <td class="px-4 py-3 text-right {% if t.deals_lost %}text-red-500{% else %}text-gray-400{% endif %}">{{ t.deals_lost or '—' }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ t.deals_won }}</td>
         <td class="px-4 py-3 text-right">{{ fmt_money(t.pg_amt) }}</td>
         <td class="px-4 py-3 text-right text-green-600">{{ fmt_money(t.won_amt) }}</td>
@@ -85,7 +85,7 @@
     <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">Source</th>
-        <th class="px-4 py-3 text-right font-semibold">DQ %</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of leads that were disqualified before converting to a deal.">DQ %</th>
         <th class="px-4 py-3 text-right font-semibold">Follow-Up %</th>
         <th class="px-4 py-3 text-right font-semibold">Deal Creation %</th>
         <th class="px-4 py-3 text-right font-semibold">Win Rate %</th>
