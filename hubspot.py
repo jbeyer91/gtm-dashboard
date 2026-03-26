@@ -332,24 +332,36 @@ def get_prior_range(period: str):
 
 def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> list:
     """Fetch all matching records up to max_records (HubSpot caps at 10,000 per search)."""
+    import time
     results = []
     payload = {**payload, "limit": 200}
     after = None
     while True:
         if after:
             payload["after"] = after
-        resp = requests.post(
-            f"{BASE_URL}/crm/v3/objects/{object_type}/search",
-            headers=HEADERS,
-            json=payload,
-            timeout=_TIMEOUT,
-        )
+        # Retry up to 3 times on 429 rate-limit responses
+        for attempt in range(4):
+            resp = requests.post(
+                f"{BASE_URL}/crm/v3/objects/{object_type}/search",
+                headers=HEADERS,
+                json=payload,
+                timeout=_TIMEOUT,
+            )
+            if resp.status_code == 429:
+                wait = 2 ** attempt  # 1s, 2s, 4s, 8s
+                log.warning(
+                    "HubSpot 429 rate limit for %s (attempt %d/4), retrying in %ds",
+                    object_type, attempt + 1, wait,
+                )
+                time.sleep(wait)
+                continue
+            break  # success or non-429 error — exit retry loop
         if not resp.ok:
             log.warning(
                 "HubSpot search API error %s for %s: %s",
                 resp.status_code, object_type, resp.text[:400],
             )
-            break  # hit the 10k limit or other error — return what we have
+            break
         data = resp.json()
         results.extend(data.get("results", []))
         paging = data.get("paging", {})
