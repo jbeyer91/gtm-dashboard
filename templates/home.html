@@ -40,19 +40,20 @@
   {% endif %}
   <div class="flex items-center justify-between mb-1.5">
     <span class="text-xs font-semibold uppercase tracking-widest"
-          style="color: rgba(255,255,255,0.65);">Monthly Pace</span>
-    <span class="text-xs font-semibold text-white">
-      {{ "%.1f"|format(t.attain_pct) }}% attained · {{ pace_word }}
+          style="color: rgba(255,255,255,0.65);">Monthly Quota</span>
+    <span class="text-white">
+      <span class="text-lg font-bold tabular-nums">{{ fmt_money(t.won_amt) }}</span>
+      <span class="text-xs font-semibold ml-1" style="color: rgba(255,255,255,0.65);">of {{ fmt_money(t.quota_amt) }} · {{ "%.1f"|format(t.attain_pct) }}% · {{ pace_word }}</span>
     </span>
   </div>
   <div class="relative w-full h-2.5 rounded-full" style="background: rgba(255,255,255,0.15);">
     <div class="h-2.5 rounded-full" style="width: {{ attain_clamped }}%; background: rgba(255,255,255,0.88);"></div>
     <div class="absolute top-0 h-2.5 w-0.5 rounded"
          style="left: {{ pace_pct }}%; transform: translateX(-50%); background: rgba(255,255,255,0.5);"
-         title="Expected at {{ "%.0f"|format(pace_pct) }}% of month"></div>
+         title="Pace target: {{ fmt_money((t.quota_amt * pace_pct / 100)|int) }}"></div>
   </div>
   <p class="text-xs mt-1.5" style="color: rgba(255,255,255,0.5);">
-    {{ bdays_elapsed }} of {{ bdays_total }} business days elapsed ({{ "%.0f"|format(pace_pct) }}% of month)
+    {{ bdays_elapsed }} of {{ bdays_total }} business days elapsed · pace target {{ fmt_money((t.quota_amt * pace_pct / 100)|int) }}
   </p>
 
 </div>
@@ -61,22 +62,7 @@
 {% set deals_target = 13 * n_reps if n_reps else 13 %}
 <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
 
-  {# 1. Quota Attainment #}
-  {% set f1 = [t.attain_pct, 100]|min %}
-  {% if t.attain_pct >= pace_pct + 2 %}{% set p1_word = "ahead of pace" %}
-  {% elif t.attain_pct >= pace_pct - 2 %}{% set p1_word = "on pace" %}
-  {% else %}{% set p1_word = "behind pace" %}{% endif %}
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
-    <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Quota Attainment</p>
-    <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.won_amt) }}</p>
-    <div class="w-full h-1.5 rounded-full mt-2" style="background: #ECEEF8;">
-      <div class="h-1.5 rounded-full" style="width: {{ f1 }}%; background: #2C4FA3;"></div>
-    </div>
-    <p class="text-xs text-slate-500 mt-1.5">{{ "%.1f"|format(t.attain_pct) }}% of {{ fmt_money(t.quota_amt) }} quota · target 100%</p>
-    <p class="text-xs text-slate-500 mt-1">pace expects {{ "%.0f"|format(pace_pct) }}% · {{ p1_word }}</p>
-  </div>
-
-  {# 2. Deals Created #}
+  {# 1. Deals Created #}
   {% set d_pct = (t.deals_created / deals_target * 100) if deals_target else 0 %}
   {% set f2 = [d_pct, 100]|min %}
   {% set expected_deals = (deals_target * pace_pct / 100) %}
@@ -130,6 +116,24 @@
       <div class="h-1.5 rounded-full" style="width: {{ f5 }}%; background: #2C4FA3;"></div>
     </div>
     <p class="text-xs text-slate-500 mt-1.5">target: 10%</p>
+  </div>
+
+  {# 6. Win Rate #}
+  {% set f6 = [win_rate / 25 * 100, 100]|min %}
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
+    <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Win Rate</p>
+    <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(win_rate) }}%</p>
+    <div class="w-full h-1.5 rounded-full mt-2" style="background: #ECEEF8;">
+      <div class="h-1.5 rounded-full" style="width: {{ f6 }}%; background: #2C4FA3;"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-1.5">won / (won + lost) · target: 25%</p>
+  </div>
+
+  {# 7. ACV #}
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
+    <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Avg Deal Size</p>
+    <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(acv) }}</p>
+    <p class="text-xs text-slate-500 mt-3">avg contract value · closed won this month</p>
   </div>
 
 </div>
