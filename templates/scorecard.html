@@ -104,7 +104,7 @@
     <div class="flex items-center">{{ dot(dc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.deals_created }}</p></div>
     {% set deals_per_rep = ((t.deals_created / data.rows|length)|round|int) if data.rows|length else 0 %}
     {% set deals_remaining_per_rep = [13 - deals_per_rep, 0]|max %}
-    <p class="text-xs text-gray-400 mt-1">target: 13 / rep · {{ deals_per_rep }} avg · {{ deals_remaining_per_rep }} remaining {{ delta_badge(deltas.deals_created) }}</p>
+    <p class="text-xs text-gray-400 mt-1">{{ deals_per_rep }}/rep avg · {{ deals_remaining_per_rep }} more to reach 13 {{ delta_badge(deltas.deals_created) }}</p>
   </div>
 
   {# $ to Stage 2 #}
