@@ -92,8 +92,8 @@
   {% if t.attain_pct >= 80 %}{% set qc = "green" %}{% elif t.attain_pct >= 60 %}{% set qc = "yellow" %}{% else %}{% set qc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Revenue closed this month vs. monthly quota.">Quota Attainment</p>
-    <div class="flex items-center">{{ dot(qc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(t.attain_pct) }}%</p></div>
-    <p class="text-xs text-gray-400 mt-1">{{ fmt_money(t.won_amt) }} / {{ fmt_money(t.quota_amt) }} {{ delta_badge(deltas.attain_pct) }}</p>
+    <div class="flex items-center">{{ dot(qc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(t.won_amt) }}</p></div>
+    <p class="text-xs text-gray-400 mt-1">{{ "%.1f"|format(t.attain_pct) }}% of {{ fmt_money(t.quota_amt) }} quota {{ delta_badge(deltas.attain_pct) }}</p>
   </div>
 
   {# Deals Created #}
@@ -151,6 +151,7 @@
       <tr>
         <th class="px-4 py-3 text-left font-semibold" title="Composite grade: Quota 50% · $ to S2 15% · Deals Created 12% · Stale Accounts 10% · Avg Dials 8% · Connect Rate 5%">Grade</th>
         <th class="px-4 py-3 text-left font-semibold">Rep</th>
+        <th class="px-4 py-3 text-right font-semibold" title="Revenue closed this month.">Won $</th>
         <th class="px-4 py-3 text-right font-semibold" title="Revenue closed this month as % of quota.">Quota %</th>
         <th class="px-4 py-3 text-right font-semibold" title="New deals entered into CRM this month. Target: 13/rep.">Deals Created</th>
         <th class="px-4 py-3 text-right font-semibold" title="$ value of deals that entered Stage 2 this month.">$ Adv. to S2</th>
@@ -169,10 +170,11 @@
         {# Rep name #}
         <td class="px-4 py-3 font-medium text-gray-900">{{ row.ae }}</td>
 
-        {# Quota % — primary outcome, stays colored #}
+        {# Won $ + Quota % — primary outcome columns #}
         {% if row.attain_pct >= 80 %}{% set qcls = "text-green-600" %}
         {% elif row.attain_pct >= 60 %}{% set qcls = "text-amber-600" %}
         {% else %}{% set qcls = "text-red-500" %}{% endif %}
+        <td class="px-4 py-3 text-right tabular-nums font-semibold {{ qcls }}">{{ fmt_money(row.won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ qcls }}">{{ "%.1f"|format(row.attain_pct) }}%</td>
 
         {# Remaining columns neutral — grade badge carries the composite signal #}
