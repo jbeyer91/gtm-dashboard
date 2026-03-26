@@ -89,7 +89,7 @@
       <tr>
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(t.dials) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ ((t.avg_dials_per_day / data.rows|length)|round(1)) if data.rows|length else "—" }}<span class="text-gray-400 font-normal text-xs ml-1">avg</span></td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.avg_dials_per_day }}<span class="text-gray-400 font-normal text-xs ml-1">avg</span></td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_connect) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ t.connects }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_conversation) }}</td>
