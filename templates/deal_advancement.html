@@ -14,7 +14,7 @@
 
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
   {{ stat_card("Deals Created", t.created, delta=deltas.created) }}
   {{ stat_card("→ Stage 2", t.to_s2, delta=deltas.to_s2) }}
   {{ stat_card("→ Stage 3", t.to_s3, delta=deltas.to_s3) }}
@@ -22,6 +22,28 @@
   {{ stat_card("Closed Won", t.won, delta=deltas.won) }}
   {{ stat_card("Closed Lost", t.lost, delta=deltas.lost, invert=true) }}
 </div>
+
+{# ── Funnel progression visual ─────────────────────────────────────────────── #}
+{% if t.created > 0 %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 mb-5">
+  <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">Stage Progression · of {{ t.created }} deals created this period</p>
+  <div class="space-y-2.5">
+    {% set funnel_stages = [("→ S2+", t.to_s2, "#2C4FA3"), ("→ S3+", t.to_s3, "#4F72C4"), ("→ S4+", t.to_s4, "#7B96D4"), ("Closed Won", t.won, "#16a34a"), ("Closed Lost", t.lost, "#ef4444")] %}
+    {% for label, count, color in funnel_stages %}
+    {% set pct = (count / t.created * 100) %}
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-slate-500 w-20 shrink-0 text-right">{{ label }}</span>
+      <div class="flex-1 h-1.5 rounded-full" style="background: #ECEEF8;">
+        <div class="h-1.5 rounded-full" style="width: {{ [pct, 100]|min }}%; background: {{ color }};"></div>
+      </div>
+      <span class="text-xs tabular-nums text-gray-700 w-24 text-right shrink-0">
+        {{ count }} <span class="text-slate-400">({{ "%.0f"|format(pct) }}%)</span>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">

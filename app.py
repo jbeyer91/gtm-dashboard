@@ -412,7 +412,7 @@ def scorecard():
 @app.route("/call-stats")
 @login_required
 def call_stats():
-    period = request.args.get("period", "today")
+    period = request.args.get("period", "this_week")
     team   = request.args.get("team", "all")
     try:
         data = analytics.compute_call_stats(period)
