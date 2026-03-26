@@ -236,6 +236,20 @@ def _schedule_next():
     _timer.start()
 
 
+def trigger():
+    """Immediately kick off a background cache sync (e.g. after a manual refresh).
+
+    Cancels any pending scheduled sync, then fires _sync in a new daemon
+    thread so the HTTP request thread returns instantly.
+    """
+    global _timer
+    if _timer is not None:
+        _timer.cancel()
+    t = threading.Thread(target=_sync, daemon=True)
+    t.start()
+    log.info("Cache sync triggered manually.")
+
+
 def start(initial_delay_s: float = 0):
     """Start the background scheduler.
 

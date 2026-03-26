@@ -197,8 +197,9 @@ def logout():
 @app.route("/refresh-cache", methods=["POST"])
 @login_required
 def refresh_cache():
-    """Bust the server-side cache so the next page load fetches fresh HubSpot data."""
+    """Bust cache and kick off a background re-warm so the next page load is instant."""
     clear_cache()
+    cache_scheduler.trigger()
     return redirect(request.referrer or url_for("index"))
 
 
