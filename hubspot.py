@@ -200,7 +200,6 @@ def get_owner_team_map() -> dict:
     return result
 
 
-@ttl_cache
 def get_date_range(period: str):
     now = datetime.now(timezone.utc)
     if period == "this_month":
