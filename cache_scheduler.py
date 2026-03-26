@@ -83,6 +83,7 @@ _DEAL_WEEK_VIEWS = [
 ]
 
 _timer: threading.Timer = None
+_sync_lock = threading.Lock()   # prevents concurrent syncs from doubling memory
 
 
 def _refresh_base_data():
@@ -100,6 +101,27 @@ def _refresh_base_data():
             fn(_force=True)
         except Exception as exc:
             log.warning("  ✗ %s: %s", fn.__name__, exc)
+
+
+_RAW_FN_NAMES = frozenset({
+    "get_deals", "get_calls", "get_contacts_inbound",
+    "get_quotas", "get_all_open_deals",
+})
+
+
+def _evict_raw_from_memory():
+    """Remove raw HubSpot API results from the in-memory cache.
+
+    After analytics for a period are computed the large raw lists (deals,
+    calls, contacts) are no longer needed in RAM — they're already on disk.
+    Evicting them keeps steady-state RSS well below the 512 MB limit.
+    """
+    from cache_utils import _store
+    keys_to_drop = [k for k in list(_store) if k and k[0] in _RAW_FN_NAMES]
+    for k in keys_to_drop:
+        _store.pop(k, None)
+    if keys_to_drop:
+        log.debug("Evicted %d raw API entries from memory.", len(keys_to_drop))
 
 
 def _refresh_period_data(period: str):
@@ -147,6 +169,16 @@ def _sync():
     Using _force=True on every call bypasses TTL checks while leaving existing
     cache entries readable — users never land on a cold cache mid-sync.
     """
+    if not _sync_lock.acquire(blocking=False):
+        log.info("Cache sync already in progress — skipping duplicate trigger.")
+        return
+    try:
+        _sync_body()
+    finally:
+        _sync_lock.release()
+
+
+def _sync_body():
     log.info(
         "Cache sync starting — %d periods × %d views + %d week periods…",
         len(ALL_PERIODS), len(_VIEWS), len(DEAL_WEEK_PERIODS),
@@ -175,6 +207,7 @@ def _sync():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        _evict_raw_from_memory()              # drop large raw lists; they're on disk
         gc.collect()                          # release temporaries before next period
 
     # Step 3: warm prior-period analytics.  Historical data is stable so we
@@ -187,6 +220,7 @@ def _sync():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        _evict_raw_from_memory()
         gc.collect()
 
     # Step 4: call-stats-only short periods (today, this_week, last_week) + priors.
@@ -211,6 +245,7 @@ def _sync():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        _evict_raw_from_memory()
         gc.collect()
 
     # Step 5: scorecard (always this_month) + its prior.
