@@ -40,12 +40,11 @@
 
 <!-- Summary cards -->
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
-<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Total Dials", "{:,}".format(t.dials), delta=deltas.dials) }}
   {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), delta=deltas.pct_connect, delta_fmt='pct', tip="% of dials that reached a live person. Target: 10%.") }}
   {{ stat_card("Conversation Rate", fmt_pct(t.pct_conversation), delta=deltas.pct_conversation, delta_fmt='pct', tip="% of live connects that turned into a conversation (1+ min). Outbound only.") }}
   {{ stat_card("Outbound Deals Created", t.outbound_deals_created, delta=deltas.ob_deals, tip="New deals created in CRM sourced from cold outreach calls this period.") }}
-  {{ stat_card("Deals to Stage 2", t.outbound_deals_to_s2, delta=deltas.deals_s2, tip="Cold outreach deals that advanced to Stage 2 or beyond.") }}
 </div>
 
 <!-- Table -->
@@ -62,7 +61,6 @@
         <th class="px-4 py-3 text-right font-semibold">Convos</th>
         <th class="px-4 py-3 text-right font-semibold" title="% of total dials that resulted in a new deal being created in CRM.">Dial → Deal %</th>
         <th class="px-4 py-3 text-right font-semibold" title="Cold outreach deals created this period (excludes inbound/referral).">CO Deals Created</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Cold outreach deals that advanced to Stage 2 or beyond.">Deals → S2</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -80,7 +78,6 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ row.conversations }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_deals) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.outbound_deals_created }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ row.outbound_deals_to_s2 }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -96,7 +93,6 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ t.conversations }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_deals) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ t.outbound_deals_created }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ t.outbound_deals_to_s2 }}</td>
       </tr>
     </tfoot>
   </table>
