@@ -551,7 +551,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "dealtype", "hubspot_owner_id", "hs_deal_stage_probability", "hs_is_closed_won",
             "hs_is_closed_lost", "deal_source", "hs_analytics_source",
             "closed_lost_reason", "closed_lost_sub_reason", "last_touch_channel",
-            "num_associated_contacts",
+            "num_associated_contacts", "days_to_close",
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",

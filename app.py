@@ -240,7 +240,7 @@ def _filter_by_team(data: dict, team: str) -> dict:
     skip = {"acv", "win_rate", "attain_pct", "delta_amt", "pct_connect",
             "pct_conversation", "pct_deals", "pct_active_30", "pct_called_120",
             "pct_in_sequence", "cold_outreach_acv", "inbound_acv",
-            "referral_acv", "conference_acv", "total_acv"}
+            "referral_acv", "conference_acv", "total_acv", "avg_days_to_close"}
     totals = dict(orig)
     for k, v in orig.items():
         if isinstance(v, (int, float)) and k not in skip:
@@ -260,6 +260,8 @@ def _filter_by_team(data: dict, team: str) -> dict:
         totals["win_rate"]  = _pct(totals["total_won_n"], closed)
         totals["delta_amt"] = totals["total_won_amt"] - totals.get("quota_amt", 0)
         totals["attain_pct"]= _pct(totals["total_won_amt"], totals.get("quota_amt", 0))
+        dtc_n = totals.get("days_to_close_n", 0)
+        totals["avg_days_to_close"] = round(totals.get("days_to_close_sum", 0) / dtc_n) if dtc_n else None
     if "active_30" in totals and "ac_accounts" in totals:
         totals["pct_active_30"]   = _pct(totals["active_30"],   totals["ac_accounts"])
         totals["pct_called_120"]  = _pct(totals.get("called_120", 0),  totals["ac_accounts"])
@@ -540,10 +542,11 @@ def deals_won():
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
-            "total_won_amt": _d(t, pt, "total_won_amt"),
-            "total_won_n":   _d(t, pt, "total_won_n"),
-            "acv":           _d(t, pt, "acv"),
-            "win_rate":      _d(t, pt, "win_rate"),
+            "total_won_amt":    _d(t, pt, "total_won_amt"),
+            "total_won_n":      _d(t, pt, "total_won_n"),
+            "acv":              _d(t, pt, "acv"),
+            "win_rate":         _d(t, pt, "win_rate"),
+            "avg_days_to_close": _d(t, pt, "avg_days_to_close"),
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")

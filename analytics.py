@@ -571,7 +571,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         won_deals = [d for d in won_deals if _deal_source(d) == source]
         lost_deals = [d for d in lost_deals if _deal_source(d) == source]
 
-    owner_won = defaultdict(lambda: {"cold_amt": 0.0, "cold_n": 0, "inbound_amt": 0.0, "inbound_n": 0, "conf_amt": 0.0, "conf_n": 0, "ref_amt": 0.0, "ref_n": 0, "total_amt": 0.0, "total_n": 0})
+    owner_won = defaultdict(lambda: {"cold_amt": 0.0, "cold_n": 0, "inbound_amt": 0.0, "inbound_n": 0, "conf_amt": 0.0, "conf_n": 0, "ref_amt": 0.0, "ref_n": 0, "total_amt": 0.0, "total_n": 0, "days_to_close_sum": 0.0, "days_to_close_n": 0})
     owner_lost = defaultdict(int)
 
     for d in won_deals:
@@ -584,6 +584,13 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         src = _deal_source(d)
         owner_won[oid]["total_amt"] += amount
         owner_won[oid]["total_n"] += 1
+        dtc = d["properties"].get("days_to_close")
+        if dtc is not None:
+            try:
+                owner_won[oid]["days_to_close_sum"] += float(dtc)
+                owner_won[oid]["days_to_close_n"] += 1
+            except (ValueError, TypeError):
+                pass
         if src == "Cold outreach":
             owner_won[oid]["cold_amt"] += amount
             owner_won[oid]["cold_n"] += 1
@@ -632,6 +639,9 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
             "quota_amt":  quota_amt,
             "delta_amt":  total_won - quota_amt,
             "attain_pct": round(total_won / quota_amt * 100, 1) if quota_amt else None,
+            "days_to_close_sum": owner_won[oid]["days_to_close_sum"],
+            "days_to_close_n":   owner_won[oid]["days_to_close_n"],
+            "avg_days_to_close": round(owner_won[oid]["days_to_close_sum"] / owner_won[oid]["days_to_close_n"]) if owner_won[oid]["days_to_close_n"] else None,
         })
 
     rows.sort(key=lambda r: r["total_won_amt"], reverse=True)
@@ -643,6 +653,8 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
     tl = _sum("total_lost_n")
     total_won_rev = _sum("total_won_amt")
     total_quota   = _sum("quota_amt")
+    tot_dtc_sum = _sum("days_to_close_sum")
+    tot_dtc_n   = _sum("days_to_close_n")
     totals = {
         "ae": "TOTAL",
         "cold_amt": _sum("cold_amt"), "cold_n": _sum("cold_n"),
@@ -656,6 +668,9 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         "quota_amt":  total_quota,
         "delta_amt":  total_won_rev - total_quota,
         "attain_pct": round(total_won_rev / total_quota * 100, 1) if total_quota else None,
+        "days_to_close_sum": tot_dtc_sum,
+        "days_to_close_n":   tot_dtc_n,
+        "avg_days_to_close": round(tot_dtc_sum / tot_dtc_n) if tot_dtc_n else None,
     }
 
     return {"rows": rows, "totals": totals, "period": period, "source": source}
