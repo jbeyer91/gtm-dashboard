@@ -109,7 +109,7 @@ def _refresh_period_data(period: str):
     than reusing stale sub-call cache entries from the previous sync cycle.
     """
     try:
-        start, end = hubspot.get_date_range(period, _force=True)
+        start, end = hubspot.get_date_range(period)
     except Exception as exc:
         log.warning("  ✗ get_date_range(%s): %s", period, exc)
         return

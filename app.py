@@ -657,7 +657,7 @@ def debug_deals_won():
     """Show the raw date range and deal counts used by the Deals Won view."""
     from hubspot import get_date_range, get_deals
     period = request.args.get("period", "last_quarter")
-    start, end = get_date_range(period, _force=True)
+    start, end = get_date_range(period)
     raw_deals = get_deals(start, end, "closedate", _force=True)
     won = [d for d in raw_deals if d["properties"].get("hs_is_closed_won") == "true"]
     lost = [d for d in raw_deals if d["properties"].get("hs_is_closed_lost") == "true"]
