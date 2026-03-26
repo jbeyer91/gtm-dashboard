@@ -21,7 +21,7 @@ S2_COVERAGE_MULT   = round(1 / STAGE2_WIN_RATE)          # 4x
 # Derived: created deals needed per $ of quota
 DEALS_PER_DOLLAR   = 1 / (ACV * STAGE1_TO_STAGE2 * STAGE2_WIN_RATE)  # 1/1800
 # Fixed monthly deals-created target per rep (12 outbound + 3 inbound)
-DEALS_CREATED_TARGET_PER_REP = 15
+DEALS_CREATED_TARGET_PER_REP = 13
 
 SOURCE_MAP = {
     "PAID_SEARCH": "Paid Search",
