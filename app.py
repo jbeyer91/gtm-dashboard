@@ -16,6 +16,7 @@ from flask import (
 from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
+import calls_drilldown as calls_drilldown_bp
 from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
@@ -23,6 +24,7 @@ ALLOWED_DOMAIN = "belfrysoftware.com"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
+app.register_blueprint(calls_drilldown_bp.bp)
 
 oauth = OAuth(app)
 oauth.register(
@@ -115,7 +117,10 @@ NAV = [
         {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
     ]},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
-    {"type": "link",  "endpoint": "call_stats",        "label": "Calls"},
+    {"type": "group", "label": "Calls", "children": [
+        {"endpoint": "call_stats",                    "label": "Summary"},
+        {"endpoint": "calls_drilldown.calls_drilldown", "label": "Connect Analysis"},
+    ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
