@@ -961,6 +961,7 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
     return result
 
 
+@ttl_cache
 def get_calls_enriched(start: datetime, end: datetime) -> list:
     """Return calls with _line_type, _icp_rank, and _contact_id pre-attached.
 

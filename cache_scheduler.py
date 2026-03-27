@@ -65,6 +65,8 @@ DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 # All compute views to warm — most-visited first
 _VIEWS = [
     analytics.compute_call_stats,
+    analytics.compute_connect_diagnostics,
+    analytics.compute_account_coverage,
     analytics.compute_pipeline_coverage,
     analytics.compute_pipeline_generated,
     analytics.compute_deals_won,
@@ -104,7 +106,7 @@ def _refresh_base_data():
 
 
 _RAW_FN_NAMES = frozenset({
-    "get_deals", "get_calls", "get_contacts_inbound",
+    "get_deals", "get_calls", "get_calls_enriched", "get_contacts_inbound",
     "get_quotas", "get_all_open_deals",
 })
 
@@ -226,12 +228,17 @@ def _sync_body():
 
     # Step 4: call-stats-only short periods (today, this_week, last_week) + priors.
     for period in CALL_STATS_EXTRA:
-        try:
-            analytics.compute_call_stats(period, _force=True)
-            total += 1
-        except Exception as exc:
-            log.warning("  ✗ compute_call_stats(%s): %s", period, exc)
-            failed += 1
+        for fn in (
+            analytics.compute_call_stats,
+            analytics.compute_connect_diagnostics,
+            analytics.compute_account_coverage,
+        ):
+            try:
+                fn(period, _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
+                failed += 1
 
     # Step 4b: this_week / last_week for deal-page views.
     # Raw API data is refreshed first so compute functions receive fresh data
