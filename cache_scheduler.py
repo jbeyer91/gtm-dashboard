@@ -143,6 +143,7 @@ def _refresh_period_data(period: str):
     for fn, kwargs in [
         (hubspot.get_deals,            {"date_field": "createdate"}),
         (hubspot.get_deals,            {"date_field": "closedate"}),
+        (hubspot.get_deals,            {"date_field": "hs_v2_date_entered_71300358"}),
         (hubspot.get_deals,            {"date_field": "hs_v2_date_entered_71300363"}),
         (hubspot.get_calls,            {}),
         (hubspot.get_contacts_inbound, {}),

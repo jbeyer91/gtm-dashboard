@@ -534,7 +534,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
     # hs_v2_date_entered_* are filterable; hs_date_entered_* (v1) are not
-    _FILTERABLE = {"createdate", "closedate", "hs_v2_date_entered_71300363"}
+    _FILTERABLE = {"createdate", "closedate", "hs_v2_date_entered_71300358", "hs_v2_date_entered_71300363"}
     safe_field = date_field if date_field in _FILTERABLE else "createdate"
     payload = {
         "filterGroups": [

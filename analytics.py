@@ -1224,17 +1224,17 @@ def compute_scorecard(period: str = "this_month") -> dict:
             continue
         owner_created[oid] += 1
 
-    # $ advanced to Stage 2 this period: use deals created in the period whose
-    # current stage is S2+ (hs_date_entered_* is null on this HubSpot plan).
+    # $ advanced to Stage 2 this period: deals whose hs_v2_date_entered Stage 2
+    # field falls within [start, end].  This matches HubSpot's own "Date entered
+    # Stage 2" report and correctly includes deals created in prior periods that
+    # advanced to Stage 2 this month.
+    s2_deals = get_deals(start, end, "hs_v2_date_entered_71300358")
     owner_s2_amt = defaultdict(float)
-    _s2_stages = (NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"], NB_STAGES["won"])
-    for d in created_deals:
+    for d in s2_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
             continue
-        stage = d["properties"].get("dealstage", "")
-        if stage in _s2_stages:
-            owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
+        owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
 
     # ── grade weights ─────────────────────────────────────────────────────────
     WEIGHTS = {
