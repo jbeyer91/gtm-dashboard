@@ -66,7 +66,6 @@ DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 _VIEWS = [
     analytics.compute_call_stats,
     analytics.compute_connect_diagnostics,
-    analytics.compute_account_coverage,
     analytics.compute_pipeline_coverage,
     analytics.compute_pipeline_generated,
     analytics.compute_deals_won,
@@ -231,7 +230,6 @@ def _sync_body():
         for fn in (
             analytics.compute_call_stats,
             analytics.compute_connect_diagnostics,
-            analytics.compute_account_coverage,
         ):
             try:
                 fn(period, _force=True)
