@@ -405,7 +405,8 @@ def compute_connect_diagnostics(period: str) -> dict:
     from zoneinfo import ZoneInfo
     ET = ZoneInfo("America/Chicago")
     DIALS_PER_DAY_GOAL = 40
-    HOURLY_MIN = 5  # minimum dials before showing a connect rate
+    HOURLY_MIN = 5        # minimum dials per hour before showing connect % on chart
+    BEST_HOUR_MIN = 25    # minimum dials per hour for Best Connect Hour KPI
 
     start, end = get_date_range(period)
     period_bdays = max(sum(
@@ -417,13 +418,34 @@ def compute_connect_diagnostics(period: str) -> dict:
     owners = get_owners()
     calls  = get_calls_enriched(start, end)
 
-    # Outbound only, permitted reps only
-    filtered = [
-        c for c in calls
-        if c["properties"].get("hubspot_owner_id")
-        and _owner_allowed(c["properties"]["hubspot_owner_id"])
-        and (c["properties"].get("hs_call_direction") or "").upper() != "INBOUND"
-    ]
+    # Same exclusion logic as compute_call_stats:
+    # - outbound only, permitted reps only
+    # - exclude calls where a deal was open for that contact at call time
+    contact_windows = get_deal_contact_windows()
+    filtered = []
+    for c in calls:
+        if not c["properties"].get("hubspot_owner_id"):
+            continue
+        if not _owner_allowed(c["properties"]["hubspot_owner_id"]):
+            continue
+        if (c["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
+            continue
+        contact_id = c.get("_contact_id")
+        if contact_id and contact_id in contact_windows:
+            ts_raw = c["properties"].get("hs_timestamp") or c["properties"].get("hs_createdate")
+            if ts_raw:
+                try:
+                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+                    skip = False
+                    for (open_start, open_end) in contact_windows[contact_id]:
+                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                except Exception:
+                    pass
+        filtered.append(c)
 
     _empty_hourly = [
         {"hour": h, "label": _hour_label(h), "dials": 0, "connects": 0, "pct": None}
@@ -502,6 +524,12 @@ def compute_connect_diagnostics(period: str) -> dict:
             "pct":      _pct(c, d) if d >= HOURLY_MIN else None,
         })
 
+    best_slot = max(
+        (s for s in hourly_stats if s["dials"] >= BEST_HOUR_MIN and s["pct"] is not None),
+        key=lambda s: s["pct"],
+        default=None,
+    )
+
     return {
         "rows":    rows,
         "totals":  {
@@ -512,6 +540,7 @@ def compute_connect_diagnostics(period: str) -> dict:
         "outcome_dist": {b: outcome_raw.get(b, 0) for b in _OUTCOME_BUCKET_ORDER},
         "hourly_stats": hourly_stats,
         "target_dials": target_dials,
+        "best_connect_hour": best_slot["label"] if best_slot else "—",
     }
 
 

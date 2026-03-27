@@ -28,21 +28,12 @@
 
 {% set t = diag.totals %}
 
-{# Compute best connect hour from hourly_stats for 4th KPI #}
-{% set ns_best = namespace(pct=-1, label="—") %}
-{% for slot in diag.hourly_stats %}
-  {% if slot.pct is not none and slot.pct > ns_best.pct %}
-    {% set ns_best.pct = slot.pct %}
-    {% set ns_best.label = slot.label %}
-  {% endif %}
-{% endfor %}
-
 {# ── 1. Summary cards ───────────────────────────────────────────────────────── #}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Total Dials", "{:,}".format(t.dials)) }}
   {{ stat_card("Connects", "{:,}".format(t.connects)) }}
   {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), tip="% of outbound dials that reached a live person or gatekeeper.") }}
-  {{ stat_card("Best Connect Hour", ns_best.label, tip="Hour with highest connect rate (min. 5 dials). All reps combined, Central Time.") }}
+  {{ stat_card("Best Connect Hour", diag.best_connect_hour, tip="Hour with highest connect rate (min. 25 dials). All reps combined, Central Time.") }}
 </div>
 
 {# ── 2. Hourly chart — dials, connects, connect rate (ET) ─────────────────── #}
@@ -193,27 +184,15 @@
           <td class="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{{ row.ae }}</td>
           {% for h in hours %}
           {% set v = row.by_hour.get(h, 0) %}
-          {% if v == 0 %}
-            <td class="px-1 py-1 text-center">
+          <td class="px-1 py-1 text-center">
+            {% if v == 0 %}
               <div class="w-9 h-7 rounded flex items-center justify-center bg-gray-100 text-gray-300 text-[10px]">—</div>
-            </td>
-          {% elif v <= 2 %}
-            <td class="px-1 py-1 text-center">
-              <div class="w-9 h-7 rounded flex items-center justify-center bg-violet-100 text-violet-600 font-medium text-[10px] tabular-nums">{{ v }}</div>
-            </td>
-          {% elif v <= 5 %}
-            <td class="px-1 py-1 text-center">
-              <div class="w-9 h-7 rounded flex items-center justify-center bg-violet-200 text-violet-700 font-medium text-[10px] tabular-nums">{{ v }}</div>
-            </td>
-          {% elif v <= 10 %}
-            <td class="px-1 py-1 text-center">
-              <div class="w-9 h-7 rounded flex items-center justify-center bg-violet-400 text-white font-semibold text-[10px] tabular-nums">{{ v }}</div>
-            </td>
-          {% else %}
-            <td class="px-1 py-1 text-center">
-              <div class="w-9 h-7 rounded flex items-center justify-center bg-violet-600 text-white font-bold text-[10px] tabular-nums">{{ v }}</div>
-            </td>
-          {% endif %}
+            {% else %}
+              {% set alpha = v / ns_max.val %}
+              <div class="w-9 h-7 rounded flex items-center justify-center font-semibold text-[10px] tabular-nums"
+                   style="background-color:rgba(109,40,217,{{ '%.2f'|format(alpha) }});color:{{ 'white' if alpha > 0.45 else '#6d28d9' }}">{{ v }}</div>
+            {% endif %}
+          </td>
           {% endfor %}
           {# Pacing column #}
           {% set tgt = row.target_dials %}
@@ -256,13 +235,18 @@
     </table>
   </div>
   {# Color legend #}
-  <div class="px-6 pb-4 flex items-center gap-4">
+  <div class="px-6 pb-4 flex items-center gap-3">
     <span class="text-[10px] text-gray-400 uppercase tracking-wider mr-1">Dials:</span>
     <span class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block"></span>None</span>
-    <span class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-3 h-3 rounded-sm bg-violet-100 inline-block"></span>1–2</span>
-    <span class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-3 h-3 rounded-sm bg-violet-200 inline-block"></span>3–5</span>
-    <span class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-3 h-3 rounded-sm bg-violet-400 inline-block"></span>6–10</span>
-    <span class="flex items-center gap-1 text-[10px] text-gray-500"><span class="w-3 h-3 rounded-sm bg-violet-600 inline-block"></span>11+</span>
+    <span class="flex items-center gap-1 text-[10px] text-gray-500">
+      <span class="inline-flex gap-0.5">
+        <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.15)"></span>
+        <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.40)"></span>
+        <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.65)"></span>
+        <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.90)"></span>
+      </span>
+      Low → High (scaled to busiest cell)
+    </span>
   </div>
 </div>
 {% endif %}
