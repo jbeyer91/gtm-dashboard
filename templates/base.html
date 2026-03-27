@@ -59,8 +59,14 @@
 
     /* Group children */
     .s-group-body { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
-    @media (min-width: 768px) { #sidebar:hover .s-group-body { max-height: 240px; } }
-    @media (max-width: 767px) { #sidebar.open .s-group-body { max-height: 240px; } }
+    @media (min-width: 768px) { #sidebar:hover .s-group-body { max-height: 260px; } }
+    @media (max-width: 767px) { #sidebar.open .s-group-body { max-height: 260px; } }
+
+    /* Section header icons: full opacity when collapsed (icon-only mode),
+       fade to 40% when expanded so they don't compete with nav destinations. */
+    .s-section-icon { opacity: 1; transition: opacity 0.12s ease 0.06s; }
+    @media (min-width: 768px) { #sidebar:hover .s-section-icon { opacity: 0.4; } }
+    @media (max-width: 767px) { #sidebar.open .s-section-icon { opacity: 0.4; } }
 
     /* Backdrop (mobile only) */
     #sidebar-backdrop {
@@ -157,8 +163,9 @@
       {% if item.type == "link" %}
         {% set is_active = (active == item.endpoint) %}
         <a href="{{ url_for(item.endpoint) }}" title="{{ item.label }}"
-           class="flex items-center gap-3 mx-2 my-0.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-colors duration-100
-                  {{ 'bg-white/20 text-white' if is_active else 'text-white hover:bg-white/10' }}">
+           class="flex items-center gap-3 mx-2 my-0.5 px-2.5 py-2 rounded-lg text-sm transition-colors duration-100
+                  {{ 'text-white font-semibold' if is_active else 'text-white/60 font-medium hover:bg-white/10 hover:text-white' }}"
+           {% if is_active %}style="background:rgba(167,139,250,0.18);box-shadow:inset 3px 0 0 #A78BFA;"{% endif %}>
           {% if item.endpoint == "home" %}
             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -187,35 +194,39 @@
       {% elif item.type == "group" %}
         {% set ns = namespace(group_active=false) %}
         {% for sub in item.children %}{% if active == sub.endpoint %}{% set ns.group_active = true %}{% endif %}{% endfor %}
-        <div class="mx-2 my-0.5">
-          <div title="{{ item.label }}"
-               class="flex items-center gap-3 px-2.5 py-2.5 rounded-lg transition-colors duration-100
-                      text-white">
+        <div class="mx-2 mt-4 mb-0.5">
+          {# Section header — acts as a label, not a destination #}
+          <div title="{{ item.label }}" class="flex items-center gap-3 px-2.5 pb-1.5">
             {% if item.label == "Deals" %}
-              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <svg class="s-section-icon w-4 h-4 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
             {% elif item.label == "Pipeline" %}
-              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/>
+              <svg class="s-section-icon w-4 h-4 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>
               </svg>
             {% elif item.label == "Marketing" %}
-              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <svg class="s-section-icon w-4 h-4 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
               </svg>
             {% else %}
-              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <svg class="s-section-icon w-4 h-4 shrink-0 text-white" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
               </svg>
             {% endif %}
-            <span class="s-label text-xs font-semibold uppercase tracking-widest text-white">{{ item.label }}</span>
+            <span class="s-label text-[10px] font-semibold uppercase tracking-[0.1em]"
+                  style="color:rgba(255,255,255,0.4);">{{ item.label }}</span>
           </div>
+          {# Children #}
           <div class="s-group-body">
             {% for sub in item.children %}
+            {% set sub_active = (active == sub.endpoint) %}
             <a href="{{ url_for(sub.endpoint) }}"
-               class="flex items-center gap-2.5 pl-9 pr-3 py-2 rounded-lg text-sm transition-colors duration-100
-                      {{ 'bg-white/15 text-white font-medium' if active == sub.endpoint else 'text-gray-400 hover:bg-white/10 hover:text-white' }}">
-              <span class="w-1 h-1 rounded-full bg-current shrink-0 opacity-70"></span>
+               class="flex items-center pl-9 pr-3 py-1.5 rounded-lg text-sm transition-colors duration-100 my-0.5
+                      {{ 'text-white font-semibold' if sub_active else 'text-white/55 font-medium hover:bg-white/10 hover:text-white' }}"
+               {% if sub_active %}style="background:rgba(167,139,250,0.15);box-shadow:inset 3px 0 0 #A78BFA;"{% endif %}>
               <span class="s-label">{{ sub.label }}</span>
             </a>
             {% endfor %}
@@ -226,28 +237,31 @@
     {% endfor %}
   </div>
 
-  <!-- Footer -->
-  <div class="shrink-0 py-2" style="border-top:1px solid rgba(255,255,255,0.1);">
-    <div title="{% if cache_stale %}Data is over 2 hours old{% else %}Refreshes every hour{% endif %}"
-         class="flex items-center gap-3 mx-2 px-2.5 py-2 rounded-lg text-xs {{ 'text-amber-300' if cache_stale else 'text-gray-500' }}">
-      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+  <!-- Footer utility area — clearly separate from nav destinations -->
+  <div class="shrink-0 pt-1 pb-2" style="border-top:1px solid rgba(255,255,255,0.08);">
+    {# Last refreshed timestamp — informational only #}
+    <div title="{% if cache_stale %}Data is over 2 hours old{% else %}Refreshes hourly in the background{% endif %}"
+         class="flex items-center gap-3 mx-2 px-2.5 py-1.5 {{ 'text-amber-300' if cache_stale else '' }}"
+         style="{% if not cache_stale %}color:rgba(255,255,255,0.3);{% endif %}">
+      <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3.5 2"/>
       </svg>
-      <span class="s-label whitespace-nowrap">{{ last_refreshed }}{% if cache_stale %} ⚠{% endif %}</span>
+      <span class="s-label text-xs whitespace-nowrap">{{ last_refreshed }}{% if cache_stale %} ⚠{% endif %}</span>
     </div>
     <form method="POST" action="{{ url_for('refresh_cache') }}">
       <button type="submit" title="Fetch fresh data from HubSpot"
-              class="flex items-center gap-3 mx-2 px-2.5 py-2 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-white transition-colors duration-100"
-              style="width:calc(100% - 1rem);">
-        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              class="flex items-center gap-3 mx-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors duration-100 hover:bg-white/10 hover:text-white"
+              style="width:calc(100% - 1rem);color:rgba(255,255,255,0.4);">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
         </svg>
         <span class="s-label">Refresh data</span>
       </button>
     </form>
     <a href="{{ url_for('logout') }}" title="Logout"
-       class="flex items-center gap-3 mx-2 px-2.5 py-2 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-white transition-colors duration-100">
-      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+       class="flex items-center gap-3 mx-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors duration-100 hover:bg-white/10 hover:text-white"
+       style="color:rgba(255,255,255,0.4);">
+      <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
       </svg>
       <span class="s-label">Logout</span>
