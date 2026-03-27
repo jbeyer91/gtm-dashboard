@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% from "macros.html" import period_filter, team_filter, stat_card, fmt_pct, fmt_num %}
+{% block title %} — Connect Analysis{% endblock %}
+{% block content %}
+
+{% set ns_pl = namespace(label=period) %}
+{% for val, lbl in periods %}{% if val == period %}{% set ns_pl.label = lbl %}{% endif %}{% endfor %}
+
+<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Connect Analysis</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Line type & ICP diagnostics · {{ ns_pl.label }}</p>
+</div>
+
+{{ period_filter(period, periods, {"team": team}) }}
+{{ team_filter(team, teams, {"period": period}) }}
+
+{% set t = diag.totals %}
+
+{# ── Summary cards ─────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+  {{ stat_card("Total Dials", "{:,}".format(t.dials)) }}
+  {{ stat_card("Connects", "{:,}".format(t.connects)) }}
+  {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), tip="% of outbound dials that reached a live person.") }}
+</div>
+
+{# ── Heatmap: connect rate by ICP rank × line type ──────────────────────────── #}
+{% if diag.icp_ranks and diag.line_types %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <h2 class="text-base font-semibold text-gray-800 mb-1">Connect Rate by ICP Rank &amp; Line Type</h2>
+  <p class="text-xs text-gray-400 mb-4">Cells with &lt; 5 dials are shown in gray (no statistical significance).</p>
+
+  <div class="overflow-x-auto">
+    <table class="text-sm border-collapse">
+      <thead>
+        <tr>
+          <th class="pr-4 pb-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">ICP</th>
+          {% for lt in diag.line_types %}
+          <th class="px-3 pb-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider min-w-[90px]">
+            {{ lt }}
+          </th>
+          {% endfor %}
+          <th class="pl-4 pb-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">All</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for icp in diag.icp_ranks %}
+        {% set icp_row_total = namespace(dials=0, connects=0) %}
+        {% for lt in diag.line_types %}
+          {% set cell = diag.heatmap.get(icp, {}).get(lt, {}) %}
+          {% set icp_row_total.dials = icp_row_total.dials + (cell.dials or 0) %}
+          {% set icp_row_total.connects = icp_row_total.connects + (cell.connects or 0) %}
+        {% endfor %}
+        <tr class="border-t border-gray-100">
+          <td class="pr-4 py-2.5 font-semibold text-gray-700">{{ icp }}</td>
+          {% for lt in diag.line_types %}
+          {% set cell = diag.heatmap.get(icp, {}).get(lt, {}) %}
+          {% set d = cell.dials or 0 %}
+          {% set c = cell.connects or 0 %}
+          {% set pct = cell.pct %}
+          <td class="px-3 py-2.5 text-center rounded-lg">
+            {% if d == 0 %}
+              <span class="text-gray-300 text-xs">—</span>
+            {% elif pct is none %}
+              {# < 5 dials — no color #}
+              <div class="inline-flex flex-col items-center rounded-lg px-2 py-1 bg-gray-50 border border-gray-100">
+                <span class="text-xs font-semibold text-gray-400">{{ "%.0f"|format(c / d * 100) }}%</span>
+                <span class="text-[10px] text-gray-300">{{ d }}d</span>
+              </div>
+            {% else %}
+              {% if pct >= 20 %}
+                {% set bg = "bg-green-50 border-green-200" %}
+                {% set tx = "text-green-700" %}
+                {% set sub = "text-green-400" %}
+              {% elif pct >= 12 %}
+                {% set bg = "bg-yellow-50 border-yellow-200" %}
+                {% set tx = "text-yellow-700" %}
+                {% set sub = "text-yellow-400" %}
+              {% else %}
+                {% set bg = "bg-red-50 border-red-200" %}
+                {% set tx = "text-red-600" %}
+                {% set sub = "text-red-300" %}
+              {% endif %}
+              <div class="inline-flex flex-col items-center rounded-lg px-2 py-1 border {{ bg }}">
+                <span class="text-xs font-semibold {{ tx }}">{{ "%.0f"|format(pct) }}%</span>
+                <span class="text-[10px] {{ sub }}">{{ d }}d</span>
+              </div>
+            {% endif %}
+          </td>
+          {% endfor %}
+          {# Row total #}
+          <td class="pl-4 py-2.5 text-center">
+            {% if icp_row_total.dials > 0 %}
+            {% set row_pct = icp_row_total.connects / icp_row_total.dials * 100 %}
+            <div class="inline-flex flex-col items-center rounded-lg px-2 py-1 bg-gray-50 border border-gray-200">
+              <span class="text-xs font-semibold text-gray-600">{{ "%.0f"|format(row_pct) }}%</span>
+              <span class="text-[10px] text-gray-400">{{ icp_row_total.dials }}d</span>
+            </div>
+            {% else %}<span class="text-gray-300 text-xs">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── Per-rep table ─────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
+  <div class="px-6 py-4 border-b border-gray-100">
+    <h2 class="text-base font-semibold text-gray-800">Per-Rep Connect Breakdown</h2>
+  </div>
+  {% if diag.rows %}
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <tr>
+        <th class="px-4 py-3 text-left font-semibold">AE</th>
+        <th class="px-4 py-3 text-right font-semibold">Dials</th>
+        <th class="px-4 py-3 text-right font-semibold">Connects</th>
+        <th class="px-4 py-3 text-right font-semibold">Connect %</th>
+        {% set all_lt = diag.line_types %}
+        {% for lt in all_lt %}
+        <th class="px-4 py-3 text-right font-semibold" title="{{ lt }} dials / connect rate">{{ lt }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in diag.rows %}
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.dials) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ row.connects }}</td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold
+          {% if row.pct_connect >= 20 %}text-green-600
+          {% elif row.pct_connect >= 12 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ fmt_pct(row.pct_connect) }}
+        </td>
+        {% for lt in all_lt %}
+        {% set ltd = row.by_line_type.get(lt, {}) %}
+        <td class="px-4 py-3 text-right tabular-nums text-gray-500 text-xs">
+          {% if ltd.dials %}{{ ltd.dials }}d / {{ "%.0f"|format(ltd.pct) }}%{% else %}—{% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 border-t-2 border-gray-200 text-xs font-semibold text-gray-600">
+      {% set tot = diag.totals %}
+      <tr>
+        <td class="px-4 py-3">TOTAL</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(tot.dials) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ tot.connects }}</td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if tot.pct_connect >= 20 %}text-green-600
+          {% elif tot.pct_connect >= 12 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ fmt_pct(tot.pct_connect) }}
+        </td>
+        {% for lt in all_lt %}<td class="px-4 py-3"></td>{% endfor %}
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+  <p class="px-6 py-8 text-sm text-gray-400 text-center">No outbound calls logged for this period.</p>
+  {% endif %}
+</div>
+
+{# ── Outcome distribution ──────────────────────────────────────────────────── #}
+{% if diag.outcome_dist %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <h2 class="text-base font-semibold text-gray-800 mb-4">Call Outcome Distribution</h2>
+  <div class="flex flex-wrap gap-3">
+    {% set total_dials = diag.totals.dials %}
+    {% for label, count in diag.outcome_dist.items() %}
+    {% set pct = (count / total_dials * 100) if total_dials else 0 %}
+    <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+      <span class="text-sm text-gray-700 font-medium">{{ label }}</span>
+      <span class="text-sm font-bold text-gray-900 tabular-nums">{{ count }}</span>
+      <span class="text-xs text-gray-400">({{ "%.1f"|format(pct) }}%)</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Account coverage table ────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
+  <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div>
+      <h2 class="text-base font-semibold text-gray-800">Account Coverage</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Companies with at least one outbound call this period</p>
+    </div>
+    {% if cov.totals.companies_called %}
+    <span class="text-sm font-semibold text-gray-500 tabular-nums">
+      {{ cov.totals.companies_called }} companies · {{ "{:,}".format(cov.totals.dials) }} dials
+    </span>
+    {% endif %}
+  </div>
+  {% if cov.rows %}
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <tr>
+        <th class="px-4 py-3 text-left font-semibold">Company</th>
+        <th class="px-4 py-3 text-left font-semibold">ICP</th>
+        <th class="px-4 py-3 text-left font-semibold">Owner</th>
+        <th class="px-4 py-3 text-right font-semibold">Dials</th>
+        <th class="px-4 py-3 text-right font-semibold">Connects</th>
+        <th class="px-4 py-3 text-right font-semibold">Connect %</th>
+        <th class="px-4 py-3 text-right font-semibold">Last Called</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in cov.rows %}
+      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+        <td class="px-4 py-2.5 font-medium text-gray-800 max-w-[220px] truncate" title="{{ row.company_name }}">
+          {{ row.company_name }}
+        </td>
+        <td class="px-4 py-2.5">
+          <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold
+            {% if row.icp_rank == 'A' %}bg-green-100 text-green-700
+            {% elif row.icp_rank == 'B' %}bg-blue-100 text-blue-700
+            {% elif row.icp_rank == 'C' %}bg-yellow-100 text-yellow-700
+            {% elif row.icp_rank == 'D' %}bg-red-100 text-red-600
+            {% else %}bg-gray-100 text-gray-500{% endif %}">
+            {{ row.icp_rank }}
+          </span>
+        </td>
+        <td class="px-4 py-2.5 text-gray-600">{{ row.owner_name }}</td>
+        <td class="px-4 py-2.5 text-right tabular-nums font-medium">{{ row.dials }}</td>
+        <td class="px-4 py-2.5 text-right tabular-nums">{{ row.connects }}</td>
+        <td class="px-4 py-2.5 text-right tabular-nums
+          {% if row.pct_connect >= 20 %}text-green-600 font-semibold
+          {% elif row.pct_connect >= 12 %}text-yellow-600
+          {% elif row.connects > 0 %}text-red-500
+          {% else %}text-gray-400{% endif %}">
+          {% if row.dials >= 3 %}{{ fmt_pct(row.pct_connect) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-2.5 text-right text-gray-500 tabular-nums">{{ row.last_call }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="px-6 py-8 text-sm text-gray-400 text-center">No accounts called in this period.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

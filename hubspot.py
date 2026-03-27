@@ -931,6 +931,65 @@ def get_call_to_contact_map(call_ids: list) -> dict:
     return {call_id: contacts[0] for call_id, contacts in call_to_contacts.items() if contacts}
 
 
+def get_contacts_for_drilldown(contact_ids: list) -> dict:
+    """Batch-read cop_line_type + company_icp_rank for a list of contact IDs.
+
+    Returns {contact_id: {"cop_line_type": str, "company_icp_rank": str}}.
+    Not cached — called from analytics functions that are themselves cached.
+    """
+    if not contact_ids:
+        return {}
+    result = {}
+    for i in range(0, len(contact_ids), 100):
+        batch = contact_ids[i:i + 100]
+        resp = requests.post(
+            f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
+            headers=HEADERS,
+            json={
+                "inputs": [{"id": cid} for cid in batch],
+                "properties": ["cop_line_type", "company_icp_rank"],
+            },
+            timeout=_TIMEOUT,
+        )
+        if not resp.ok:
+            continue
+        for c in resp.json().get("results", []):
+            result[str(c["id"])] = {
+                "cop_line_type":    (c["properties"].get("cop_line_type") or "").strip(),
+                "company_icp_rank": (c["properties"].get("company_icp_rank") or "").strip(),
+            }
+    return result
+
+
+def get_calls_enriched(start: datetime, end: datetime) -> list:
+    """Return calls with _line_type, _icp_rank, and _contact_id pre-attached.
+
+    Each item in the returned list is the original call dict extended with:
+      _line_type  — cop_line_type of the linked contact (or "Unknown")
+      _icp_rank   — company_icp_rank of the linked contact (or "—")
+      _contact_id — HubSpot contact ID linked to this call (or None)
+
+    Not cached — depends on get_calls() which is cached.
+    """
+    calls = get_calls(start, end)
+    if not calls:
+        return []
+    call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
+    contact_ids = list(set(call_to_contact.values()))
+    contact_props = get_contacts_for_drilldown(contact_ids)
+    enriched = []
+    for call in calls:
+        contact_id = call_to_contact.get(call["id"])
+        cp = contact_props.get(str(contact_id), {}) if contact_id else {}
+        enriched.append({
+            **call,
+            "_line_type":   cp.get("cop_line_type") or "Unknown",
+            "_icp_rank":    cp.get("company_icp_rank") or "—",
+            "_contact_id":  contact_id,
+        })
+    return enriched
+
+
 @ttl_cache
 def get_forecast_submissions() -> list:
     """Fetch forecast submissions from HubSpot's Forecast Read API (beta, Jan 2026).
