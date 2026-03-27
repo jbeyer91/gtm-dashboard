@@ -199,6 +199,23 @@ def ttl_cache(func):
     return wrapper
 
 
+# ── Cache probing ─────────────────────────────────────────────────────────────
+
+def is_cached(func, *args, **kwargs) -> bool:
+    """Return True if func(*args) has ANY entry in memory or disk (even stale).
+
+    Stale disk entries can be served via stale-while-revalidate so they never
+    block the request thread.  Only returns False for a full cold miss — i.e.
+    no disk file at all — which would require synchronous computation.
+    """
+    key = (func.__name__,) + tuple(_to_hashable(a) for a in args) + tuple(
+        (k, _to_hashable(v)) for k, v in sorted(kwargs.items())
+    )
+    if key in _store:
+        return True
+    return _read_disk(key) is not None
+
+
 # ── Cache management ──────────────────────────────────────────────────────────
 
 def clear_cache() -> None:
