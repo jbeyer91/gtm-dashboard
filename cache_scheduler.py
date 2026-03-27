@@ -62,10 +62,13 @@ CALL_STATS_EXTRA = [
 # so clicking "This Week" / "Last Week" never hits HubSpot live.
 DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 
-# All compute views to warm — most-visited first
+# All compute views to warm — most-visited first.
+# compute_scorecard is included here so the home page unblocks immediately
+# after this_month data is ready, not at the end of the full sync cycle.
 _VIEWS = [
     analytics.compute_call_stats,
     analytics.compute_connect_diagnostics,
+    analytics.compute_scorecard,
     analytics.compute_pipeline_coverage,
     analytics.compute_pipeline_generated,
     analytics.compute_deals_won,
@@ -254,14 +257,12 @@ def _sync_body():
         _evict_raw_from_memory()
         gc.collect()
 
-    # Step 5: scorecard (always this_month) + its prior.
-    for period in ("this_month", "prior_this_month"):
-        try:
-            analytics.compute_scorecard(period, _force=True)
-            total += 1
-        except Exception as exc:
-            log.warning("  ✗ compute_scorecard(%s): %s", period, exc)
-            failed += 1
+    # Step 5: scorecard prior period (this_month is already covered by _VIEWS).
+    try:
+        analytics.compute_scorecard("prior_this_month", _force=True)
+        total += 1
+    except Exception as exc:
+        log.warning("  ✗ compute_scorecard(prior_this_month): %s", exc)
 
     log.info(
         "Cache sync complete (%d ok, %d failed). Next sync in %.0f min.",
