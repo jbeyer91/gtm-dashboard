@@ -9,7 +9,7 @@ from hubspot import (
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
-    get_target_account_companies, _search_all, _batch_associations,
+    get_target_account_companies, _search_all,
     get_calls_enriched,
 )
 
@@ -117,37 +117,41 @@ DISPOSITION_LABELS: dict[str, str] = {
     "17b47fee-58de-441e-a44c-c6300d46f273": "Wrong number",
 }
 
-# ── Outcome buckets for 4-card distribution display ──────────────────────────
-# Each GUID maps to one of four display buckets.
+# ── Outcome buckets for grouped display (4 cards) ────────────────────────────
+# Maps each disposition GUID to one of four display buckets.
+# Note: this is display grouping only — CALL_CONNECTED_GUIDS controls
+# connect-rate math and is intentionally separate.
 OUTCOME_BUCKET: dict[str, str] = {
-    "f240bbac-87c9-4f6e-bf70-924b57d47db7": "Connected",        # Connected
-    "ee078117-c361-4e51-84af-4cfd534fd878": "Connected",        # Answered - Bad Timing
-    "ff4c1e61-46ad-4100-9676-b5d4a0c4f52b": "Connected",        # Answered - Call Back
-    "b43b9c27-ecc9-461f-8b4b-6d2c00ae6f0d": "Connected",        # Answered - Meeting Set
-    "c6ab5404-53ca-4f44-938d-d4400b589b74": "Connected",        # Answered - Not Interested
-    "293301fd-5a90-47e9-90a9-b87d59f27cc5": "Connected",        # Answered - No Longer with Co.
-    "a8810b96-f812-4d60-800c-9b0beefa8941": "Connected",        # Answered - Poor Fit
-    "314680f7-ba23-4153-b297-1e3bd1453951": "Connected",        # Answered - Referral
-    "0513d3b2-f7e3-4ae5-81ca-be71e399499b": "Connected",        # Answered - Wrong Contact
-    "bf63f95f-8fa4-4a42-b918-0a8e5ee4ba3e": "Connected",        # Gatekeeper
-    "a4c4c377-d246-4b32-a13b-75a56a4cd0ff": "Voicemail",        # Left live message
-    "b2cf5968-551e-4856-9783-52b3da59a7d0": "Voicemail",        # Left voicemail
-    "9d9162e7-6cf3-4944-bf63-4dff82258764": "No Answer",        # Busy
-    "73a0d17f-1163-4015-bdd5-ec830791da20": "No Answer",        # No answer
-    "899b0622-cdd2-4c55-8461-1c738dab0b69": "No Answer",        # No answer - Poor Fit
-    "17b47fee-58de-441e-a44c-c6300d46f273": "No Answer",        # Wrong number
-    "0f54a15c-1cb7-458a-8a2a-5a0e97cd7c13": "Other",            # Bad Outcome
+    "f240bbac-87c9-4f6e-bf70-924b57d47db7": "Positive connect",  # Connected
+    "bf63f95f-8fa4-4a42-b918-0a8e5ee4ba3e": "Positive connect",  # Gatekeeper
+    "b43b9c27-ecc9-461f-8b4b-6d2c00ae6f0d": "Positive connect",  # Answered - Meeting Set
+    "ff4c1e61-46ad-4100-9676-b5d4a0c4f52b": "Positive connect",  # Answered - Call Back
+    "314680f7-ba23-4153-b297-1e3bd1453951": "Positive connect",  # Answered - Referral
+    "c6ab5404-53ca-4f44-938d-d4400b589b74": "Negative connect",  # Answered - Not Interested
+    "a8810b96-f812-4d60-800c-9b0beefa8941": "Negative connect",  # Answered - Poor Fit
+    "ee078117-c361-4e51-84af-4cfd534fd878": "Negative connect",  # Answered - Bad Timing
+    "293301fd-5a90-47e9-90a9-b87d59f27cc5": "Negative connect",  # Answered - No Longer with Co.
+    "0513d3b2-f7e3-4ae5-81ca-be71e399499b": "Negative connect",  # Answered - Wrong Contact
+    "0f54a15c-1cb7-458a-8a2a-5a0e97cd7c13": "Negative connect",  # Bad Outcome
+    "73a0d17f-1163-4015-bdd5-ec830791da20": "No answer",          # No answer
+    "899b0622-cdd2-4c55-8461-1c738dab0b69": "No answer",          # No answer - Poor Fit
+    "9d9162e7-6cf3-4944-bf63-4dff82258764": "No answer",          # Busy
+    "17b47fee-58de-441e-a44c-c6300d46f273": "No answer",          # Wrong number
+    "a4c4c377-d246-4b32-a13b-75a56a4cd0ff": "Voicemail",          # Left live message
+    "b2cf5968-551e-4856-9783-52b3da59a7d0": "Voicemail",          # Left voicemail
 }
-_OUTCOME_BUCKET_ORDER = ["Connected", "Voicemail", "No Answer", "Other"]
+# No disposition → "No answer" (handled as default in the aggregation loop)
+_OUTCOME_BUCKET_ORDER = ["Positive connect", "Negative connect", "No answer", "Voicemail"]
 
-# ── Line type buckets: raw cop_line_type → display label ─────────────────────
+# ── Line type buckets: raw cop_line_type → display bucket ────────────────────
+# 3-bucket scheme: Direct line / Mobile / Unknown
 _LINE_TYPE_BUCKETS: dict[str, str] = {
     "mobile":               "Mobile",
     "personal_number":      "Mobile",
-    "fixed_line":           "Landline",
-    "fixed_line_or_mobile": "Landline",
-    "toll_free":            "Toll-Free",
-    "voip":                 "VoIP",
+    "fixed_line":           "Direct line",
+    "fixed_line_or_mobile": "Direct line",
+    "toll_free":            "Direct line",
+    "voip":                 "Direct line",
     "unknown":              "Unknown",
 }
 
@@ -386,150 +390,106 @@ def _hour_label(h: int) -> str:
 
 @ttl_cache
 def compute_connect_diagnostics(period: str) -> dict:
-    """Per-rep connect diagnostics broken down by line type and ICP rank.
+    """Per-rep and team-wide call activity diagnostics.
 
     Returns:
-      rows         — per-rep summary list, sorted by dials desc
-      totals       — aggregate totals
-      heatmap      — nested dict [icp_rank][line_type] = {dials, connects, pct|None}
-                     pct is None when dials < HEATMAP_MIN (no color)
-      icp_ranks    — ordered list of ICP ranks present in data
-      line_types   — sorted list of line types present in data
-      outcome_dist — {bucket: count} for four outcome buckets
-      hourly_stats — list of {hour, label, dials, connects, pct|None} in ET (7–20)
+      rows         — per-rep list sorted by dials desc; each row includes:
+                     ae, owner_id, dials, connects, pct_connect,
+                     by_hour {h: dial_count}, target_dials
+      totals       — {dials, connects, pct_connect} (all permitted reps)
+      outcome_dist — {bucket_label: count} for four grouped display buckets
+      hourly_stats — [{hour, label, dials, connects, pct|None}] for ET hours 7–20
+                     pct is None when dials < 5 (insufficient for a reliable rate)
+      target_dials — dials goal for the period (period_bdays × 40)
     """
     from zoneinfo import ZoneInfo
     ET = ZoneInfo("America/New_York")
-    HEATMAP_MIN = 5
+    DIALS_PER_DAY_GOAL = 40
+    HOURLY_MIN = 5  # minimum dials before showing a connect rate
+
     start, end = get_date_range(period)
+    period_bdays = max(sum(
+        1 for i in range((end - start).days + 1)
+        if (start + timedelta(days=i)).weekday() < 5
+    ), 1)
+    target_dials = period_bdays * DIALS_PER_DAY_GOAL
+
     owners = get_owners()
-    calls = get_calls_enriched(start, end)
+    calls  = get_calls_enriched(start, end)
 
-    # Apply same filters as compute_call_stats: outbound only, team owners only
-    filtered = []
-    for call in calls:
-        oid = call["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
-            continue
-        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
-            continue
-        filtered.append(call)
+    # Outbound only, permitted reps only
+    filtered = [
+        c for c in calls
+        if c["properties"].get("hubspot_owner_id")
+        and _owner_allowed(c["properties"]["hubspot_owner_id"])
+        and (c["properties"].get("hs_call_direction") or "").upper() != "INBOUND"
+    ]
 
+    _empty_hourly = [
+        {"hour": h, "label": _hour_label(h), "dials": 0, "connects": 0, "pct": None}
+        for h in range(7, 21)
+    ]
     if not filtered:
-        hourly_empty = [
-            {"hour": h, "label": _hour_label(h), "dials": 0, "connects": 0, "pct": None}
-            for h in range(7, 21)
-        ]
         return {
             "rows": [], "totals": {"dials": 0, "connects": 0, "pct_connect": 0.0},
-            "heatmap": {}, "icp_ranks": [], "line_types": [],
             "outcome_dist": {b: 0 for b in _OUTCOME_BUCKET_ORDER},
-            "hourly_stats": hourly_empty,
+            "hourly_stats": _empty_hourly,
+            "target_dials": target_dials,
         }
 
-    # Accumulators
-    owner_stats: dict = defaultdict(lambda: {
-        "dials": 0, "connects": 0,
-        "lt": defaultdict(lambda: {"dials": 0, "connects": 0}),
-        "icp": defaultdict(lambda: {"dials": 0, "connects": 0}),
-    })
-    heatmap_raw: dict = defaultdict(lambda: {"dials": 0, "connects": 0})
-    outcome_buckets: dict = defaultdict(int)
-    hourly_raw: dict = defaultdict(lambda: {"dials": 0, "connects": 0})
+    # Single-pass accumulators
+    owner_stats:  dict = defaultdict(lambda: {"dials": 0, "connects": 0})
+    owner_hourly: dict = defaultdict(lambda: defaultdict(int))   # oid → {hour → dial_count}
+    outcome_raw:  dict = defaultdict(int)
+    hourly_raw:   dict = defaultdict(lambda: {"dials": 0, "connects": 0})
 
     for call in filtered:
-        oid  = call["properties"].get("hubspot_owner_id", "")
+        oid  = call["properties"]["hubspot_owner_id"]
         disp = (call["properties"].get("hs_call_disposition") or "").strip()
         is_connect = disp in CALL_CONNECTED_GUIDS
-        line_type  = _normalize_line_type(call.get("_line_type") or "")
-        icp_rank   = _normalize_icp_rank(call.get("_icp_rank") or "")
 
-        s = owner_stats[oid]
-        s["dials"] += 1
-        s["lt"][line_type]["dials"] += 1
-        s["icp"][icp_rank]["dials"] += 1
+        owner_stats[oid]["dials"] += 1
         if is_connect:
-            s["connects"] += 1
-            s["lt"][line_type]["connects"] += 1
-            s["icp"][icp_rank]["connects"] += 1
+            owner_stats[oid]["connects"] += 1
 
-        heatmap_raw[(icp_rank, line_type)]["dials"] += 1
-        if is_connect:
-            heatmap_raw[(icp_rank, line_type)]["connects"] += 1
+        # Outcome bucket — empty disposition → "No answer" (no disposition recorded)
+        outcome_raw[OUTCOME_BUCKET.get(disp, "No answer")] += 1
 
-        bucket = OUTCOME_BUCKET.get(disp, "Other") if disp else "Other"
-        outcome_buckets[bucket] += 1
-
-        # Hourly bucketing — convert UTC call timestamp to ET
+        # ET hour — used for team hourly chart and per-rep heatmap
         ts_raw = (call["properties"].get("hs_timestamp")
                   or call["properties"].get("hs_createdate") or "")
         try:
-            ts_utc = _parse_hs_datetime(ts_raw)
-            hour_et = ts_utc.astimezone(ET).hour
+            hour_et = _parse_hs_datetime(ts_raw).astimezone(ET).hour
         except (ValueError, AttributeError):
             hour_et = None
+
         if hour_et is not None:
             hourly_raw[hour_et]["dials"] += 1
             if is_connect:
                 hourly_raw[hour_et]["connects"] += 1
+            owner_hourly[oid][hour_et] += 1
 
-    # Build per-rep rows
+    # Per-rep rows
     rows = []
     for oid, s in owner_stats.items():
         owner = owners.get(oid, {})
-        name = owner.get("last_name") or owner.get("name") or oid
-        d, c = s["dials"], s["connects"]
+        name  = owner.get("last_name") or owner.get("name") or oid
+        d, c  = s["dials"], s["connects"]
         rows.append({
-            "ae": name,
-            "owner_id": oid,
-            "dials": d,
-            "connects": c,
+            "ae":          name,
+            "owner_id":    oid,
+            "dials":       d,
+            "connects":    c,
             "pct_connect": _pct(c, d),
-            "by_line_type": {
-                lt: {
-                    "dials": v["dials"],
-                    "connects": v["connects"],
-                    "pct": _pct(v["connects"], v["dials"]),
-                }
-                for lt, v in s["lt"].items()
-            },
-            "by_icp": {
-                rank: {
-                    "dials": v["dials"],
-                    "connects": v["connects"],
-                    "pct": _pct(v["connects"], v["dials"]),
-                }
-                for rank, v in s["icp"].items()
-            },
+            "by_hour":     dict(owner_hourly.get(oid, {})),
+            "target_dials": target_dials,
         })
     rows.sort(key=lambda r: r["dials"], reverse=True)
 
     total_dials    = sum(r["dials"]    for r in rows)
     total_connects = sum(r["connects"] for r in rows)
-    totals = {
-        "dials":       total_dials,
-        "connects":    total_connects,
-        "pct_connect": _pct(total_connects, total_dials),
-    }
 
-    # Collect axis labels
-    all_icp = sorted({k[0] for k in heatmap_raw}, key=_icp_sort_key)
-    all_lt  = sorted({k[1] for k in heatmap_raw})
-
-    # Build nested heatmap dict: heatmap[icp][line_type]
-    heatmap: dict = {}
-    for (icp, lt), v in heatmap_raw.items():
-        d, c = v["dials"], v["connects"]
-        heatmap.setdefault(icp, {})[lt] = {
-            "dials":    d,
-            "connects": c,
-            "pct":      _pct(c, d) if d >= HEATMAP_MIN else None,
-        }
-
-    # Outcome distribution — four fixed buckets in display order
-    outcome_dist = {b: outcome_buckets.get(b, 0) for b in _OUTCOME_BUCKET_ORDER}
-
-    # Hourly stats for ET business hours (7 AM – 8 PM)
+    # Hourly stats — team-wide, ET, business hours only (7 AM – 8 PM)
     hourly_stats = []
     for h in range(7, 21):
         v = hourly_raw.get(h, {"dials": 0, "connects": 0})
@@ -539,114 +499,21 @@ def compute_connect_diagnostics(period: str) -> dict:
             "label":    _hour_label(h),
             "dials":    d,
             "connects": c,
-            "pct":      _pct(c, d) if d >= HEATMAP_MIN else None,
+            "pct":      _pct(c, d) if d >= HOURLY_MIN else None,
         })
 
     return {
-        "rows": rows,
-        "totals": totals,
-        "heatmap": heatmap,
-        "icp_ranks": all_icp,
-        "line_types": all_lt,
-        "outcome_dist": outcome_dist,
+        "rows":    rows,
+        "totals":  {
+            "dials":       total_dials,
+            "connects":    total_connects,
+            "pct_connect": _pct(total_connects, total_dials),
+        },
+        "outcome_dist": {b: outcome_raw.get(b, 0) for b in _OUTCOME_BUCKET_ORDER},
         "hourly_stats": hourly_stats,
+        "target_dials": target_dials,
     }
 
-
-@ttl_cache
-def compute_account_coverage(period: str) -> dict:
-    """Which accounts (companies) are being called, and how often.
-
-    Returns per-company rows for companies that had at least one outbound call
-    in the period, plus totals. Rows are sorted by dials desc.
-    """
-    start, end = get_date_range(period)
-    owners = get_owners()
-    calls = get_calls_enriched(start, end)
-
-    filtered = []
-    for call in calls:
-        oid = call["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
-            continue
-        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
-            continue
-        filtered.append(call)
-
-    if not filtered:
-        return {"rows": [], "totals": {"companies_called": 0, "dials": 0, "connects": 0, "pct_connect": 0.0}}
-
-    # Map contacts → companies
-    contact_ids = list({c["_contact_id"] for c in filtered if c["_contact_id"]})
-    contact_to_companies = _batch_associations("contacts", "companies", contact_ids)
-
-    # Build company info lookup from get_companies_for_coverage()
-    company_info = {co["id"]: co.get("properties", {}) for co in get_companies_for_coverage()}
-
-    # Tally per company
-    co_stats: dict = defaultdict(lambda: {
-        "dials": 0, "connects": 0, "owner_ids": set(), "last_ts": None,
-    })
-
-    for call in filtered:
-        contact_id = call["_contact_id"]
-        if not contact_id:
-            continue
-        company_ids = contact_to_companies.get(str(contact_id), [])
-        if not company_ids:
-            continue
-        company_id = company_ids[0]
-
-        disp = (call["properties"].get("hs_call_disposition") or "").strip()
-        is_connect = disp in CALL_CONNECTED_GUIDS
-        oid = call["properties"].get("hubspot_owner_id", "")
-
-        ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate") or ""
-        try:
-            ts = _parse_hs_datetime(ts_raw)
-        except ValueError:
-            ts = None
-
-        s = co_stats[company_id]
-        s["dials"] += 1
-        if is_connect:
-            s["connects"] += 1
-        s["owner_ids"].add(oid)
-        if ts and (s["last_ts"] is None or ts > s["last_ts"]):
-            s["last_ts"] = ts
-
-    rows = []
-    for company_id, s in co_stats.items():
-        props = company_info.get(company_id, {})
-        name     = props.get("name") or f"Company {company_id}"
-        icp_rank = _normalize_icp_rank(props.get("icp_rank") or "")
-        owner_id = props.get("hubspot_owner_id") or (next(iter(s["owner_ids"]), ""))
-        owner    = owners.get(owner_id, {})
-        owner_name = owner.get("last_name") or owner.get("name") or owner_id
-        d, c = s["dials"], s["connects"]
-        rows.append({
-            "company_id":   company_id,
-            "company_name": name,
-            "icp_rank":     icp_rank,
-            "owner_id":     owner_id,
-            "owner_name":   owner_name,
-            "dials":        d,
-            "connects":     c,
-            "pct_connect":  _pct(c, d),
-            "last_call":    s["last_ts"].strftime("%-m/%-d") if s["last_ts"] else "—",
-        })
-
-    rows.sort(key=lambda r: (-r["dials"], _icp_sort_key(r["icp_rank"])))
-
-    total_dials    = sum(r["dials"]    for r in rows)
-    total_connects = sum(r["connects"] for r in rows)
-    totals = {
-        "companies_called": len(rows),
-        "dials":            total_dials,
-        "connects":         total_connects,
-        "pct_connect":      _pct(total_connects, total_dials),
-    }
-    return {"rows": rows, "totals": totals}
 
 
 @ttl_cache

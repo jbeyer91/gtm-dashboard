@@ -37,27 +37,29 @@ def _login_required(f):
 
 
 def _filter_rows_by_team(data: dict, team: str) -> dict:
-    """Filter rows to a specific team and recompute totals."""
+    """Filter per-rep rows to a specific team and recompute totals.
+
+    Note: aggregate sections (hourly_stats, outcome_dist) are computed
+    fleet-wide at cache time and are NOT re-filtered here. Those sections
+    are labelled "All reps" in the template when a team filter is active.
+    """
     if team == "all":
         return data
     from hubspot import get_owner_team_map
+    from analytics import _pct
     team_map = get_owner_team_map()
     rows = [r for r in data.get("rows", []) if team_map.get(r.get("owner_id")) == team]
     if not rows:
         totals = {k: (0 if isinstance(v, (int, float)) else v) for k, v in data.get("totals", {}).items()}
         return {**data, "rows": rows, "totals": totals}
-    from analytics import _pct
     total_dials    = sum(r["dials"]    for r in rows)
     total_connects = sum(r["connects"] for r in rows)
-    totals = {
+    return {**data, "rows": rows, "totals": {
         **data.get("totals", {}),
         "dials":       total_dials,
         "connects":    total_connects,
         "pct_connect": _pct(total_connects, total_dials),
-    }
-    if "companies_called" in data.get("totals", {}):
-        totals["companies_called"] = len(rows)
-    return {**data, "rows": rows, "totals": totals}
+    }}
 
 
 @bp.route("/calls/connect-analysis")
@@ -66,12 +68,11 @@ def calls_drilldown():
     period = request.args.get("period", "this_month")
     team   = request.args.get("team", "all")
 
-    # If neither analytics function has a cache entry (fresh deploy, never computed)
-    # return a loading page immediately rather than blocking the request thread for
-    # 30s on live HubSpot calls.  The scheduler will warm the cache in the background;
-    # the page auto-refreshes every 12 seconds until data is ready.
-    if not (is_cached(analytics.compute_connect_diagnostics, period) or
-            is_cached(analytics.compute_account_coverage, period)):
+    # Guard against cold cache: if compute_connect_diagnostics has no disk entry
+    # yet (fresh deploy), return the loading page immediately rather than blocking
+    # the request thread on a live HubSpot fetch.  The scheduler warms the cache
+    # in the background; the page auto-refreshes every 12 s until data is ready.
+    if not is_cached(analytics.compute_connect_diagnostics, period):
         from app import NAV
         return render_template(
             "calls_drilldown.html",
@@ -82,9 +83,7 @@ def calls_drilldown():
 
     try:
         diag = analytics.compute_connect_diagnostics(period)
-        cov  = analytics.compute_account_coverage(period)
         diag = _filter_rows_by_team(diag, team)
-        cov  = _filter_rows_by_team(cov, team)
     except Exception as e:
         log.exception("calls_drilldown error")
         from app import NAV
@@ -94,9 +93,9 @@ def calls_drilldown():
     return render_template(
         "calls_drilldown.html",
         diag=diag,
-        cov=cov,
         period=period,
         team=team,
+        teams_filtered=(team != "all"),
         periods=CALL_STATS_PERIODS,
         teams=TEAMS,
         nav=NAV,
