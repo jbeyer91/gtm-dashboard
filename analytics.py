@@ -398,12 +398,12 @@ def compute_connect_diagnostics(period: str) -> dict:
                      by_hour {h: dial_count}, target_dials
       totals       — {dials, connects, pct_connect} (all permitted reps)
       outcome_dist — {bucket_label: count} for four grouped display buckets
-      hourly_stats — [{hour, label, dials, connects, pct|None}] for ET hours 7–20
+      hourly_stats — [{hour, label, dials, connects, pct|None}] for CT hours 7–20
                      pct is None when dials < 5 (insufficient for a reliable rate)
       target_dials — dials goal for the period (period_bdays × 40)
     """
     from zoneinfo import ZoneInfo
-    ET = ZoneInfo("America/New_York")
+    ET = ZoneInfo("America/Chicago")
     DIALS_PER_DAY_GOAL = 40
     HOURLY_MIN = 5  # minimum dials before showing a connect rate
 
@@ -455,7 +455,7 @@ def compute_connect_diagnostics(period: str) -> dict:
         # Outcome bucket — empty disposition → "No answer" (no disposition recorded)
         outcome_raw[OUTCOME_BUCKET.get(disp, "No answer")] += 1
 
-        # ET hour — used for team hourly chart and per-rep heatmap
+        # CT hour — used for team hourly chart and per-rep heatmap
         ts_raw = (call["properties"].get("hs_timestamp")
                   or call["properties"].get("hs_createdate") or "")
         try:
