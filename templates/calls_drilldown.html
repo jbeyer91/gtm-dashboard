@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, team_filter, stat_card, fmt_pct, fmt_num %}
+{% from "macros.html" import period_filter, stat_card, fmt_pct, fmt_num %}
 {% block title %} — Connect Analysis{% endblock %}
 {% block content %}
 
@@ -11,8 +11,7 @@
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Dialing behavior & connect timing · {{ ns_pl.label }}</p>
 </div>
 
-{{ period_filter(period, periods, {"team": team}) }}
-{{ team_filter(team, teams, {"period": period}) }}
+{{ period_filter(period, periods) }}
 
 {% if loading is defined and loading %}
 {# ── Loading state — shown while scheduler warms the cache on first deploy ── #}
@@ -44,7 +43,6 @@
       <h2 class="text-base font-semibold text-gray-800">Dials &amp; Connect Rate by Hour</h2>
       <p class="text-xs text-gray-400 mt-0.5">
         Call timestamps in Central Time · connect rate hidden when &lt; 5 dials · hover for connects
-        {% if teams_filtered %}<span class="ml-2 font-medium text-violet-500">— all reps</span>{% endif %}
       </p>
     </div>
   </div>
@@ -255,10 +253,7 @@
 {% set total_dials = diag.totals.dials %}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
   <h2 class="text-base font-semibold text-gray-800 mb-1">Call Outcome Breakdown</h2>
-  <p class="text-xs text-gray-400 mb-4">
-    Grouped by outcome quality
-    {% if teams_filtered %}<span class="ml-1 font-medium text-violet-500">— all reps</span>{% endif %}
-  </p>
+  <p class="text-xs text-gray-400 mb-4">Grouped by outcome quality</p>
   {# Proportional fill bar across the top #}
   {% set bucket_cfg = [
     ("Positive connect", "bg-green-50",  "border-green-200",  "text-green-700",  "text-green-500",  "bg-green-400",  "Connected, Gatekeeper, Meeting Set, Call Back, Referral"),
