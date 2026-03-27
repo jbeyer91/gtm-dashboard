@@ -5,6 +5,7 @@ from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session
 
 import analytics
+from cache_utils import is_cached
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,21 @@ def _filter_rows_by_team(data: dict, team: str) -> dict:
 def calls_drilldown():
     period = request.args.get("period", "this_month")
     team   = request.args.get("team", "all")
+
+    # If neither analytics function has a cache entry (fresh deploy, never computed)
+    # return a loading page immediately rather than blocking the request thread for
+    # 30s on live HubSpot calls.  The scheduler will warm the cache in the background;
+    # the page auto-refreshes every 12 seconds until data is ready.
+    if not (is_cached(analytics.compute_connect_diagnostics, period) or
+            is_cached(analytics.compute_account_coverage, period)):
+        from app import NAV
+        return render_template(
+            "calls_drilldown.html",
+            loading=True, period=period, team=team,
+            periods=CALL_STATS_PERIODS, teams=TEAMS,
+            nav=NAV, active="calls_drilldown.calls_drilldown",
+        ), 202
+
     try:
         diag = analytics.compute_connect_diagnostics(period)
         cov  = analytics.compute_account_coverage(period)
