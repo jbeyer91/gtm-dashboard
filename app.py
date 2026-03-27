@@ -432,7 +432,12 @@ def scorecard():
 def call_stats():
     period = request.args.get("period", "this_week")
     team   = request.args.get("team", "all")
-    if not is_cached(analytics.compute_call_stats, period):
+    # Guard on this_month (warmed early in _VIEWS) rather than the selected period.
+    # this_week lives in CALL_STATS_EXTRA which runs after all ALL_PERIODS, so
+    # checking it directly would pin the loading screen for the entire sync cycle.
+    # Once this_month is cached the scheduler is operational; short-period requests
+    # (this_week, today) compute quickly from a fresh live fetch.
+    if not is_cached(analytics.compute_call_stats, "this_month"):
         return render_template("loading.html", nav=NAV, active="call_stats"), 202
     try:
         data = analytics.compute_call_stats(period)

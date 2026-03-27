@@ -28,11 +28,21 @@
 
 {% set t = diag.totals %}
 
+{# Compute best connect hour from hourly_stats for 4th KPI #}
+{% set ns_best = namespace(pct=-1, label="—") %}
+{% for slot in diag.hourly_stats %}
+  {% if slot.pct is not none and slot.pct > ns_best.pct %}
+    {% set ns_best.pct = slot.pct %}
+    {% set ns_best.label = slot.label %}
+  {% endif %}
+{% endfor %}
+
 {# ── 1. Summary cards ───────────────────────────────────────────────────────── #}
-<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Total Dials", "{:,}".format(t.dials)) }}
   {{ stat_card("Connects", "{:,}".format(t.connects)) }}
   {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), tip="% of outbound dials that reached a live person or gatekeeper.") }}
+  {{ stat_card("Best Connect Hour", ns_best.label, tip="Hour with highest connect rate (min. 5 dials). All reps combined, ET.") }}
 </div>
 
 {# ── 2. Hourly chart — dials, connects, connect rate (ET) ─────────────────── #}
@@ -40,9 +50,9 @@
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
   <div class="flex items-start justify-between mb-1">
     <div>
-      <h2 class="text-base font-semibold text-gray-800">Dials, Connects &amp; Connect Rate by Hour</h2>
+      <h2 class="text-base font-semibold text-gray-800">Dials &amp; Connect Rate by Hour</h2>
       <p class="text-xs text-gray-400 mt-0.5">
-        Call timestamps in ET (America/New_York) · connect rate hidden when &lt; 5 dials
+        Call timestamps in ET (America/New_York) · connect rate hidden when &lt; 5 dials · hover for connects
         {% if teams_filtered %}<span class="ml-2 font-medium text-violet-500">— all reps</span>{% endif %}
       </p>
     </div>
@@ -70,16 +80,6 @@
           yAxisID: 'y',
           backgroundColor: 'rgba(139, 92, 246, 0.55)',
           borderColor:     'rgba(139, 92, 246, 0.85)',
-          borderWidth: 1,
-          order: 2,
-        },
-        {
-          type: 'bar',
-          label: 'Connects',
-          data: connects,
-          yAxisID: 'y',
-          backgroundColor: 'rgba(16, 185, 129, 0.65)',
-          borderColor:     'rgba(16, 185, 129, 0.9)',
           borderWidth: 1,
           order: 1,
         },
@@ -112,8 +112,13 @@
         tooltip: {
           callbacks: {
             label: function(ctx) {
+              var i = ctx.dataIndex;
               if (ctx.dataset.label === 'Connect %') {
                 return ctx.parsed.y !== null ? ' Connect %: ' + ctx.parsed.y.toFixed(1) + '%' : ' Connect %: —';
+              }
+              if (ctx.dataset.label === 'Dials') {
+                var c = connects[i];
+                return ' Dials: ' + ctx.parsed.y + (c > 0 ? ' (' + c + ' connected)' : '');
               }
               return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y;
             },
@@ -166,7 +171,7 @@
   <div class="px-6 py-4 border-b border-gray-100">
     <h2 class="text-base font-semibold text-gray-800">Rep Dial Activity by Hour</h2>
     <p class="text-xs text-gray-400 mt-0.5">
-      Dials per hour (ET) · color intensity = volume · pacing vs 40 dials/day goal
+      Dials per hour (ET) · color intensity = volume · goal: 40 dials/day (business days)
     </p>
   </div>
   <div class="px-2 py-3 overflow-x-auto">
@@ -179,7 +184,7 @@
             {% if h < 12 %}{{ h }}a{% elif h == 12 %}12p{% else %}{{ h - 12 }}p{% endif %}
           </th>
           {% endfor %}
-          <th class="px-3 py-1.5 text-center text-gray-500 font-semibold min-w-[90px]">Total / Goal</th>
+          <th class="px-3 py-1.5 text-center text-gray-500 font-semibold min-w-[90px]">MTD Dials / Goal</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-50">
@@ -270,20 +275,33 @@
     Grouped by outcome quality
     {% if teams_filtered %}<span class="ml-1 font-medium text-violet-500">— all reps</span>{% endif %}
   </p>
+  {# Proportional fill bar across the top #}
+  {% set bucket_cfg = [
+    ("Positive connect", "bg-green-50",  "border-green-200",  "text-green-700",  "text-green-500",  "bg-green-400",  "Connected, Gatekeeper, Meeting Set, Call Back, Referral"),
+    ("Negative connect", "bg-red-50",    "border-red-200",    "text-red-700",    "text-red-400",    "bg-red-400",    "Not Interested, Poor Fit, Bad Timing, No Longer with Co., Wrong Contact, Bad Outcome"),
+    ("No answer",        "bg-yellow-50", "border-yellow-200", "text-yellow-700", "text-yellow-500", "bg-yellow-400", "No answer, Busy, Wrong number, No disposition"),
+    ("Voicemail",        "bg-blue-50",   "border-blue-200",   "text-blue-700",   "text-blue-400",   "bg-blue-400",   "Left voicemail, Left live message"),
+  ] %}
+  <div class="flex rounded-lg overflow-hidden h-2 mb-5">
+    {% for label, bg, border, tx, sub, bar, tip in bucket_cfg %}
+    {% set count = diag.outcome_dist.get(label, 0) %}
+    {% set pct = (count / total_dials * 100) if total_dials else 0 %}
+    <div class="{{ bar }}" style="width:{{ '%.2f'|format(pct) }}%" title="{{ label }}: {{ '%.1f'|format(pct) }}%"></div>
+    {% endfor %}
+  </div>
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-    {% set bucket_cfg = [
-      ("Positive connect", "bg-green-50",  "border-green-200",  "text-green-700",  "text-green-500",  "Connected, Gatekeeper, Meeting Set, Call Back, Referral"),
-      ("Negative connect", "bg-red-50",    "border-red-200",    "text-red-700",    "text-red-400",    "Not Interested, Poor Fit, Bad Timing, No Longer with Co., Wrong Contact, Bad Outcome"),
-      ("No answer",        "bg-yellow-50", "border-yellow-200", "text-yellow-700", "text-yellow-500", "No answer, Busy, Wrong number, No disposition"),
-      ("Voicemail",        "bg-blue-50",   "border-blue-200",   "text-blue-700",   "text-blue-400",   "Left voicemail, Left live message"),
-    ] %}
-    {% for label, bg, border, tx, sub, tip in bucket_cfg %}
+    {% for label, bg, border, tx, sub, bar, tip in bucket_cfg %}
     {% set count = diag.outcome_dist.get(label, 0) %}
     {% set pct = (count / total_dials * 100) if total_dials else 0 %}
     <div class="rounded-xl border {{ border }} {{ bg }} px-4 py-4 flex flex-col gap-1" title="{{ tip }}">
       <span class="text-xs font-semibold uppercase tracking-wider {{ sub }}">{{ label }}</span>
       <span class="text-2xl font-bold {{ tx }} tabular-nums">{{ "{:,}".format(count) }}</span>
-      <span class="text-xs {{ sub }} tabular-nums">{{ "%.1f"|format(pct) }}% of dials</span>
+      <div class="flex items-center gap-2 mt-0.5">
+        <div class="flex-1 h-1 rounded-full bg-gray-100 overflow-hidden">
+          <div class="{{ bar }} h-1 rounded-full" style="width:{{ '%.1f'|format(pct) }}%"></div>
+        </div>
+        <span class="text-xs {{ sub }} tabular-nums shrink-0">{{ "%.1f"|format(pct) }}%</span>
+      </div>
     </div>
     {% endfor %}
   </div>
