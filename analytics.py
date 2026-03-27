@@ -86,6 +86,71 @@ CALL_CONVERSATION_GUIDS = {
     "0513d3b2-f7e3-4ae5-81ca-be71e399499b",  # Answered - Wrong Contact
 }
 
+# ── ICP rank: HubSpot internal enum value → display label ────────────────────
+_ICP_INTERNAL_TO_LABEL: dict[str, str] = {
+    "superior":       "A+",
+    "strong":         "A",
+    "moderate":       "B",
+    "conservative":   "C",
+    "least_priority": "D",
+    "suppress":       "Suppress",
+}
+
+# ── Disposition GUIDs → human-readable label (module-level for reuse) ────────
+DISPOSITION_LABELS: dict[str, str] = {
+    "f240bbac-87c9-4f6e-bf70-924b57d47db7": "Connected",
+    "bf63f95f-8fa4-4a42-b918-0a8e5ee4ba3e": "Gatekeeper",
+    "ee078117-c361-4e51-84af-4cfd534fd878": "Answered - Bad Timing",
+    "ff4c1e61-46ad-4100-9676-b5d4a0c4f52b": "Answered - Call Back",
+    "b43b9c27-ecc9-461f-8b4b-6d2c00ae6f0d": "Answered - Meeting Set",
+    "c6ab5404-53ca-4f44-938d-d4400b589b74": "Answered - Not Interested",
+    "293301fd-5a90-47e9-90a9-b87d59f27cc5": "Answered - No Longer with Co.",
+    "a8810b96-f812-4d60-800c-9b0beefa8941": "Answered - Poor Fit",
+    "314680f7-ba23-4153-b297-1e3bd1453951": "Answered - Referral",
+    "0513d3b2-f7e3-4ae5-81ca-be71e399499b": "Answered - Wrong Contact",
+    "a4c4c377-d246-4b32-a13b-75a56a4cd0ff": "Left live message",
+    "0f54a15c-1cb7-458a-8a2a-5a0e97cd7c13": "Bad Outcome",
+    "9d9162e7-6cf3-4944-bf63-4dff82258764": "Busy",
+    "b2cf5968-551e-4856-9783-52b3da59a7d0": "Left voicemail",
+    "73a0d17f-1163-4015-bdd5-ec830791da20": "No answer",
+    "899b0622-cdd2-4c55-8461-1c738dab0b69": "No answer - Poor Fit",
+    "17b47fee-58de-441e-a44c-c6300d46f273": "Wrong number",
+}
+
+# ── Outcome buckets for 4-card distribution display ──────────────────────────
+# Each GUID maps to one of four display buckets.
+OUTCOME_BUCKET: dict[str, str] = {
+    "f240bbac-87c9-4f6e-bf70-924b57d47db7": "Connected",        # Connected
+    "ee078117-c361-4e51-84af-4cfd534fd878": "Connected",        # Answered - Bad Timing
+    "ff4c1e61-46ad-4100-9676-b5d4a0c4f52b": "Connected",        # Answered - Call Back
+    "b43b9c27-ecc9-461f-8b4b-6d2c00ae6f0d": "Connected",        # Answered - Meeting Set
+    "c6ab5404-53ca-4f44-938d-d4400b589b74": "Connected",        # Answered - Not Interested
+    "293301fd-5a90-47e9-90a9-b87d59f27cc5": "Connected",        # Answered - No Longer with Co.
+    "a8810b96-f812-4d60-800c-9b0beefa8941": "Connected",        # Answered - Poor Fit
+    "314680f7-ba23-4153-b297-1e3bd1453951": "Connected",        # Answered - Referral
+    "0513d3b2-f7e3-4ae5-81ca-be71e399499b": "Connected",        # Answered - Wrong Contact
+    "bf63f95f-8fa4-4a42-b918-0a8e5ee4ba3e": "Connected",        # Gatekeeper
+    "a4c4c377-d246-4b32-a13b-75a56a4cd0ff": "Voicemail",        # Left live message
+    "b2cf5968-551e-4856-9783-52b3da59a7d0": "Voicemail",        # Left voicemail
+    "9d9162e7-6cf3-4944-bf63-4dff82258764": "No Answer",        # Busy
+    "73a0d17f-1163-4015-bdd5-ec830791da20": "No Answer",        # No answer
+    "899b0622-cdd2-4c55-8461-1c738dab0b69": "No Answer",        # No answer - Poor Fit
+    "17b47fee-58de-441e-a44c-c6300d46f273": "No Answer",        # Wrong number
+    "0f54a15c-1cb7-458a-8a2a-5a0e97cd7c13": "Other",            # Bad Outcome
+}
+_OUTCOME_BUCKET_ORDER = ["Connected", "Voicemail", "No Answer", "Other"]
+
+# ── Line type buckets: raw cop_line_type → display label ─────────────────────
+_LINE_TYPE_BUCKETS: dict[str, str] = {
+    "mobile":               "Mobile",
+    "personal_number":      "Mobile",
+    "fixed_line":           "Landline",
+    "fixed_line_or_mobile": "Landline",
+    "toll_free":            "Toll-Free",
+    "voip":                 "VoIP",
+    "unknown":              "Unknown",
+}
+
 
 def _letter_grade(score: float) -> str:
     # Scale allows >100 when quota is overachieved (quota score capped at 150)
@@ -286,7 +351,7 @@ def compute_call_stats(period: str) -> dict:
 
 
 # ── ICP rank sort order (unknown/blank sorts last) ───────────────────────────
-_ICP_ORDER = ["A", "B", "C", "D"]
+_ICP_ORDER = ["A+", "A", "B", "C", "D", "Suppress"]
 
 
 def _icp_sort_key(rank: str) -> tuple:
@@ -296,19 +361,45 @@ def _icp_sort_key(rank: str) -> tuple:
         return (1, rank)
 
 
+def _normalize_icp_rank(raw: str) -> str:
+    """Map HubSpot internal icp_rank enum value to display label."""
+    v = (raw or "").strip().lower()
+    return _ICP_INTERNAL_TO_LABEL.get(v) or (raw.strip() if raw and raw.strip() else "—")
+
+
+def _normalize_line_type(raw: str) -> str:
+    """Map raw cop_line_type value to a display bucket label."""
+    v = (raw or "").strip().lower()
+    return _LINE_TYPE_BUCKETS.get(v, "Unknown")
+
+
+def _hour_label(h: int) -> str:
+    """Convert 0-23 hour to a short AM/PM label, e.g. 9 → '9 AM', 13 → '1 PM'."""
+    if h == 0:
+        return "12 AM"
+    if h < 12:
+        return f"{h} AM"
+    if h == 12:
+        return "12 PM"
+    return f"{h - 12} PM"
+
+
 @ttl_cache
 def compute_connect_diagnostics(period: str) -> dict:
     """Per-rep connect diagnostics broken down by line type and ICP rank.
 
     Returns:
-      rows        — per-rep summary list, sorted by dials desc
-      totals      — aggregate totals
-      heatmap     — nested dict [icp_rank][line_type] = {dials, connects, pct|None}
-                    pct is None when dials < HEATMAP_MIN (no color)
-      icp_ranks   — ordered list of ICP ranks present in data
-      line_types  — sorted list of line types present in data
-      outcome_dist — {outcome_label: count} for the disposition breakdown donut
+      rows         — per-rep summary list, sorted by dials desc
+      totals       — aggregate totals
+      heatmap      — nested dict [icp_rank][line_type] = {dials, connects, pct|None}
+                     pct is None when dials < HEATMAP_MIN (no color)
+      icp_ranks    — ordered list of ICP ranks present in data
+      line_types   — sorted list of line types present in data
+      outcome_dist — {bucket: count} for four outcome buckets
+      hourly_stats — list of {hour, label, dials, connects, pct|None} in ET (7–20)
     """
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
     HEATMAP_MIN = 5
     start, end = get_date_range(period)
     owners = get_owners()
@@ -325,9 +416,15 @@ def compute_connect_diagnostics(period: str) -> dict:
         filtered.append(call)
 
     if not filtered:
+        hourly_empty = [
+            {"hour": h, "label": _hour_label(h), "dials": 0, "connects": 0, "pct": None}
+            for h in range(7, 21)
+        ]
         return {
             "rows": [], "totals": {"dials": 0, "connects": 0, "pct_connect": 0.0},
-            "heatmap": {}, "icp_ranks": [], "line_types": [], "outcome_dist": {},
+            "heatmap": {}, "icp_ranks": [], "line_types": [],
+            "outcome_dist": {b: 0 for b in _OUTCOME_BUCKET_ORDER},
+            "hourly_stats": hourly_empty,
         }
 
     # Accumulators
@@ -337,34 +434,15 @@ def compute_connect_diagnostics(period: str) -> dict:
         "icp": defaultdict(lambda: {"dials": 0, "connects": 0}),
     })
     heatmap_raw: dict = defaultdict(lambda: {"dials": 0, "connects": 0})
-    outcome_raw: dict = defaultdict(int)
-
-    DISPOSITION_LABELS = {
-        "f240bbac-87c9-4f6e-bf70-924b57d47db7": "Connected",
-        "bf63f95f-8fa4-4a42-b918-0a8e5ee4ba3e": "Gatekeeper",
-        "ee078117-c361-4e51-84af-4cfd534fd878": "Answered - Bad Timing",
-        "ff4c1e61-46ad-4100-9676-b5d4a0c4f52b": "Answered - Call Back",
-        "b43b9c27-ecc9-461f-8b4b-6d2c00ae6f0d": "Answered - Meeting Set",
-        "c6ab5404-53ca-4f44-938d-d4400b589b74": "Answered - Not Interested",
-        "293301fd-5a90-47e9-90a9-b87d59f27cc5": "Answered - No Longer with Co.",
-        "a8810b96-f812-4d60-800c-9b0beefa8941": "Answered - Poor Fit",
-        "314680f7-ba23-4153-b297-1e3bd1453951": "Answered - Referral",
-        "0513d3b2-f7e3-4ae5-81ca-be71e399499b": "Answered - Wrong Contact",
-        "a4c4c377-d246-4b32-a13b-75a56a4cd0ff": "Left live message",
-        "0f54a15c-1cb7-458a-8a2a-5a0e97cd7c13": "Bad Outcome",
-        "9d9162e7-6cf3-4944-bf63-4dff82258764": "Busy",
-        "b2cf5968-551e-4856-9783-52b3da59a7d0": "Left voicemail",
-        "73a0d17f-1163-4015-bdd5-ec830791da20": "No answer",
-        "899b0622-cdd2-4c55-8461-1c738dab0b69": "No answer - Poor Fit",
-        "17b47fee-58de-441e-a44c-c6300d46f273": "Wrong number",
-    }
+    outcome_buckets: dict = defaultdict(int)
+    hourly_raw: dict = defaultdict(lambda: {"dials": 0, "connects": 0})
 
     for call in filtered:
-        oid = call["properties"].get("hubspot_owner_id", "")
+        oid  = call["properties"].get("hubspot_owner_id", "")
         disp = (call["properties"].get("hs_call_disposition") or "").strip()
         is_connect = disp in CALL_CONNECTED_GUIDS
-        line_type = call["_line_type"] or "Unknown"
-        icp_rank  = call["_icp_rank"] or "—"
+        line_type  = _normalize_line_type(call.get("_line_type") or "")
+        icp_rank   = _normalize_icp_rank(call.get("_icp_rank") or "")
 
         s = owner_stats[oid]
         s["dials"] += 1
@@ -379,8 +457,21 @@ def compute_connect_diagnostics(period: str) -> dict:
         if is_connect:
             heatmap_raw[(icp_rank, line_type)]["connects"] += 1
 
-        label = DISPOSITION_LABELS.get(disp, "No disposition" if not disp else "Other")
-        outcome_raw[label] += 1
+        bucket = OUTCOME_BUCKET.get(disp, "Other") if disp else "Other"
+        outcome_buckets[bucket] += 1
+
+        # Hourly bucketing — convert UTC call timestamp to ET
+        ts_raw = (call["properties"].get("hs_timestamp")
+                  or call["properties"].get("hs_createdate") or "")
+        try:
+            ts_utc = _parse_hs_datetime(ts_raw)
+            hour_et = ts_utc.astimezone(ET).hour
+        except (ValueError, AttributeError):
+            hour_et = None
+        if hour_et is not None:
+            hourly_raw[hour_et]["dials"] += 1
+            if is_connect:
+                hourly_raw[hour_et]["connects"] += 1
 
     # Build per-rep rows
     rows = []
@@ -435,12 +526,21 @@ def compute_connect_diagnostics(period: str) -> dict:
             "pct":      _pct(c, d) if d >= HEATMAP_MIN else None,
         }
 
-    # Outcome distribution — sort connected first, then by count desc
-    def _outcome_key(item):
-        guid_for_label = {v: k for k, v in DISPOSITION_LABELS.items()}
-        is_conn = guid_for_label.get(item[0], "") in CALL_CONNECTED_GUIDS
-        return (0 if is_conn else 1, -item[1])
-    outcome_dist = dict(sorted(outcome_raw.items(), key=_outcome_key))
+    # Outcome distribution — four fixed buckets in display order
+    outcome_dist = {b: outcome_buckets.get(b, 0) for b in _OUTCOME_BUCKET_ORDER}
+
+    # Hourly stats for ET business hours (7 AM – 8 PM)
+    hourly_stats = []
+    for h in range(7, 21):
+        v = hourly_raw.get(h, {"dials": 0, "connects": 0})
+        d, c = v["dials"], v["connects"]
+        hourly_stats.append({
+            "hour":     h,
+            "label":    _hour_label(h),
+            "dials":    d,
+            "connects": c,
+            "pct":      _pct(c, d) if d >= HEATMAP_MIN else None,
+        })
 
     return {
         "rows": rows,
@@ -449,6 +549,7 @@ def compute_connect_diagnostics(period: str) -> dict:
         "icp_ranks": all_icp,
         "line_types": all_lt,
         "outcome_dist": outcome_dist,
+        "hourly_stats": hourly_stats,
     }
 
 
@@ -518,7 +619,7 @@ def compute_account_coverage(period: str) -> dict:
     for company_id, s in co_stats.items():
         props = company_info.get(company_id, {})
         name     = props.get("name") or f"Company {company_id}"
-        icp_rank = (props.get("icp_rank") or "—").strip()
+        icp_rank = _normalize_icp_rank(props.get("icp_rank") or "")
         owner_id = props.get("hubspot_owner_id") or (next(iter(s["owner_ids"]), ""))
         owner    = owners.get(owner_id, {})
         owner_name = owner.get("last_name") or owner.get("name") or owner_id
