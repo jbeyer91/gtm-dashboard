@@ -42,7 +42,7 @@
   {{ stat_card("Total Dials", "{:,}".format(t.dials)) }}
   {{ stat_card("Connects", "{:,}".format(t.connects)) }}
   {{ stat_card("Connect Rate", fmt_pct(t.pct_connect), tip="% of outbound dials that reached a live person or gatekeeper.") }}
-  {{ stat_card("Best Connect Hour", ns_best.label, tip="Hour with highest connect rate (min. 5 dials). All reps combined, ET.") }}
+  {{ stat_card("Best Connect Hour", ns_best.label, tip="Hour with highest connect rate (min. 5 dials). All reps combined, Central Time.") }}
 </div>
 
 {# ── 2. Hourly chart — dials, connects, connect rate (ET) ─────────────────── #}
@@ -52,7 +52,7 @@
     <div>
       <h2 class="text-base font-semibold text-gray-800">Dials &amp; Connect Rate by Hour</h2>
       <p class="text-xs text-gray-400 mt-0.5">
-        Call timestamps in ET (America/New_York) · connect rate hidden when &lt; 5 dials · hover for connects
+        Call timestamps in Central Time · connect rate hidden when &lt; 5 dials · hover for connects
         {% if teams_filtered %}<span class="ml-2 font-medium text-violet-500">— all reps</span>{% endif %}
       </p>
     </div>
@@ -171,7 +171,7 @@
   <div class="px-6 py-4 border-b border-gray-100">
     <h2 class="text-base font-semibold text-gray-800">Rep Dial Activity by Hour</h2>
     <p class="text-xs text-gray-400 mt-0.5">
-      Dials per hour (ET) · color intensity = volume · goal: 40 dials/day (business days)
+      Dials per hour (CT) · color intensity = volume · goal: 40 dials/day (business days)
     </p>
   </div>
   <div class="px-2 py-3 overflow-x-auto">

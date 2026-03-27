@@ -202,7 +202,7 @@ def get_owner_team_map() -> dict:
 
 def get_date_range(period: str):
     from zoneinfo import ZoneInfo
-    ET = ZoneInfo("America/New_York")
+    ET = ZoneInfo("America/Chicago")
     now = datetime.now(timezone.utc)
     now_et = now.astimezone(ET)
     if period == "this_month":
