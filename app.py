@@ -327,12 +327,23 @@ def home():
                                 for k, v in data["team"].items()}
         t      = data["team"]
         n_reps = len(data["rows"])   # reflects filtered team for deals_target
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="home")
 
+    home_metrics_warming = False
+    win_rate = None
+    acv = None
+    try:
         won_data = analytics.compute_deals_won("this_month")
         won_data = _filter_by_team(won_data, team)
         wt = won_data["totals"]
-    except Exception as e:
-        return render_template("error.html", message=str(e), nav=NAV, active="home")
+        win_rate = wt["win_rate"]
+        acv = wt["acv"]
+    except Exception:
+        # Deals-won data is secondary on the landing page. If HubSpot is slow
+        # or rate-limiting, render Home with scorecard data and let these KPIs
+        # fill in on a later request.
+        home_metrics_warming = True
 
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
 
@@ -357,7 +368,7 @@ def home():
     return render_template("home.html", data=data, t=t, month_label=month_label,
                            pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            n_reps=n_reps, team=team, teams=TEAMS,
-                           win_rate=wt["win_rate"], acv=wt["acv"],
+                           win_rate=win_rate, acv=acv, home_metrics_warming=home_metrics_warming,
                            active="home", nav=NAV)
 
 
