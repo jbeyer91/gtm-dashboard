@@ -119,7 +119,7 @@
       </div>
       <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
         <p class="text-gray-400 font-medium">Connect Rate</p>
-        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(tm.score_connect_rate or tm.connect_rate) }}</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(tm.connect_rate) }}</p>
       </div>
       <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
         <p class="text-gray-400 font-medium">Deals Created</p>
@@ -282,7 +282,7 @@
               </div>
               <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
                 <p class="text-gray-400 font-medium">Connect Rate</p>
-                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(rm.score_connect_rate or rm.connect_rate) }}</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(rm.connect_rate) }}</p>
               </div>
               <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
                 <p class="text-gray-400 font-medium">Deals Created</p>
@@ -329,7 +329,7 @@
                         <div><span class="text-gray-400">Won</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.won_amt) }}</p></div>
                         <div><span class="text-gray-400">Dials</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_num(hm.dials) }}</p></div>
                         <div><span class="text-gray-400">Avg Dials / Day</span><p class="font-semibold tabular-nums text-gray-700">{{ hist.meta.avg_dials_day }}</p></div>
-                        <div><span class="text-gray-400">Connect Rate</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_pct(hm.score_connect_rate or hm.connect_rate) }}</p></div>
+                        <div><span class="text-gray-400">Connect Rate</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_pct(hm.connect_rate) }}</p></div>
                         <div><span class="text-gray-400">Deals Created</span><p class="font-semibold tabular-nums text-gray-700">{{ hm.score_deals_created or hm.adv_created }}</p></div>
                         <div><span class="text-gray-400">$ Advanced to S2</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.score_s2_amt or 0) }}</p></div>
                         <div><span class="text-gray-400">Stale Accounts</span><p class="font-semibold tabular-nums text-gray-700">{{ hm.score_stale_count or 0 }}</p></div>
