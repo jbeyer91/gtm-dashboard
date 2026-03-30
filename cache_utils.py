@@ -216,6 +216,29 @@ def is_cached(func, *args, **kwargs) -> bool:
     return _read_disk(key) is not None
 
 
+def get_cached(func, *args, **kwargs):
+    """Return a cached value for func(*args), or None without computing live.
+
+    This is stricter than calling the wrapped function directly: it only reads
+    memory or disk cache and never falls through to a live HubSpot-backed
+    computation in the request path.
+    """
+    key = (func.__name__,) + tuple(_to_hashable(a) for a in args) + tuple(
+        (k, _to_hashable(v)) for k, v in sorted(kwargs.items())
+    )
+    now = time.time()
+    if key in _store:
+        result, expires_at = _store[key]
+        if expires_at > now:
+            return result
+    disk = _read_disk(key)
+    if disk is None:
+        return None
+    result, expires_at = disk
+    _store[key] = (result, expires_at)
+    return result
+
+
 # ── Cache management ──────────────────────────────────────────────────────────
 
 def clear_cache() -> None:
