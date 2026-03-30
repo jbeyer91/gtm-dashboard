@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, team_filter, source_filter, stat_card, fmt_pct, fmt_money, csv_link %}
+{% from "macros.html" import period_filter, team_filter, source_filter, stat_card, fmt_pct, fmt_money, csv_link, grade_badge, why_list, next_focus_list %}
 {% block title %} — Deals Won{% endblock %}
 {% block content %}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
@@ -11,6 +11,49 @@
 {{ team_filter(team, teams, {"period": period, "source": source}) }}
 {{ source_filter(source, sources, period, {"team": team}) }}
 {{ csv_link(url_for('deals_won_csv') ~ '?period=' ~ period ~ '&source=' ~ source ~ '&team=' ~ team) }}
+
+{% set _mn = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] %}
+
+{% if team_summary %}
+{% set ts = team_summary %}
+{% set tm = ts.metrics %}
+<details open class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 group">
+  <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none list-none rounded-2xl hover:bg-gray-50/60 transition-colors duration-100">
+    <div class="flex items-center gap-3 min-w-0">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span class="text-xs font-semibold text-gray-500 uppercase tracking-widest whitespace-nowrap">Team · Monthly Snapshot</span>
+      <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap">{{ _mn[ts.month - 1] ~ " " ~ ts.year }}</span>
+    </div>
+    <div class="flex items-center gap-3 ml-4 shrink-0">
+      {{ grade_badge(ts.final_grade) }}
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-400 transition-transform duration-150 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  </summary>
+  <div class="flex flex-wrap gap-x-6 gap-y-2 px-5 py-3 bg-gray-50/70 border-t border-b border-gray-100 text-xs">
+    {% if tm.quota_amt %}
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Won</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(tm.won_amt) }}</span></div>
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Quota</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(tm.quota_amt) }}</span></div>
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Attain</span><span class="font-semibold tabular-nums {% if tm.attain_pct is not none and tm.attain_pct >= 100 %}text-green-600{% elif tm.attain_pct is not none and tm.attain_pct >= 75 %}text-yellow-600{% elif tm.attain_pct is not none %}text-red-500{% else %}text-gray-400{% endif %}">{% if tm.attain_pct is not none %}{{ fmt_pct(tm.attain_pct) }}{% else %}—{% endif %}</span></div>
+    {% else %}
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Won</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(tm.won_amt) }}</span></div>
+    {% endif %}
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Win Rate</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(tm.win_rate) }}</span></div>
+    <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Deals Won</span><span class="font-semibold tabular-nums text-gray-800">{{ tm.won_n }}</span></div>
+    {% if tm.dials %}<div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Dials</span><span class="font-semibold tabular-nums text-gray-800">{{ "{:,}".format(tm.dials|int) }}</span></div>{% endif %}
+    {% set new_deals = (tm.pg_cold_n or 0) + (tm.pg_inbound_n or 0) %}
+    {% if new_deals %}<div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">New Deals</span><span class="font-semibold tabular-nums text-gray-800">{{ new_deals }}</span></div>{% endif %}
+  </div>
+  <div class="px-5 py-5 space-y-5">
+    <p class="text-sm font-semibold text-gray-800 leading-snug">{{ ts.main_takeaway }}</p>
+    {{ why_list(ts.why) }}
+    {{ next_focus_list(ts.next_focus) }}
+  </div>
+</details>
+{% endif %}
 
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
@@ -65,8 +108,23 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
-        <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
+      {% set rd = rep_data.get(row.owner_id) %}
+      {% set rs = rd.summary if rd else none %}
+      <tr id="row-{{ row.owner_id }}" data-rep-row="{{ row.owner_id }}"
+          {% if rs %}onclick="toggleRepPanel('{{ row.owner_id }}')"{% endif %}
+          class="hover:bg-blue-50/60 transition-colors duration-100 {% if rs %}cursor-pointer select-none{% endif %}">
+        <td class="px-4 py-3 font-medium">
+          <div class="flex items-center justify-between gap-2">
+            <span>{{ row.ae }}</span>
+            {% if rs %}
+            <svg id="chev-{{ row.owner_id }}" xmlns="http://www.w3.org/2000/svg"
+                 class="w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform duration-150"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+            {% endif %}
+          </div>
+        </td>
         {% if source == "Cold outreach" %}
         <td class="px-3 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.cold_amt) }}</td>
         <td class="px-3 py-3 text-right tabular-nums">{{ row.cold_n }}</td>
@@ -107,6 +165,87 @@
         </td>
         {% endif %}
       </tr>
+      {% if rs %}
+      {% set rm = rs.metrics %}
+      {% set snap_label = _mn[rs.month - 1] ~ " " ~ rs.year %}
+      <tr id="panel-{{ row.owner_id }}" class="hidden" data-rep-panel="{{ row.owner_id }}">
+        <td colspan="20" class="p-0">
+          <div class="bg-gray-50/60 border-t border-gray-100 px-5 py-4">
+            <!-- Panel header -->
+            <div class="flex items-center gap-3 mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-widest">{{ rs.entity_label }} · Monthly Snapshot</span>
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{{ snap_label }}</span>
+              {{ grade_badge(rs.final_grade) }}
+            </div>
+            <!-- Metrics strip -->
+            <div class="flex flex-wrap gap-x-6 gap-y-2 py-2.5 border-t border-b border-gray-200 text-xs mb-4">
+              {% if rm.quota_amt %}
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Won</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(rm.won_amt) }}</span></div>
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Quota</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(rm.quota_amt) }}</span></div>
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Attain</span><span class="font-semibold tabular-nums {% if rm.attain_pct is not none and rm.attain_pct >= 100 %}text-green-600{% elif rm.attain_pct is not none and rm.attain_pct >= 75 %}text-yellow-600{% elif rm.attain_pct is not none %}text-red-500{% else %}text-gray-400{% endif %}">{% if rm.attain_pct is not none %}{{ fmt_pct(rm.attain_pct) }}{% else %}—{% endif %}</span></div>
+              {% else %}
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Won</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_money(rm.won_amt) }}</span></div>
+              {% endif %}
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Win Rate</span><span class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(rm.win_rate) }}</span></div>
+              <div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Deals Won</span><span class="font-semibold tabular-nums text-gray-800">{{ rm.won_n }}</span></div>
+              {% if rm.dials %}<div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">Dials</span><span class="font-semibold tabular-nums text-gray-800">{{ "{:,}".format(rm.dials|int) }}</span></div>{% endif %}
+              {% set new_deals = (rm.pg_cold_n or 0) + (rm.pg_inbound_n or 0) %}
+              {% if new_deals %}<div class="flex items-center gap-1.5"><span class="text-gray-400 font-medium">New Deals</span><span class="font-semibold tabular-nums text-gray-800">{{ new_deals }}</span></div>{% endif %}
+            </div>
+            <!-- Summary -->
+            <div class="space-y-4">
+              <p class="text-sm font-semibold text-gray-800 leading-snug">{{ rs.main_takeaway }}</p>
+              {{ why_list(rs.why) }}
+              {{ next_focus_list(rs.next_focus) }}
+              {% if rd.prior_months %}
+              <details class="mt-1 group/hist">
+                <summary class="text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer select-none list-none hover:text-gray-600 transition-colors duration-100 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-150 group-open/hist:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                  History · {{ rd.prior_months | length }} prior {{ "month" if rd.prior_months | length == 1 else "months" }}
+                </summary>
+                <div class="mt-3 space-y-1 pl-1">
+                  {% for hist in rd.prior_months %}
+                  {% set hm = hist.metrics %}
+                  {% set hist_label = _mn[hist.month - 1] ~ " " ~ hist.year %}
+                  <details class="group/hentry border border-gray-100 rounded-lg overflow-hidden">
+                    <summary class="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer select-none list-none bg-white hover:bg-gray-50/80 transition-colors duration-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-300 shrink-0 transition-transform duration-150 group-open/hentry:rotate-90 group-open/hentry:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                      <span class="text-xs font-semibold text-gray-500 shrink-0">{{ hist_label }}</span>
+                      {{ grade_badge(hist.final_grade, "text-xs px-1.5 py-px rounded shrink-0") }}
+                      <span class="text-xs text-gray-400 truncate min-w-0">{{ hist.main_takeaway }}</span>
+                    </summary>
+                    <div class="px-4 py-3 border-t border-gray-100 bg-white space-y-3">
+                      {% if hm %}
+                      <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                        {% if hm.quota_amt %}
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Won</span><span class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.won_amt) }}</span></div>
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Quota</span><span class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.quota_amt) }}</span></div>
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Attain</span><span class="font-semibold tabular-nums {% if hm.attain_pct is not none and hm.attain_pct >= 100 %}text-green-600{% elif hm.attain_pct is not none and hm.attain_pct >= 75 %}text-yellow-600{% elif hm.attain_pct is not none %}text-red-500{% else %}text-gray-400{% endif %}">{% if hm.attain_pct is not none %}{{ fmt_pct(hm.attain_pct) }}{% else %}—{% endif %}</span></div>
+                        {% else %}
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Won</span><span class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.won_amt) }}</span></div>
+                        {% endif %}
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Win Rate</span><span class="font-semibold tabular-nums text-gray-700">{{ fmt_pct(hm.win_rate) }}</span></div>
+                        <div class="flex items-center gap-1"><span class="text-gray-400">Deals</span><span class="font-semibold tabular-nums text-gray-700">{{ hm.won_n }}</span></div>
+                        {% if hm.dials %}<div class="flex items-center gap-1"><span class="text-gray-400">Dials</span><span class="font-semibold tabular-nums text-gray-700">{{ "{:,}".format(hm.dials|int) }}</span></div>{% endif %}
+                      </div>
+                      {% endif %}
+                      <p class="text-sm font-semibold text-gray-800 leading-snug">{{ hist.main_takeaway }}</p>
+                      {{ why_list(hist.why, "space-y-2", "mt-1 space-y-0.5") }}
+                      {{ next_focus_list(hist.next_focus, "space-y-1") }}
+                    </div>
+                  </details>
+                  {% endfor %}
+                </div>
+              </details>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
     <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
@@ -154,4 +293,27 @@
     </tfoot>
   </table>
 </div>
+<script>
+function toggleRepPanel(ownerId) {
+  const allPanels = document.querySelectorAll("[data-rep-panel]");
+  const allRows = document.querySelectorAll("[data-rep-row]");
+  const panel = document.getElementById("panel-" + ownerId);
+  const chev = document.getElementById("chev-" + ownerId);
+  const isOpen = !panel.classList.contains("hidden");
+
+  allPanels.forEach((p) => p.classList.add("hidden"));
+  allRows.forEach((r) => r.classList.remove("bg-blue-50/80"));
+  document.querySelectorAll('[id^="chev-"]').forEach((c) => {
+    c.classList.remove("rotate-180", "text-blue-400");
+    c.classList.add("text-gray-300");
+  });
+
+  if (!isOpen) {
+    panel.classList.remove("hidden");
+    document.getElementById("row-" + ownerId).classList.add("bg-blue-50/80");
+    chev.classList.add("rotate-180", "text-blue-400");
+    chev.classList.remove("text-gray-300");
+  }
+}
+</script>
 {% endblock %}

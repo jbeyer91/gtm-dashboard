@@ -80,3 +80,58 @@
 {% macro fmt_pct(v) %}{{ "%.1f"|format(v) }}%{% endmacro %}
 {% macro fmt_money(v) %}${{ "{:,.0f}".format(v) }}{% endmacro %}
 {% macro fmt_num(v) %}{{ "{:,}".format(v|int) }}{% endmacro %}
+
+{% macro grade_badge(grade, size_class="text-sm px-2.5 py-0.5 rounded-lg") %}
+{% if grade %}
+<span class="{{ size_class }} font-bold border
+  {%- if grade == 'A' %} bg-green-50 text-green-700 border-green-200
+  {%- elif grade == 'B+' %} bg-blue-50 text-blue-700 border-blue-200
+  {%- elif grade == 'B' %} bg-yellow-50 text-yellow-700 border-yellow-200
+  {%- elif grade in ['C+', 'C'] %} bg-orange-50 text-orange-700 border-orange-200
+  {%- else %} bg-red-50 text-red-600 border-red-200{%- endif %}">{{ grade }}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro why_list(items, ol_class="space-y-2.5", ul_class="mt-1.5 space-y-1") %}
+{% if items %}
+<div>
+  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Why</p>
+  <ol class="{{ ol_class }}">
+    {% for reason in items %}
+    {% set parts = reason.split('\n') %}
+    <li class="text-sm text-gray-700 leading-relaxed">
+      {{ parts[0] }}
+      {% if parts | length > 1 %}
+      <ul class="{{ ul_class }} pl-3 border-l-2 border-gray-100">
+        {% for sub in parts[1:] %}
+        {% if sub.strip() %}
+        <li class="text-xs text-gray-500 leading-relaxed">
+          {%- set sub_clean = sub.strip() -%}
+          {{- sub_clean[2:] if sub_clean[:2] == '- ' else sub_clean -}}
+        </li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro next_focus_list(items, ul_class="space-y-1.5") %}
+{% if items %}
+<div>
+  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Next Focus</p>
+  <ul class="{{ ul_class }}">
+    {% for item in items %}
+    <li class="flex gap-2 text-sm text-gray-700 leading-relaxed">
+      <span class="text-blue-400 mt-0.5 shrink-0">›</span>
+      <span>{{ item }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endmacro %}
