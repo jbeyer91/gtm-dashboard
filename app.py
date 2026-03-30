@@ -563,10 +563,27 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
+    import summary_engine
+    import monthly_store
+    team_summary = summary_engine.get_or_generate_team_summary()
+    rep_data = {}
+    for row in data["rows"]:
+        oid = row["owner_id"]
+        rec = summary_engine.get_or_generate_rep_summary(oid)
+        history = monthly_store.get_rep_history(oid)
+        rep_data[oid] = {
+            "summary": rec,
+            # history is newest-first. When rec is not None, history[0] is the
+            # current month and history[1:] are older. When rec is None (generation
+            # failed), history[1:] may still contain older records — the panel is
+            # hidden because rs is falsy, so no data is lost visually.
+            "prior_months": history[1:],
+        }
     return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
+                           team_summary=team_summary, rep_data=rep_data,
                            nav=NAV, active="deals_won")
 
 
@@ -1285,6 +1302,84 @@ def abm_deal_backfill_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=abm-deal-backfill.csv"},
     )
+
+
+# ── Monthly summary routes ────────────────────────────────────────────────────
+
+@app.route("/api/monthly-summary/team")
+@login_required
+def monthly_summary_team():
+    import summary_engine
+    rec = summary_engine.get_or_generate_team_summary()
+    if rec is None:
+        return ("", 204)
+    return jsonify(rec)
+
+
+@app.route("/api/monthly-summary/rep/<owner_id>")
+@login_required
+def monthly_summary_rep(owner_id):
+    import summary_engine
+    rec = summary_engine.get_or_generate_rep_summary(owner_id)
+    if rec is None:
+        return ("", 204)
+    return jsonify(rec)
+
+
+@app.route("/api/monthly-summary/rep/<owner_id>/history")
+@login_required
+def monthly_summary_rep_history(owner_id):
+    import monthly_store
+    return jsonify(monthly_store.get_rep_history(owner_id))
+
+
+@app.route("/api/monthly-summary/generate", methods=["POST"])
+@login_required
+def monthly_summary_generate():
+    """Trigger summary generation for all active reps and the team.
+
+    Always force-refreshes the underlying HubSpot analytics cache before
+    generating, so summaries are never built from stale or partially-populated
+    data regardless of cache state at call time.
+
+    Idempotent — already-locked records are skipped.
+    Returns a count of newly saved records.
+    """
+    import summary_engine
+    import monthly_store
+    import cache_scheduler
+
+    cache_scheduler._refresh_base_data()
+    year, month = monthly_store.last_completed_month()
+    cache_scheduler._refresh_period_data("last_month")
+    cache_scheduler._refresh_period_data("this_month")
+
+    result  = summary_engine.generate_all_for_month(year, month)
+    n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
+    return jsonify({"year": year, "month": month, "records_saved": n_saved})
+
+
+@app.route("/api/monthly-summary/regenerate", methods=["POST"])
+@login_required
+def monthly_summary_regenerate():
+    """Delete and re-generate summaries for last_completed_month.
+
+    Use this to correct summaries that were locked against stale data.
+    """
+    import summary_engine
+    import monthly_store
+    import cache_scheduler
+
+    year, month = monthly_store.last_completed_month()
+    n_deleted = monthly_store.delete_month(year, month)
+
+    cache_scheduler._refresh_base_data()
+    cache_scheduler._refresh_period_data("last_month")
+    cache_scheduler._refresh_period_data("this_month")
+
+    result  = summary_engine.generate_all_for_month(year, month)
+    n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
+    return jsonify({"year": year, "month": month, "deleted": n_deleted, "records_saved": n_saved})
 
 
 # ── Background cache scheduler ───────────────────────────────────────────────

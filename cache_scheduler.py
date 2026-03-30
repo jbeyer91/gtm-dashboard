@@ -268,7 +268,39 @@ def _sync_body():
         "Cache sync complete (%d ok, %d failed). Next sync in %.0f min.",
         total, failed, SYNC_INTERVAL_S / 60,
     )
+    _maybe_generate_summaries()
     _schedule_next()
+
+
+def _maybe_generate_summaries():
+    """Generate locked monthly summaries after each cache sync if not yet present.
+
+    Does real work only once per month (the first sync after month rollover).
+    All subsequent hourly syncs skip in microseconds — the team-record existence
+    check is a single in-memory dict lookup.
+
+    Wrapped in a broad try/except so a summary failure never breaks the
+    hourly data sync that users depend on.
+    """
+    try:
+        import monthly_store
+        import summary_engine
+        year, month = monthly_store.last_completed_month()
+        already_done = any(
+            r["year"] == year and r["month"] == month
+            for r in monthly_store.get_team_history()
+        )
+        if already_done:
+            return
+        log.info(
+            "Monthly summaries absent for %d-%02d — generating after cache sync…",
+            year, month,
+        )
+        result = summary_engine.generate_all_for_month(year, month)
+        n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
+        log.info("Monthly summary generation complete — %d new records locked.", n_saved)
+    except Exception as exc:
+        log.warning("Monthly summary generation failed (will retry next sync): %s", exc)
 
 
 def _schedule_next():
