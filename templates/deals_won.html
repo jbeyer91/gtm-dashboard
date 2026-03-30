@@ -13,6 +13,7 @@
 {{ csv_link(url_for('deals_won_csv') ~ '?period=' ~ period ~ '&source=' ~ source ~ '&team=' ~ team) }}
 
 {% set _mn = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] %}
+{% set rep_data = rep_data|default({}) %}
 
 {% if team_summary %}
 {% set ts = team_summary %}

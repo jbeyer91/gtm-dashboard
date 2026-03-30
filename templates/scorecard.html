@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "macros.html" import fmt_pct, fmt_money, fmt_num, csv_link %}
+{% from "macros.html" import fmt_pct, fmt_money, fmt_num, csv_link, grade_badge as monthly_grade_badge, why_list, next_focus_list %}
 {% block title %} — Scorecard{% endblock %}
 
-{% macro grade_badge(grade) %}
+{% macro scorecard_grade_badge(grade) %}
   {% if grade in ("A+","A","A-") %}
     {% set cls = "bg-green-100 text-green-800 ring-green-200" %}
   {% elif grade in ("B+","B","B-") %}
@@ -48,7 +48,6 @@
 {% endmacro %}
 
 {% block content %}
-{# ── Page header ──────────────────────────────────────────────────────────── #}
 <div class="rounded-2xl mb-5 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
   <div class="flex items-end justify-between">
     <div>
@@ -58,7 +57,6 @@
   </div>
 </div>
 
-{# ── Insight strip ────────────────────────────────────────────────────────── #}
 {% set t = data.team %}
 {% set reps_on_track = namespace(count=0) %}
 {% set reps_at_risk  = namespace(count=0) %}
@@ -83,12 +81,74 @@
 
 {{ csv_link(url_for('scorecard_csv')) }}
 
-{# ── Team overview cards ──────────────────────────────────────────────────── #}
+{% if is_admin and team_summary %}
+{% set tm = team_summary.metrics %}
+<details open class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 group">
+  <summary class="flex items-start justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none rounded-2xl hover:bg-gray-50/60 transition-colors duration-100">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <span class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Team Monthly Summary</span>
+        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{{ team_summary_meta.month_label }}</span>
+      </div>
+      <p class="text-sm text-gray-600 mt-1.5">Locked monthly snapshot · Based on data through {{ team_summary_meta.cutoff_label }}</p>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      {{ monthly_grade_badge(team_summary.final_grade) }}
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-400 transition-transform duration-150 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  </summary>
+  <div class="px-5 py-3 bg-gray-50/70 border-t border-b border-gray-100">
+    <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 text-xs">
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Attain</p>
+        <p class="font-semibold tabular-nums text-gray-800">{% if tm.attain_pct is not none %}{{ fmt_pct(tm.attain_pct) }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Won</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_money(tm.won_amt) }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Dials</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_num(tm.dials) }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Avg Dials / Day</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ team_summary_meta.avg_dials_day }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Connect Rate</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(tm.score_connect_rate or tm.connect_rate) }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Deals Created</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ tm.score_deals_created or tm.adv_created }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">$ Advanced to S2</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ fmt_money(tm.score_s2_amt or 0) }}</p>
+      </div>
+      <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+        <p class="text-gray-400 font-medium">Stale Accounts</p>
+        <p class="font-semibold tabular-nums text-gray-800">{{ tm.score_stale_count or 0 }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="px-5 py-5 space-y-5">
+    <div>
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Main Takeaway</p>
+      <p class="text-sm font-semibold text-gray-800 leading-snug">{{ team_summary.main_takeaway }}</p>
+    </div>
+    {{ why_list(team_summary.why) }}
+    {{ next_focus_list(team_summary.next_focus) }}
+  </div>
+</details>
+{% endif %}
+
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Overview</h2>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-
-  {# Quota Attainment #}
   {% if t.attain_pct >= 80 %}{% set qc = "green" %}{% elif t.attain_pct >= 60 %}{% set qc = "yellow" %}{% else %}{% set qc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Revenue closed this month vs. monthly quota.">Quota Attainment</p>
@@ -96,7 +156,6 @@
     <p class="text-xs text-gray-400 mt-1">{{ "%.1f"|format(t.attain_pct) }}% of {{ fmt_money(t.quota_amt) }} quota {{ delta_badge(deltas.attain_pct) }}</p>
   </div>
 
-  {# Deals Created #}
   {% set deals_per_rep_avg = (t.deals_created / data.rows|length) if data.rows|length else 0 %}
   {% if deals_per_rep_avg >= 10 %}{% set dc = "green" %}{% elif deals_per_rep_avg >= 7 %}{% set dc = "yellow" %}{% else %}{% set dc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
@@ -107,7 +166,6 @@
     <p class="text-xs text-gray-400 mt-1">{{ deals_per_rep }}/rep avg · {{ deals_remaining_per_rep }} more to reach 13 {{ delta_badge(deltas.deals_created) }}</p>
   </div>
 
-  {# $ to Stage 2 #}
   {% set s2_pct = (t.s2_amt / t.s2_target * 100) if t.s2_target else 0 %}
   {% if s2_pct >= 80 %}{% set s2c = "green" %}{% elif s2_pct >= 60 %}{% set s2c = "yellow" %}{% else %}{% set s2c = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
@@ -116,7 +174,6 @@
     <p class="text-xs text-gray-400 mt-1">target: {{ fmt_money(t.s2_target) }} {{ delta_badge(deltas.s2_amt, money=true) }}</p>
   </div>
 
-  {# Avg Dials #}
   {% if t.avg_dials >= 40 %}{% set adc = "green" %}{% elif t.avg_dials >= 30 %}{% set adc = "yellow" %}{% else %}{% set adc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="Average outbound dials per working day. Target: 40/day.">Avg Dials / Day</p>
@@ -124,7 +181,6 @@
     <p class="text-xs text-gray-400 mt-1">target: 40 {{ delta_badge(deltas.avg_dials) }}</p>
   </div>
 
-  {# Connect Rate #}
   {% if t.connect_rate >= 10 %}{% set crc = "green" %}{% elif t.connect_rate >= 8 %}{% set crc = "yellow" %}{% else %}{% set crc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2" data-tip="% of outbound dials that reached a live person. Target: 10%.">Connect Rate</p>
@@ -132,7 +188,6 @@
     <p class="text-xs text-gray-400 mt-1">target: 10% {{ delta_badge(deltas.connect_rate) }}</p>
   </div>
 
-  {# Stale Accounts #}
   {% set stale_pct = (t.stale_count / t.ac_accounts * 100) if t.ac_accounts else 0 %}
   {% if stale_pct <= 10 %}{% set sc = "green" %}{% elif stale_pct <= 25 %}{% set sc = "yellow" %}{% else %}{% set sc = "red" %}{% endif %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
@@ -140,10 +195,8 @@
     <div class="flex items-center">{{ dot(sc) }}<p class="text-2xl font-bold text-gray-900 tabular-nums">{{ t.stale_count }}</p></div>
     <p class="text-xs text-gray-400 mt-1">{{ stale_pct|round|int }}% of A+–C accounts {{ delta_badge(deltas.stale_count, invert=true) }}</p>
   </div>
-
 </div>
 
-{# ── Rep breakdown table ───────────────────────────────────────────────────── #}
 <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Rep Breakdown</h2>
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
@@ -162,34 +215,168 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50/40 transition-colors duration-100">
+      {% set rd = rep_data.get(row.owner_id) %}
+      {% set rs = rd.summary if rd else none %}
+      {% set rmeta = rd.meta if rd else {} %}
+      <tr id="scorecard-row-{{ row.owner_id }}" data-scorecard-row="{{ row.owner_id }}"
+          {% if rs %}onclick="toggleScorecardPanel('{{ row.owner_id }}')"{% endif %}
+          class="hover:bg-blue-50/40 transition-colors duration-100 {% if rs %}cursor-pointer select-none{% endif %}">
+        <td class="px-4 py-3">{{ scorecard_grade_badge(row.grade) }}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">
+          <div class="flex items-center justify-between gap-2">
+            <span>{{ row.ae }}</span>
+            {% if rs %}
+            <svg id="scorecard-chev-{{ row.owner_id }}" xmlns="http://www.w3.org/2000/svg"
+                 class="w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform duration-150"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+            {% endif %}
+          </div>
+        </td>
 
-        {# Grade badge #}
-        <td class="px-4 py-3">{{ grade_badge(row.grade) }}</td>
-
-        {# Rep name #}
-        <td class="px-4 py-3 font-medium text-gray-900">{{ row.ae }}</td>
-
-        {# Won $ + Quota % — primary outcome columns #}
         {% if row.attain_pct >= 80 %}{% set qcls = "text-green-600" %}
         {% elif row.attain_pct >= 60 %}{% set qcls = "text-amber-600" %}
         {% else %}{% set qcls = "text-red-500" %}{% endif %}
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ qcls }}">{{ fmt_money(row.won_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold {{ qcls }}">{{ "%.1f"|format(row.attain_pct) }}%</td>
-
-        {# Remaining columns neutral — grade badge carries the composite signal #}
         <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ row.deals_created }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ fmt_money(row.s2_amt) }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ row.avg_dials }}</td>
         <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(row.connect_rate) }}%</td>
-
-        {# Stale — color only at extreme levels (>40%) #}
         {% set row_stale_pct = (row.stale_count / row.ac_accounts * 100) if row.ac_accounts else 0 %}
         <td class="px-4 py-3 text-right tabular-nums {% if row_stale_pct > 40 %}text-red-500 font-semibold{% else %}text-gray-700{% endif %}">{{ row.stale_count }}</td>
-
       </tr>
+      {% if rs %}
+      {% set rm = rs.metrics %}
+      <tr id="scorecard-panel-{{ row.owner_id }}" class="hidden" data-scorecard-panel="{{ row.owner_id }}">
+        <td colspan="9" class="p-0">
+          <div class="bg-gray-50/60 border-t border-gray-100 px-5 py-4">
+            <div class="flex items-start justify-between gap-4 mb-4">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2.5 flex-wrap">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-widest">{{ rs.entity_label }} Monthly Summary</span>
+                  <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{{ rmeta.month_label }}</span>
+                </div>
+                <p class="text-sm text-gray-600 mt-1.5">Locked monthly snapshot · Based on data through {{ rmeta.cutoff_label }}</p>
+              </div>
+              <div class="shrink-0">{{ monthly_grade_badge(rs.final_grade) }}</div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-5 text-xs">
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Attain</p>
+                <p class="font-semibold tabular-nums text-gray-800">{% if rm.attain_pct is not none %}{{ fmt_pct(rm.attain_pct) }}{% else %}—{% endif %}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Won</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_money(rm.won_amt) }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Dials</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_num(rm.dials) }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Avg Dials / Day</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ rmeta.avg_dials_day }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Connect Rate</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_pct(rm.score_connect_rate or rm.connect_rate) }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Deals Created</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ rm.score_deals_created or rm.adv_created }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">$ Advanced to S2</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ fmt_money(rm.score_s2_amt or 0) }}</p>
+              </div>
+              <div class="rounded-xl bg-white border border-gray-100 px-3 py-2">
+                <p class="text-gray-400 font-medium">Stale Accounts</p>
+                <p class="font-semibold tabular-nums text-gray-800">{{ rm.score_stale_count or 0 }}</p>
+              </div>
+            </div>
+
+            <div class="space-y-5">
+              <div>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Main Takeaway</p>
+                <p class="text-sm font-semibold text-gray-800 leading-snug">{{ rs.main_takeaway }}</p>
+              </div>
+              {{ why_list(rs.why) }}
+              {{ next_focus_list(rs.next_focus) }}
+
+              {% if rd.prior_months %}
+              <details class="mt-1 group/hist">
+                <summary class="text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer select-none list-none hover:text-gray-600 transition-colors duration-100 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-150 group-open/hist:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                  History · {{ rd.prior_months | length }} prior {{ "month" if rd.prior_months | length == 1 else "months" }}
+                </summary>
+                <div class="mt-3 space-y-1 pl-1">
+                  {% for hist in rd.prior_months %}
+                  {% set hm = hist.record.metrics %}
+                  <details class="group/hentry border border-gray-100 rounded-lg overflow-hidden">
+                    <summary class="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer select-none list-none bg-white hover:bg-gray-50/80 transition-colors duration-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-300 shrink-0 transition-transform duration-150 group-open/hentry:rotate-90 group-open/hentry:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                      <span class="text-xs font-semibold text-gray-500 shrink-0">{{ hist.meta.month_label }}</span>
+                      {{ monthly_grade_badge(hist.record.final_grade, "text-xs px-1.5 py-px rounded shrink-0") }}
+                      <span class="text-xs text-gray-400 truncate min-w-0">{{ hist.record.main_takeaway }}</span>
+                    </summary>
+                    <div class="px-4 py-3 border-t border-gray-100 bg-white space-y-3">
+                      <p class="text-xs text-gray-500">Locked monthly snapshot · Based on data through {{ hist.meta.cutoff_label }}</p>
+                      <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 text-xs">
+                        <div><span class="text-gray-400">Attain</span><p class="font-semibold tabular-nums text-gray-700">{% if hm.attain_pct is not none %}{{ fmt_pct(hm.attain_pct) }}{% else %}—{% endif %}</p></div>
+                        <div><span class="text-gray-400">Won</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.won_amt) }}</p></div>
+                        <div><span class="text-gray-400">Dials</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_num(hm.dials) }}</p></div>
+                        <div><span class="text-gray-400">Avg Dials / Day</span><p class="font-semibold tabular-nums text-gray-700">{{ hist.meta.avg_dials_day }}</p></div>
+                        <div><span class="text-gray-400">Connect Rate</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_pct(hm.score_connect_rate or hm.connect_rate) }}</p></div>
+                        <div><span class="text-gray-400">Deals Created</span><p class="font-semibold tabular-nums text-gray-700">{{ hm.score_deals_created or hm.adv_created }}</p></div>
+                        <div><span class="text-gray-400">$ Advanced to S2</span><p class="font-semibold tabular-nums text-gray-700">{{ fmt_money(hm.score_s2_amt or 0) }}</p></div>
+                        <div><span class="text-gray-400">Stale Accounts</span><p class="font-semibold tabular-nums text-gray-700">{{ hm.score_stale_count or 0 }}</p></div>
+                      </div>
+                      <div>
+                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Main Takeaway</p>
+                        <p class="text-sm font-semibold text-gray-800 leading-snug">{{ hist.record.main_takeaway }}</p>
+                      </div>
+                      {{ why_list(hist.record.why, "space-y-2", "mt-1 space-y-0.5") }}
+                      {{ next_focus_list(hist.record.next_focus, "space-y-1") }}
+                    </div>
+                  </details>
+                  {% endfor %}
+                </div>
+              </details>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+      </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+function toggleScorecardPanel(ownerId) {
+  const allPanels = document.querySelectorAll("[data-scorecard-panel]");
+  const allRows = document.querySelectorAll("[data-scorecard-row]");
+  const panel = document.getElementById("scorecard-panel-" + ownerId);
+  const chev = document.getElementById("scorecard-chev-" + ownerId);
+  const isOpen = !panel.classList.contains("hidden");
+
+  allPanels.forEach((p) => p.classList.add("hidden"));
+  allRows.forEach((r) => r.classList.remove("bg-blue-50/80"));
+  document.querySelectorAll('[id^="scorecard-chev-"]').forEach((c) => {
+    c.classList.remove("rotate-180", "text-blue-400");
+    c.classList.add("text-gray-300");
+  });
+
+  if (!isOpen) {
+    panel.classList.remove("hidden");
+    document.getElementById("scorecard-row-" + ownerId).classList.add("bg-blue-50/80");
+    chev.classList.add("rotate-180", "text-blue-400");
+    chev.classList.remove("text-gray-300");
+  }
+}
+</script>
 {% endblock %}
