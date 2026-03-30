@@ -202,11 +202,9 @@ def logout():
 @app.route("/refresh-cache", methods=["POST"])
 @login_required
 def refresh_cache():
-    """Bust cache and kick off a background re-warm so the next page load is instant."""
-    clear_cache()
+    """Kick off a background refresh while continuing to serve the current cache."""
     cache_scheduler.trigger()
     return redirect(request.referrer or url_for("home"))
-
 
 
 def _prior(period, fn, *args):
@@ -288,8 +286,6 @@ def _filter_by_team(data: dict, team: str) -> dict:
         return {**data, "rows": rows, "totals": totals, "groups": filtered_groups}
 
     return {**data, "rows": rows, "totals": totals}
-
-
 @app.route("/")
 @login_required
 def home():
