@@ -17,7 +17,7 @@ from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 import calls_drilldown as calls_drilldown_bp
-from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
+from cache_utils import clear_cache, get_cached, last_refreshed_str, last_refreshed_ts, is_cached
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
@@ -320,8 +320,10 @@ def home():
     from datetime import datetime, timezone, date, timedelta
     import calendar
     team = request.args.get("team", "all")
+    data = get_cached(analytics.compute_scorecard, "this_month")
+    if data is None:
+        return render_template("loading.html", nav=NAV, active="home"), 202
     try:
-        data = analytics.compute_scorecard("this_month")
         data = _filter_by_team(data, team)
         # Recompute team-level KPIs from filtered rows so the KPI cards reflect
         # the selected team. _filter_by_team only filters data["rows"]; the
@@ -362,7 +364,9 @@ def home():
     win_rate = None
     acv = None
     try:
-        won_data = analytics.compute_deals_won("this_month")
+        won_data = get_cached(analytics.compute_deals_won, "this_month")
+        if won_data is None:
+            raise RuntimeError("deals_won cache warming")
         won_data = _filter_by_team(won_data, team)
         wt = won_data["totals"]
         win_rate = wt["win_rate"]
@@ -405,11 +409,13 @@ def home():
 def scorecard():
     from datetime import datetime, timezone, date, timedelta
     import calendar
+    data = get_cached(analytics.compute_scorecard, "this_month")
+    if data is None:
+        return render_template("loading.html", nav=NAV, active="scorecard"), 202
     try:
-        data  = analytics.compute_scorecard("this_month")
         t     = data["team"]
         _, _, prior_label = get_prior_range("this_month")
-        prior_data, _ = _prior("this_month", analytics.compute_scorecard)
+        prior_data = get_cached(analytics.compute_scorecard, "prior_this_month")
         lt = (prior_data or {}).get("team") or {}
         def _delta(key): return round((t.get(key) or 0) - (lt.get(key) or 0), 1)
         deltas = {
