@@ -119,21 +119,29 @@
   </div>
 
   {# 6. Win Rate #}
-  {% set f6 = [win_rate / 25 * 100, 100]|min %}
+  {% set f6 = [win_rate / 25 * 100, 100]|min if win_rate is not none else 0 %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Win Rate</p>
-    <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ "%.1f"|format(win_rate) }}%</p>
+    <p class="text-2xl font-bold text-gray-900 tabular-nums">
+      {% if win_rate is not none %}{{ "%.1f"|format(win_rate) }}%{% else %}&mdash;{% endif %}
+    </p>
     <div class="w-full h-1.5 rounded-full mt-2" style="background: #ECEEF8;">
       <div class="h-1.5 rounded-full" style="width: {{ f6 }}%; background: #2C4FA3;"></div>
     </div>
-    <p class="text-xs text-slate-500 mt-1.5">won / (won + lost) · target: 25%</p>
+    <p class="text-xs text-slate-500 mt-1.5">
+      {% if home_metrics_warming %}won/lost metrics warming{% else %}won / (won + lost) · target: 25%{% endif %}
+    </p>
   </div>
 
   {# 7. ACV #}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:shadow-md transition-shadow duration-200">
     <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Avg Deal Size</p>
-    <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ fmt_money(acv) }}</p>
-    <p class="text-xs text-slate-500 mt-3">avg contract value · closed won this month</p>
+    <p class="text-2xl font-bold text-gray-900 tabular-nums">
+      {% if acv is not none %}{{ fmt_money(acv) }}{% else %}&mdash;{% endif %}
+    </p>
+    <p class="text-xs text-slate-500 mt-3">
+      {% if home_metrics_warming %}closed-won metrics warming{% else %}avg contract value · closed won this month{% endif %}
+    </p>
   </div>
 
 </div>
