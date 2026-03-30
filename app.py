@@ -228,6 +228,34 @@ def _d(cur, pri, key, scale=1):
     return round((cur.get(key, 0) or 0) - (pri.get(key, 0) or 0), 1) * scale
 
 
+def _business_days_in_month(year: int, month: int) -> int:
+    import calendar
+
+    last_day = calendar.monthrange(year, month)[1]
+    return sum(1 for day in range(1, last_day + 1) if date(year, month, day).weekday() < 5)
+
+
+def _summary_meta(record) -> dict:
+    import calendar
+
+    if not record:
+        return {}
+
+    year = int(record["year"])
+    month = int(record["month"])
+    last_day = calendar.monthrange(year, month)[1]
+    business_days = max(_business_days_in_month(year, month), 1)
+    metrics = record.get("metrics") or {}
+    dials = int(metrics.get("dials", 0) or 0)
+
+    return {
+        "month_label": date(year, month, 1).strftime("%B %Y"),
+        "cutoff_label": date(year, month, last_day).strftime("%B %-d, %Y"),
+        "business_days": business_days,
+        "avg_dials_day": round(dials / business_days, 1) if dials else 0.0,
+    }
+
+
 def _filter_by_team(data: dict, team: str) -> dict:
     """Filter rows to a specific team and recompute totals from the filtered set."""
     if team == "all":
@@ -401,6 +429,26 @@ def scorecard():
         if not is_admin:
             data = dict(data)
             data["rows"] = [r for r in data["rows"] if r.get("owner_id") == owner_id]
+
+        import monthly_store
+        import summary_engine
+
+        team_summary = summary_engine.get_or_generate_team_summary() if is_admin else None
+        team_summary_meta = _summary_meta(team_summary) if team_summary else None
+
+        rep_data = {}
+        for row in data["rows"]:
+            oid = row["owner_id"]
+            rec = summary_engine.get_or_generate_rep_summary(oid)
+            history = monthly_store.get_rep_history(oid)
+            rep_data[oid] = {
+                "summary": rec,
+                "meta": _summary_meta(rec),
+                "prior_months": [
+                    {"record": hist, "meta": _summary_meta(hist)}
+                    for hist in history[1:]
+                ],
+            }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
@@ -425,6 +473,8 @@ def scorecard():
 
     return render_template("scorecard.html", data=data, month_label=month_label,
                            deltas=deltas, prior_label=prior_label,
+                           team_summary=team_summary, team_summary_meta=team_summary_meta,
+                           rep_data=rep_data,
                            is_admin=is_admin,
                            pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            active="scorecard", nav=NAV)
@@ -563,27 +613,10 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
-    import summary_engine
-    import monthly_store
-    team_summary = summary_engine.get_or_generate_team_summary()
-    rep_data = {}
-    for row in data["rows"]:
-        oid = row["owner_id"]
-        rec = summary_engine.get_or_generate_rep_summary(oid)
-        history = monthly_store.get_rep_history(oid)
-        rep_data[oid] = {
-            "summary": rec,
-            # history is newest-first. When rec is not None, history[0] is the
-            # current month and history[1:] are older. When rec is None (generation
-            # failed), history[1:] may still contain older records — the panel is
-            # hidden because rs is falsy, so no data is lost visually.
-            "prior_months": history[1:],
-        }
     return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
-                           team_summary=team_summary, rep_data=rep_data,
                            nav=NAV, active="deals_won")
 
 

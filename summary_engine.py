@@ -189,6 +189,7 @@ def collect_rep_snapshot(owner_id):
     lost = analytics.compute_deals_lost("last_month")
     adv  = analytics.compute_deal_advancement("last_month")
     cov  = analytics.compute_pipeline_coverage("this_month")
+    sc   = analytics.compute_scorecard("last_month")
     raw  = _raw_call_counts("last_month", owner_id)
 
     wr = _row(won["rows"],  owner_id)
@@ -197,6 +198,7 @@ def collect_rep_snapshot(owner_id):
     lr = _row(lost["rows"], owner_id)
     ar = _row(adv["rows"],  owner_id)
     vr = _row(cov["rows"],  owner_id)
+    sr = _row(sc["rows"],   owner_id)
 
     top_reason, top_reason_n = _top_lost_reason(lr)
 
@@ -238,6 +240,13 @@ def collect_rep_snapshot(owner_id):
         "adv_to_s4":        ar.get("to_s4",   0),
         "adv_won":          ar.get("won",     0),
         "adv_lost":         ar.get("lost",    0),
+        # Scorecard snapshot metrics
+        "score_deals_created": sr.get("deals_created", 0),
+        "score_s2_amt":        sr.get("s2_amt",        0.0),
+        "score_avg_dials":     sr.get("avg_dials",     0.0),
+        "score_connect_rate":  sr.get("connect_rate",  0.0),
+        "score_stale_count":   sr.get("stale_count",   0),
+        "score_ac_accounts":   sr.get("ac_accounts",   0),
         # Forward coverage — open pipeline entering this month
         "cov_s1_n":         vr.get("s1_n",   0),  "cov_s1_amt": vr.get("s1_amt", 0.0),
         "cov_s2_n":         vr.get("s2_n",   0),  "cov_s2_amt": vr.get("s2_amt", 0.0),
@@ -257,6 +266,7 @@ def collect_team_snapshot():
     pg   = analytics.compute_pipeline_generated("last_month")
     adv  = analytics.compute_deal_advancement("last_month")
     cov  = analytics.compute_pipeline_coverage("this_month")
+    sc   = analytics.compute_scorecard("last_month")
     raw  = _raw_call_counts("last_month")
 
     wt = won["totals"]
@@ -264,6 +274,7 @@ def collect_team_snapshot():
     pt = pg["totals"]
     at = adv["totals"]
     vt = cov["totals"]
+    st = sc["team"]
 
     # Per-rep attainment for concentration analysis
     rep_att = []
@@ -313,6 +324,13 @@ def collect_team_snapshot():
         # Advancement
         "adv_created":      at.get("created", 0),
         "adv_to_s3":        at.get("to_s3",   0),
+        # Scorecard snapshot metrics
+        "score_deals_created": st.get("deals_created", 0),
+        "score_s2_amt":        st.get("s2_amt",        0.0),
+        "score_avg_dials":     st.get("avg_dials",     0.0),
+        "score_connect_rate":  st.get("connect_rate",  0.0),
+        "score_stale_count":   st.get("stale_count",   0),
+        "score_ac_accounts":   st.get("ac_accounts",   0),
         # Coverage
         "cov_total_amt":    cov_total_amt,
         "cov_total_n":      cov_total_n,
