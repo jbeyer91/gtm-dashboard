@@ -17,7 +17,7 @@ from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 import calls_drilldown as calls_drilldown_bp
-from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts, is_cached
+from cache_utils import clear_cache, last_refreshed_str, last_refreshed_ts
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
@@ -292,8 +292,6 @@ def home():
     from datetime import datetime, timezone, date, timedelta
     import calendar
     team = request.args.get("team", "all")
-    if not is_cached(analytics.compute_scorecard, "this_month"):
-        return render_template("loading.html", nav=NAV, active="home"), 202
     try:
         data = analytics.compute_scorecard("this_month")
         data = _filter_by_team(data, team)
@@ -368,8 +366,6 @@ def home():
 def scorecard():
     from datetime import datetime, timezone, date, timedelta
     import calendar
-    if not is_cached(analytics.compute_scorecard, "this_month"):
-        return render_template("loading.html", nav=NAV, active="scorecard"), 202
     try:
         data  = analytics.compute_scorecard("this_month")
         t     = data["team"]
@@ -428,13 +424,6 @@ def scorecard():
 def call_stats():
     period = request.args.get("period", "this_week")
     team   = request.args.get("team", "all")
-    # Guard on this_month (warmed early in _VIEWS) rather than the selected period.
-    # this_week lives in CALL_STATS_EXTRA which runs after all ALL_PERIODS, so
-    # checking it directly would pin the loading screen for the entire sync cycle.
-    # Once this_month is cached the scheduler is operational; short-period requests
-    # (this_week, today) compute quickly from a fresh live fetch.
-    if not is_cached(analytics.compute_call_stats, "this_month"):
-        return render_template("loading.html", nav=NAV, active="call_stats"), 202
     try:
         data = analytics.compute_call_stats(period)
         prior_data, prior_label = _prior(period, analytics.compute_call_stats)
