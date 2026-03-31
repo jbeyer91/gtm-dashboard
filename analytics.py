@@ -198,7 +198,15 @@ def _parse_amount(val):
 
 
 def _owner_allowed(oid: str) -> bool:
-    """Return True if this owner is on a TEAM_FILTER team (or if no teams are configured)."""
+    """Return True if this owner is on a TEAM_FILTER team (or if no teams are configured).
+
+    Reps in the monthly_store grace list are also allowed — this keeps their
+    data visible in analytics through the end of their last active month even
+    after they have been removed from the HubSpot team.
+    """
+    import monthly_store
+    if oid in monthly_store.get_grace_rep_ids():
+        return True
     allowed = get_team_owner_ids()
     return not allowed or oid in allowed
 

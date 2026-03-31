@@ -177,3 +177,52 @@ def last_completed_month() -> tuple:
     if now.month == 1:
         return now.year - 1, 12
     return now.year, now.month - 1
+
+
+# ── Departed rep grace period ─────────────────────────────────────────────────
+# Reps added here continue to pass the analytics team filter through month-end
+# so their summary is generated correctly even after HubSpot team removal.
+
+def add_grace_rep(owner_id: str, label: str) -> None:
+    """Mark a departed rep to stay in analytics through end of current month."""
+    with _lock:
+        data = _load()
+        data.setdefault("grace_reps", {})[owner_id] = label
+        _persist(data)
+
+
+def remove_grace_rep(owner_id: str) -> None:
+    """Remove a rep from the grace list (call after their month-end summary is locked)."""
+    with _lock:
+        data = _load()
+        data.get("grace_reps", {}).pop(owner_id, None)
+        _persist(data)
+
+
+def get_grace_rep_ids() -> frozenset:
+    """Return the set of owner IDs currently in the grace period."""
+    with _lock:
+        data = _load()
+    return frozenset(data.get("grace_reps", {}).keys())
+
+
+def get_grace_reps() -> dict:
+    """Return {owner_id: label} for all reps currently in the grace period."""
+    with _lock:
+        data = _load()
+    return dict(data.get("grace_reps", {}))
+
+
+def get_all_rep_ids_with_history() -> dict:
+    """Return {owner_id: label} for every rep that has at least one locked record.
+
+    Used by the history page to keep departed reps visible even after they are
+    removed from the active HubSpot team.
+    """
+    with _lock:
+        data = _load()
+    result = {}
+    for v in data["records"].values():
+        if v["entity_type"] == "rep":
+            result[v["entity_id"]] = v["entity_label"]
+    return result
