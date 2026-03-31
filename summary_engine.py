@@ -33,7 +33,10 @@ _ATTAIN_ON_TRACK    = 100.0  # pct — at or above → quota met
 _ATTAIN_WARN        = 75.0   # pct — below this → materially missed
 _MONTHLY_DIALS_MIN  = 250    # rough monthly floor: ~13/day × 20 bdays
 _DEALS_CREATED_MIN  = 4      # below this per rep → creation bottleneck
-_ADV_RATE_MIN       = 0.20   # S1→S3 rate; below this → progression stall
+_ADV_RATE_MIN        = 0.20   # S1→S3 rate; below this → progression stall
+_ADV_S1_TO_S2_MIN    = 0.40   # S1→S2 rate; below this → demo-conversion gap
+_NEVER_DEMOED_THRESH = 0.35   # ≥35 % of losses never demo'd → early-funnel bottleneck
+_COV_QUOTA_FLOOR_PCT = 0.50   # forward coverage < 50 % of quota → flag coverage risk
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────
@@ -153,6 +156,7 @@ def collect_rep_snapshot(owner_id):
         "lost_n":           wr.get("total_lost_n",   0),
         "top_lost_reason":  top_reason,
         "top_lost_n":       top_reason_n,
+        "never_demoed_n":   int(lr.get("never_demoed", 0) or 0),
         # Activity — use the same filtered call metrics as the Call Stats page
         "dials":            cr.get("dials",              0),
         "connects":         cr.get("connects",           0),
@@ -197,6 +201,7 @@ def collect_team_snapshot():
     won  = analytics.compute_deals_won("last_month")
     call = analytics.compute_call_stats("last_month")
     pg   = analytics.compute_pipeline_generated("last_month")
+    lost = analytics.compute_deals_lost("last_month")
     adv  = analytics.compute_deal_advancement("last_month")
     cov  = analytics.compute_pipeline_coverage("this_month")
     sc   = analytics.compute_scorecard("last_month")
@@ -204,6 +209,7 @@ def collect_team_snapshot():
     wt = won["totals"]
     ct = call["totals"]
     pt = pg["totals"]
+    lt = lost["totals"]
     at = adv["totals"]
     vt = cov["totals"]
     st = sc["team"]
@@ -237,6 +243,9 @@ def collect_team_snapshot():
         "win_rate":         wt.get("win_rate",       0.0),
         "acv":              wt.get("acv",            0.0),
         "lost_n":           wt.get("total_lost_n",   0),
+        "top_lost_reason":  _top_lost_reason(lt)[0],
+        "top_lost_n":       _top_lost_reason(lt)[1],
+        "never_demoed_n":   int(lt.get("never_demoed", 0) or 0),
         # Source split — won
         "cold_won_amt":     wt.get("cold_amt",       0.0),
         "cold_won_n":       wt.get("cold_n",         0),
@@ -255,6 +264,7 @@ def collect_team_snapshot():
         "pg_inbound_amt":   pt.get("inbound_amt",    0.0),
         # Advancement
         "adv_created":      at.get("created", 0),
+        "adv_to_s2":        at.get("to_s2",   0),
         "adv_to_s3":        at.get("to_s3",   0),
         # Scorecard snapshot metrics
         "score_deals_created": st.get("deals_created", 0),
@@ -283,47 +293,67 @@ def _bottleneck(m):
     most proximate cause is named, not an upstream symptom.
 
     Returns one of:
-      "on_track"    — quota met (or no quota + wins present)
-      "inbound_dep" — quota met but zero cold outreach wins
-      "close"       — created adequate pipeline but win rate is low
-      "progression" — created deals but most stalled before S3
-      "activity"    — not enough dials to generate deal creation volume
-      "dial_conv"   — dials adequate but poor conversion to deals
-      "coverage"    — forward-looking coverage concern / default
+      "on_track"       — quota met with adequate forward coverage
+      "coverage_risk"  — quota met but forward pipeline is thin (attainment masking pipeline risk)
+      "inbound_dep"    — quota met but zero cold outreach wins
+      "never_demoed"   — significant share of losses never reached demo (early-funnel failure)
+      "close"          — created adequate pipeline but win rate is low
+      "s1_stall"       — deals created but most never advanced to demo stage
+      "progression"    — deals reached demo but stalled before S3
+      "activity"       — not enough dials to generate deal creation volume
+      "dial_conv"      — dials adequate but poor conversion to deals
+      "coverage"       — forward-looking coverage concern / default
     """
-    attain     = m.get("attain_pct")
-    won_n      = int(m.get("won_n",      0) or 0)
-    lost_n     = int(m.get("lost_n",     0) or 0)
-    closed_n   = won_n + lost_n
-    win_rate   = float(m.get("win_rate", 0.0) or 0)
-    dials      = int(m.get("dials",      0) or 0)
-    pg_cold_n  = int(m.get("pg_cold_n",  0) or 0)
-    pg_inb_n   = int(m.get("pg_inbound_n", 0) or 0)
-    adv_create = int(m.get("adv_created", 0) or 0)
-    adv_s3     = int(m.get("adv_to_s3",   0) or 0)
-    cold_won_n = int(m.get("cold_won_n",  0) or 0)
+    attain      = m.get("attain_pct")
+    won_n       = int(m.get("won_n",          0) or 0)
+    lost_n      = int(m.get("lost_n",         0) or 0)
+    closed_n    = won_n + lost_n
+    win_rate    = float(m.get("win_rate",     0.0) or 0)
+    dials       = int(m.get("dials",          0) or 0)
+    pg_cold_n   = int(m.get("pg_cold_n",      0) or 0)
+    pg_inb_n    = int(m.get("pg_inbound_n",   0) or 0)
+    adv_create  = int(m.get("adv_created",    0) or 0)
+    adv_s2      = int(m.get("adv_to_s2",      0) or 0)
+    adv_s3      = int(m.get("adv_to_s3",      0) or 0)
+    cold_won_n  = int(m.get("cold_won_n",     0) or 0)
+    never_dem   = int(m.get("never_demoed_n", 0) or 0)
+    quota_amt   = float(m.get("quota_amt",    0) or 0)
+    # Support both rep (individual stage keys) and team (cov_total_amt) snapshots
+    cov_amt     = float(m.get("cov_total_amt") or 0) or sum(
+        float(m.get(k, 0) or 0) for k in ("cov_s1_amt", "cov_s2_amt", "cov_s3_amt", "cov_s4_amt")
+    )
 
     # Outcome met
     if attain is not None and attain >= _ATTAIN_ON_TRACK:
+        # Forward coverage risk: quota met but thin pipeline entering next month
+        if quota_amt > 0 and cov_amt < quota_amt * _COV_QUOTA_FLOOR_PCT:
+            return "coverage_risk"
         if cold_won_n == 0 and won_n >= 2:
             return "inbound_dep"
         return "on_track"
 
-    # Layer 1 — close quality (pipeline existed but deals were lost)
-    if closed_n >= 2 and win_rate < _WIN_RATE_WARN:
+    # Layer 1 — close quality: enough closed deals but low win rate
+    if closed_n >= 3 and win_rate < _WIN_RATE_WARN:
+        # Sub-distinguish: early-funnel failure (never demo'd) vs late-stage loss
+        if never_dem >= 2 and lost_n > 0 and (never_dem / lost_n) >= _NEVER_DEMOED_THRESH:
+            return "never_demoed"
         return "close"
 
-    # Layer 2 — progression (created deals but most stalled before S3)
+    # Layer 2 — S1 stall: deals created but most never reached demo stage
+    if adv_create >= 3 and (adv_s2 / adv_create) < _ADV_S1_TO_S2_MIN:
+        return "s1_stall"
+
+    # Layer 3 — post-demo progression: deals reached demo but stalled before S3
     if adv_create >= 3 and (adv_s3 / adv_create) < _ADV_RATE_MIN:
         return "progression"
 
-    # Layer 3 — deal creation volume
+    # Layer 4 — deal creation volume
     if (pg_cold_n + pg_inb_n) < _DEALS_CREATED_MIN:
         if dials < _MONTHLY_DIALS_MIN:
             return "activity"
         return "dial_conv"
 
-    # Layer 4 — inbound dependency with no quota context
+    # Layer 5 — inbound dependency with no quota context
     if cold_won_n == 0 and won_n >= 1:
         return "inbound_dep"
 
@@ -358,9 +388,11 @@ def generate_rep_summary(m, name, month_label):
     inb_won_n    = int(m.get("inbound_won_n",  0) or 0)
     inb_won_amt  = float(m.get("inbound_won_amt", 0) or 0)
     adv_create   = int(m.get("adv_created",    0) or 0)
+    adv_to_s2    = int(m.get("adv_to_s2",      0) or 0)
     adv_to_s3    = int(m.get("adv_to_s3",      0) or 0)
     top_reason   = m.get("top_lost_reason", "Other")
     top_reason_n = int(m.get("top_lost_n",     0) or 0)
+    never_dem_n  = int(m.get("never_demoed_n", 0) or 0)
     acv          = float(m.get("acv",          0) or 0)
     cov_amt      = sum(float(m.get(k, 0) or 0) for k in ("cov_s1_amt","cov_s2_amt","cov_s3_amt","cov_s4_amt"))
     cov_n        = sum(int(m.get(k,   0) or 0) for k in ("cov_s1_n",  "cov_s2_n",  "cov_s3_n",  "cov_s4_n"))
@@ -373,7 +405,14 @@ def generate_rep_summary(m, name, month_label):
         takeaway = f"{name} closed 0 deals in {month_label} with no quota on record."
     elif quota_amt:
         gap = abs(delta)
-        if attain is not None and attain >= _ATTAIN_ON_TRACK:
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        if bn == "coverage_risk":
+            takeaway = (
+                f"{name} exceeded quota in {month_label}, closing {_m(won_amt)} "
+                f"({_p(attain)} attainment) — but enters next month with only "
+                f"{_m(cov_amt)} in open pipeline ({_p(cov_pct_of_quota)} of quota)."
+            )
+        elif attain is not None and attain >= _ATTAIN_ON_TRACK:
             takeaway = (
                 f"{name} exceeded quota in {month_label}, closing {_m(won_amt)} "
                 f"across {_n(won_n, 'deal')} at {_p(attain)} attainment."
@@ -398,7 +437,31 @@ def generate_rep_summary(m, name, month_label):
     # ── Why — 2–3 numbered reasons with proof bullets ─────────────────────────
     why = []
 
-    if bn == "on_track":
+    if bn == "coverage_risk":
+        closed_n = won_n + lost_n
+        win_line = (
+            f"\n   - Win rate: {_p(win_rate)} ({won_n} won, {lost_n} lost of {closed_n} closed)."
+            if closed_n >= 2 else ""
+        )
+        why.append(
+            f"1. Quota achieved: {_n(won_n, 'deal')} closed, {_m(won_amt)} ({_p(attain)} attainment).{win_line}"
+        )
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        why.append(
+            f"2. Forward pipeline entering next month: {_n(cov_n, 'deal')} totalling {_m(cov_amt)} — "
+            f"covering only {_p(cov_pct_of_quota)} of the {_m(quota_amt)} quota."
+            f"\n   - Below the {_p(_COV_QUOTA_FLOOR_PCT * 100)} coverage floor needed for consistent attainment."
+        )
+        if dials > 0:
+            src_note = ""
+            if cold_won_n == 0 and won_n >= 2:
+                src_note = f"\n   - All closed revenue came from inbound — cold outreach pipeline needs to be rebuilt."
+            why.append(
+                f"3. Outbound: {dials:,} dials at {_p(connect_rate)} connect rate "
+                f"generated {_n(co_deals, 'cold deal')} created.{src_note}"
+            )
+
+    elif bn == "on_track":
         src_parts = []
         if cold_won_n > 0:
             src_parts.append(f"cold outreach: {_n(cold_won_n, 'deal')} ({_m(cold_won_amt)})")
@@ -441,6 +504,25 @@ def generate_rep_summary(m, name, month_label):
                 f"source mix determines whether cold outreach exposure improves next month."
             )
 
+    elif bn == "never_demoed":
+        closed_n = won_n + lost_n
+        why.append(
+            f"1. {never_dem_n} of {lost_n} losses never reached demo stage — "
+            f"the primary gap is early-funnel conversion, not late-stage close quality."
+            f"\n   - Win rate: {_p(win_rate)} ({won_n} won vs {lost_n} lost of {closed_n} closed)."
+        )
+        total_pg = pg_cold_n + pg_inb_n
+        if total_pg > 0:
+            why.append(
+                f"2. Deal creation: {total_pg} new deals entered the funnel "
+                f"({pg_cold_n} cold, {pg_inb_n} inbound)."
+                f"\n   - Most created deals are not reaching demo — the bottleneck is before the meeting, not in the close."
+            )
+        if dials > 0:
+            why.append(
+                f"3. Activity: {dials:,} dials at {_p(connect_rate)} connect rate ({connects} connects)."
+            )
+
     elif bn == "close":
         closed_n = won_n + lost_n
         reason_line = f"\n   - Top loss reason: {top_reason} ({top_reason_n} of {lost_n} losses)." if top_reason_n > 0 else ""
@@ -462,24 +544,45 @@ def generate_rep_summary(m, name, month_label):
                 f"{constraint}; late-stage conversion is the lever to close the gap."
             )
 
-    elif bn == "progression":
-        adv_rate = round(adv_to_s3 / adv_create * 100, 1) if adv_create else 0.0
+    elif bn == "s1_stall":
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
         why.append(
-            f"1. Only {_p(adv_rate)} of deals created in {month_label} progressed past S2 "
-            f"({adv_to_s3} of {adv_create})."
-            f"\n   - Most deals stalled at S1 with no confirmed next step."
+            f"1. Only {_p(s1_to_s2_rate)} of deals created in {month_label} advanced to demo stage "
+            f"({adv_to_s2} of {adv_create}) — first conversations are not converting to committed next steps."
         )
         total_pg = pg_cold_n + pg_inb_n
         if total_pg >= _DEALS_CREATED_MIN:
             why.append(
                 f"2. Deal creation was not the constraint: {total_pg} new deals entered the funnel "
                 f"({pg_cold_n} cold, {pg_inb_n} inbound)."
-                f"\n   - The bottleneck is in moving deals forward, not generating them."
+                f"\n   - The gap is between opening conversations and booking demos, not generating them."
+            )
+        if dials > 0:
+            constraint = "adequate" if connect_rate >= _CONNECT_RATE_WARN else "also below target"
+            why.append(
+                f"3. Activity: {dials:,} dials at {_p(connect_rate)} connect rate — "
+                f"{constraint}; conversion from conversation to demo is the primary lever."
+            )
+
+    elif bn == "progression":
+        adv_rate = round(adv_to_s3 / adv_create * 100, 1) if adv_create else 0.0
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
+        why.append(
+            f"1. {_p(s1_to_s2_rate)} of new deals reached demo stage ({adv_to_s2} of {adv_create}), "
+            f"but only {_p(adv_rate)} advanced past demo ({adv_to_s3} of {adv_create})."
+            f"\n   - Demos are being held but not converting to committed next steps."
+        )
+        total_pg = pg_cold_n + pg_inb_n
+        if total_pg >= _DEALS_CREATED_MIN:
+            why.append(
+                f"2. Deal creation was not the constraint: {total_pg} new deals entered the funnel "
+                f"({pg_cold_n} cold, {pg_inb_n} inbound)."
+                f"\n   - The bottleneck is post-demo progression, not pipeline generation."
             )
         if cov_n > 0:
             why.append(
-                f"3. Open pipeline: {cov_n} deals ({_m(cov_amt)}) — stalled S1 deals are inflating "
-                f"this number without representing real near-term revenue."
+                f"3. Open pipeline: {cov_n} deals ({_m(cov_amt)}) — S2 deals without forward stage movement "
+                f"are inflating this number without representing confirmed near-term revenue."
             )
 
     elif bn == "activity":
@@ -545,7 +648,28 @@ def generate_rep_summary(m, name, month_label):
     # ── Next focus — 2–3 forward-looking actionable bullets ──────────────────
     next_focus = []
 
-    if bn == "on_track":
+    if bn == "coverage_risk":
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        next_focus.append(
+            f"Forward coverage is only {_p(cov_pct_of_quota)} of quota entering next month — "
+            f"prioritise new S1 creation in the first two weeks before deal advancement consumes the calendar."
+        )
+        next_focus.append(
+            "Strong close months create pipeline gaps the following month — protect next month's "
+            "attainment by running the same prospecting cadence regardless of this month's result."
+        )
+        if cold_won_n == 0 and won_n >= 2:
+            next_focus.append(
+                "All current wins came from inbound; build cold outreach pipeline early in the month "
+                "to reduce reliance on inbound lead volume."
+            )
+        elif dials > 0:
+            next_focus.append(
+                f"The {dials:,}-dial cadence generated {_n(co_deals, 'cold deal')} this month — "
+                f"sustain that prospecting volume into next month to avoid a coverage gap."
+            )
+
+    elif bn == "on_track":
         if cov_n < 3:
             next_focus.append(
                 f"Pipeline coverage entering next month is thin ({_n(cov_n, 'deal')}); "
@@ -583,6 +707,21 @@ def generate_rep_summary(m, name, month_label):
                 f"disqualify any deals without a committed next step."
             )
 
+    elif bn == "never_demoed":
+        next_focus.append(
+            f"Audit the {never_dem_n} never-demo'd losses: identify whether the gap is the demo ask, "
+            f"urgency, or prospect engagement — each requires a different fix."
+        )
+        next_focus.append(
+            "On every live S1 conversation, make a direct demo ask before ending the call — "
+            "if the prospect won't commit to a demo, qualify hard on urgency and need before continuing outreach."
+        )
+        if cov_n > 0:
+            next_focus.append(
+                f"Review the {cov_n} open deals ({_m(cov_amt)}) to confirm each has a scheduled demo — "
+                f"any without one should be treated as unconfirmed S1 until the meeting is booked."
+            )
+
     elif bn == "close":
         loss_line = (
             f"{top_reason_n} losses to {top_reason} — establish a specific counter-play "
@@ -603,19 +742,35 @@ def generate_rep_summary(m, name, month_label):
                 f"gaps before they reach late stage."
             )
 
-    elif bn == "progression":
+    elif bn == "s1_stall":
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
         next_focus.append(
-            "Review all S1 deals this week: assign each a concrete next-step date or "
-            "disqualify — stalled S1 deals inflate pipeline coverage without representing real revenue."
+            "The clearest gap is between conversations started and demos booked — review S1 call quality: "
+            "are you creating urgency and making a direct demo ask before ending the call?"
         )
         next_focus.append(
-            "Focus discovery calls on establishing a clear problem and getting an explicit "
-            "S2 commitment before closing the call."
+            f"Of the {adv_create} new deals created, only {adv_to_s2} reached demo — "
+            f"run a call review with your manager to identify exactly where conversations are dropping off."
         )
         if cov_n > 0:
             next_focus.append(
-                f"Of the {cov_n} open deals ({_m(cov_amt)}), flag any without stage movement "
-                f"in the last 14 days — recycle or drop rather than let them age."
+                f"Advance the {cov_n} open S1 deals ({_m(cov_amt)}) this week: "
+                f"each needs a confirmed next-step date or should be disqualified."
+            )
+
+    elif bn == "progression":
+        next_focus.append(
+            "Review all S2 deals: after each demo, has a clear next step been committed "
+            "(buying committee meeting, trial, or ROI review)? If not, re-engage or disqualify."
+        )
+        next_focus.append(
+            "Focus post-demo follow-up on stakeholder alignment and a defined next step within "
+            "48 hours of each demo — this is the highest-leverage gap based on the data."
+        )
+        if cov_n > 0:
+            next_focus.append(
+                f"Of the {cov_n} open deals ({_m(cov_amt)}), flag any in S2 without stage movement "
+                f"in the last 14 days — advance or disqualify rather than let them age."
             )
 
     elif bn == "activity":
@@ -691,7 +846,11 @@ def generate_team_summary(m, month_label):
     inb_won_n    = int(m.get("inbound_won_n",  0) or 0)
     inb_won_amt  = float(m.get("inbound_won_amt", 0) or 0)
     adv_create   = int(m.get("adv_created",    0) or 0)
+    adv_to_s2    = int(m.get("adv_to_s2",      0) or 0)
     adv_to_s3    = int(m.get("adv_to_s3",      0) or 0)
+    top_reason   = m.get("top_lost_reason", "Other")
+    top_reason_n = int(m.get("top_lost_n",     0) or 0)
+    never_dem_n  = int(m.get("never_demoed_n", 0) or 0)
     cov_amt      = float(m.get("cov_total_amt", 0) or 0)
     cov_n        = int(m.get("cov_total_n",     0) or 0)
     n_reps       = int(m.get("n_reps",          0) or 0)
@@ -705,7 +864,14 @@ def generate_team_summary(m, month_label):
     # ── Main takeaway ─────────────────────────────────────────────────────────
     if quota_amt:
         gap = abs(delta)
-        if attain is not None and attain >= _ATTAIN_ON_TRACK:
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        if bn == "coverage_risk":
+            takeaway = (
+                f"The team exceeded quota in {month_label} at {_p(attain)} attainment, "
+                f"closing {_m(won_amt)} — but enters next month with only {_m(cov_amt)} "
+                f"in open pipeline ({_p(cov_pct_of_quota)} of quota)."
+            )
+        elif attain is not None and attain >= _ATTAIN_ON_TRACK:
             takeaway = (
                 f"The team closed {_m(won_amt)} in {month_label} at {_p(attain)} of quota, "
                 f"with {n_on_quota} of {n_reps} reps at or above target."
@@ -741,13 +907,64 @@ def generate_team_summary(m, month_label):
         )
 
     # Team bottleneck
-    if bn == "close":
+    if bn == "coverage_risk":
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        why.append(
+            f"2. Forward pipeline entering next month: {_n(cov_n, 'deal')} totalling {_m(cov_amt)} — "
+            f"covering only {_p(cov_pct_of_quota)} of the {_m(quota_amt)} team quota."
+            f"\n   - Below the {_p(_COV_QUOTA_FLOOR_PCT * 100)} coverage floor needed for consistent attainment."
+        )
+        if dials > 0:
+            why.append(
+                f"3. Outbound: {dials:,} total dials at {_p(connect_rate)} connect rate, "
+                f"{_n(co_deals, 'cold deal')} created team-wide."
+            )
+    elif bn == "never_demoed":
         closed_n = won_n + lost_n
+        reason_line = f"\n   - Top loss reason: {top_reason} ({top_reason_n} of {lost_n} losses)." if top_reason_n > 0 else ""
+        why.append(
+            f"2. {never_dem_n} of {lost_n} team losses never reached demo stage — "
+            f"the primary gap is early-funnel conversion, not close quality."
+            f"\n   - Win rate: {_p(win_rate)} ({won_n} won vs {lost_n} lost of {closed_n} closed).{reason_line}"
+        )
+        total_pg = pg_cold_n + pg_inb_n
+        if cov_n > 0:
+            cov_ratio_line = (
+                f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
+                if quota_amt else ""
+            )
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
+            )
+    elif bn == "close":
+        closed_n = won_n + lost_n
+        reason_line = f"\n   - Top loss reason: {top_reason} ({top_reason_n} of {lost_n} losses)." if top_reason_n > 0 else ""
         why.append(
             f"2. Win rate of {_p(win_rate)} was below the {_WIN_RATE_WARN:.0f}% threshold "
-            f"({won_n} won vs {lost_n} lost of {closed_n} closed)."
+            f"({won_n} won vs {lost_n} lost of {closed_n} closed).{reason_line}"
             f"\n   - Deal creation was not the constraint; late-stage conversion was the gap."
         )
+        if cov_n > 0:
+            cov_ratio_line = (
+                f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
+                if quota_amt else ""
+            )
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
+            )
+    elif bn == "s1_stall":
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
+        adv_rate = round(adv_to_s3 / adv_create * 100, 1) if adv_create else 0.0
+        why.append(
+            f"2. Only {_p(s1_to_s2_rate)} of deals created in {month_label} advanced to demo stage "
+            f"({adv_to_s2} of {adv_create}) — first conversations are not converting to committed meetings."
+            f"\n   - This is a system-level pattern, not isolated to one rep."
+        )
+        if cov_n > 0:
+            why.append(
+                f"3. Open pipeline: {cov_n} deals ({_m(cov_amt)}) — stalled S1 deals may be "
+                f"inflating this count without representing confirmed near-term revenue."
+            )
     elif bn in ("activity", "dial_conv"):
         total_target = n_reps * _DEALS_CREATED_MIN
         why.append(
@@ -755,44 +972,79 @@ def generate_team_summary(m, month_label):
             f"({pg_cold_n} cold, {pg_inb_n} inbound) against a target of {total_target}+ across {n_reps} reps."
             + (f"\n   - Activity: {dials:,} total dials, {_p(connect_rate)} connect rate." if dials > 0 else "")
         )
+        if cov_n > 0:
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}."
+            )
     elif bn == "progression":
-        adv_rate = round(adv_to_s3 / adv_create * 100, 1) if adv_create else 0
+        adv_rate = round(adv_to_s3 / adv_create * 100, 1) if adv_create else 0.0
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
         why.append(
-            f"2. Deal progression was weak: {_p(adv_rate)} of deals created in {month_label} "
-            f"reached S3 ({adv_to_s3} of {adv_create})."
-            f"\n   - Pipeline exists but is not advancing — indicates qualification or urgency gaps."
+            f"2. {_p(s1_to_s2_rate)} of new deals reached demo ({adv_to_s2} of {adv_create}), "
+            f"but only {_p(adv_rate)} advanced past demo stage ({adv_to_s3} of {adv_create})."
+            f"\n   - Demos are being held but not converting to committed next steps team-wide."
         )
+        if cov_n > 0:
+            cov_ratio_line = (
+                f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
+                if quota_amt else ""
+            )
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
+            )
     elif bn == "inbound_dep":
         why.append(
             f"2. Outbound produced {_n(cold_won_n, 'won deal')} ({_m(cold_won_amt)}); "
             f"inbound accounted for {_n(inb_won_n, 'won deal')} ({_m(inb_won_amt)})."
             f"\n   - Quota attainment is inbound-dependent, increasing exposure to marketing-volume risk."
         )
+        if cov_n > 0:
+            cov_ratio_line = (
+                f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
+                if quota_amt else ""
+            )
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
+            )
     else:
         total_pg = pg_cold_n + pg_inb_n
         why.append(
             f"2. Team created {_n(total_pg, 'new deal')} in {month_label} "
             f"({pg_cold_n} cold, {pg_inb_n} inbound) with {_p(win_rate)} win rate."
         )
-
-    # Forward coverage
-    if cov_n > 0:
-        cov_ratio_line = (
-            f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
-            if quota_amt else ""
-        )
-        why.append(
-            f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
-        )
-    else:
-        why.append(
-            "3. No open pipeline recorded for the next period — forward coverage is at risk."
-        )
+        if cov_n > 0:
+            cov_ratio_line = (
+                f"\n   - Coverage vs quota: {_p(cov_amt / quota_amt * 100)}."
+                if quota_amt else ""
+            )
+            why.append(
+                f"3. Open pipeline entering next period: {cov_n} deals totalling {_m(cov_amt)}.{cov_ratio_line}"
+            )
+        elif not cov_n:
+            why.append(
+                "3. No open pipeline recorded for the next period — forward coverage is at risk."
+            )
 
     # ── Next focus ────────────────────────────────────────────────────────────
     next_focus = []
 
-    if bn in ("on_track", "coverage"):
+    if bn == "coverage_risk":
+        cov_pct_of_quota = cov_amt / quota_amt * 100 if quota_amt else 0
+        next_focus.append(
+            f"Team pipeline entering next month covers only {_p(cov_pct_of_quota)} of quota — "
+            f"prioritise new S1 creation in the first two weeks before advancement work consumes the calendar."
+        )
+        next_focus.append(
+            "Strong close months create coverage gaps the following month — set a team prospecting "
+            "target for the first week and track it daily rather than waiting for mid-month."
+        )
+        if n_at_risk > 0:
+            next_focus.append(
+                f"Coach the {n_at_risk} rep{'s' if n_at_risk != 1 else ''} below {_ATTAIN_WARN:.0f}% — "
+                f"their pipeline gap is likely larger and needs early-month attention."
+            )
+
+    elif bn in ("on_track", "coverage"):
         next_focus.append(
             f"Team enters next month with {cov_n} open deals ({_m(cov_amt)}) — "
             f"{'maintain cadence' if cov_n >= n_reps * 2 else 'prioritise S1 creation in the first two weeks'}."
@@ -807,6 +1059,22 @@ def generate_team_summary(m, month_label):
             "pipeline is on track for next month before relying on it."
         )
 
+    elif bn == "never_demoed":
+        next_focus.append(
+            f"Run a loss review focused on the {never_dem_n} never-demo'd deals — "
+            f"identify whether the gap is the demo ask, urgency creation, or follow-up cadence, "
+            f"then establish a team-wide counter-play."
+        )
+        next_focus.append(
+            "Review S1 conversation quality team-wide: are reps making a direct demo ask on every live call? "
+            "Coach reps to set a next step before ending any S1 conversation."
+        )
+        if n_at_risk > 0:
+            next_focus.append(
+                f"The {n_at_risk} rep{'s' if n_at_risk != 1 else ''} below {_ATTAIN_WARN:.0f}% likely "
+                f"have the most stalled S1 deals — prioritise individual call reviews for these reps."
+            )
+
     elif bn == "inbound_dep":
         next_focus.append(
             "Increase team cold outreach output — set a minimum of 2 CO wins per rep per month "
@@ -818,14 +1086,34 @@ def generate_team_summary(m, month_label):
         )
 
     elif bn == "close":
-        next_focus.append(
-            f"Run a loss review with the full team — {_n(lost_n, 'deal')} lost in {month_label} "
-            f"represents a pattern to diagnose before similar deals enter the funnel next month."
+        reason_focus = (
+            f"Run a loss review with the full team — {top_reason_n} of {lost_n} losses came from "
+            f"{top_reason}; establish a specific counter-play before similar deals enter the funnel."
+            if top_reason_n > 0
+            else f"Run a loss review with the full team — {_n(lost_n, 'deal')} lost in {month_label} "
+                 f"represents a pattern to diagnose before similar deals enter the funnel next month."
         )
+        next_focus.append(reason_focus)
         next_focus.append(
             f"Review S3 and S4 qualification criteria team-wide; a {_p(win_rate)} win rate "
             f"at close suggests deals are advancing without sufficient buying commitment."
         )
+
+    elif bn == "s1_stall":
+        s1_to_s2_rate = round(adv_to_s2 / adv_create * 100, 1) if adv_create else 0.0
+        next_focus.append(
+            "Conduct a team call review focused on S1 conversations: are reps creating urgency and "
+            "making a direct demo ask? Identify the drop-off point before the meeting is booked."
+        )
+        next_focus.append(
+            f"Only {_p(s1_to_s2_rate)} of new deals advanced to demo — set a team S2 meeting "
+            f"target for next month and track it weekly, not at month-end."
+        )
+        if n_at_risk > 0:
+            next_focus.append(
+                f"Coach the {n_at_risk} rep{'s' if n_at_risk != 1 else ''} below {_ATTAIN_WARN:.0f}% "
+                f"first — their S1 conversion gap is likely driving most of the team shortfall."
+            )
 
     elif bn in ("activity", "dial_conv"):
         next_focus.append(
@@ -839,12 +1127,12 @@ def generate_team_summary(m, month_label):
 
     elif bn == "progression":
         next_focus.append(
-            "Conduct a deal review on all S1 deals created last month: each must have a committed "
-            "next-step date; disqualify any without one."
+            "Conduct a deal review on all S2 deals created last month: each must have a committed "
+            "next step (trial, stakeholder meeting, or ROI review); disqualify any without one."
         )
         next_focus.append(
-            "Determine whether the S1 stall is an ICP problem (wrong companies) or a follow-through "
-            "problem (no next step set) — each requires a different coaching response."
+            "Determine whether the post-demo stall is a discovery gap (problem not clearly established) "
+            "or a follow-through gap (no next step set) — each requires a different coaching response."
         )
 
     return {

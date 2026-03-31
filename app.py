@@ -1596,6 +1596,21 @@ def monthly_summary_regenerate():
     return jsonify({"year": year, "month": month, "deleted": n_deleted, "records_saved": n_saved})
 
 
+@app.route("/api/monthly-summary/delete", methods=["POST"])
+@login_required
+def monthly_summary_delete():
+    """Delete locked summaries for last_completed_month without regenerating.
+
+    Records are regenerated lazily on next page load using the existing cache,
+    avoiding the timeout risk of a full HubSpot cache refresh.
+    """
+    import monthly_store
+    year, month = monthly_store.last_completed_month()
+    n_deleted = monthly_store.delete_month(year, month)
+    return jsonify({"year": year, "month": month, "deleted": n_deleted,
+                    "next_step": "Load /scorecard/history to regenerate"})
+
+
 # ── Background cache scheduler ───────────────────────────────────────────────
 # Guard against Flask's dev-reloader starting the thread twice.
 # In production (Gunicorn) this block always runs once per worker.
