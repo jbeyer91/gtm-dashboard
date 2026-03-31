@@ -1596,6 +1596,30 @@ def monthly_summary_regenerate():
     return jsonify({"year": year, "month": month, "deleted": n_deleted, "records_saved": n_saved})
 
 
+@app.route("/api/monthly-summary/backfill", methods=["POST"])
+@login_required
+def monthly_summary_backfill():
+    """Generate locked summaries for any historical month.
+
+    Body: {"year": 2026, "month": 1}
+
+    Uses cached HubSpot data where available.  Safe to call multiple times —
+    already-locked records are skipped.  Returns a count of newly saved records.
+    """
+    import summary_engine
+    import monthly_store
+
+    data  = request.get_json() or {}
+    year  = int(data.get("year",  0))
+    month = int(data.get("month", 0))
+    if not (year and 1 <= month <= 12):
+        return jsonify({"error": "valid year and month (1-12) required"}), 400
+
+    result  = summary_engine.generate_all_for_month(year, month)
+    n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
+    return jsonify({"year": year, "month": month, "records_saved": n_saved})
+
+
 @app.route("/api/monthly-summary/delete", methods=["POST"])
 @login_required
 def monthly_summary_delete():

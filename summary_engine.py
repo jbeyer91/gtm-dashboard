@@ -114,19 +114,24 @@ def _top_lost_reason(lost_row):
 
 # ── Snapshot collection ───────────────────────────────────────────────────────
 
-def collect_rep_snapshot(owner_id):
-    """Pull last-month metrics for one rep across all analytics surfaces.
+def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_month"):
+    """Pull metrics for one rep across all analytics surfaces.
+
+    period          — data period for deals/calls/pipeline (default "last_month";
+                      pass "month:YYYY-MM" for historical backfill)
+    coverage_period — period used for forward pipeline coverage snapshot
+                      (default "this_month"; pass "month:YYYY-MM" for backfill)
 
     Returns a flat dict of numbers.  All values default to 0 / 0.0 / None
     so the caller never needs to guard against missing keys.
     """
-    won  = analytics.compute_deals_won("last_month")
-    call = analytics.compute_call_stats("last_month")
-    pg   = analytics.compute_pipeline_generated("last_month")
-    lost = analytics.compute_deals_lost("last_month")
-    adv  = analytics.compute_deal_advancement("last_month")
-    cov  = analytics.compute_pipeline_coverage("this_month")
-    sc   = analytics.compute_scorecard("last_month")
+    won  = analytics.compute_deals_won(period)
+    call = analytics.compute_call_stats(period)
+    pg   = analytics.compute_pipeline_generated(period)
+    lost = analytics.compute_deals_lost(period)
+    adv  = analytics.compute_deal_advancement(period)
+    cov  = analytics.compute_pipeline_coverage(coverage_period)
+    sc   = analytics.compute_scorecard(period)
 
     wr = _row(won["rows"],  owner_id)
     cr = _row(call["rows"], owner_id)
@@ -192,19 +197,23 @@ def collect_rep_snapshot(owner_id):
     }
 
 
-def collect_team_snapshot():
-    """Pull last-month metrics at the team level.
+def collect_team_snapshot(period="last_month", coverage_period="this_month"):
+    """Pull metrics at the team level.
+
+    period          — data period for deals/calls/pipeline (default "last_month";
+                      pass "month:YYYY-MM" for historical backfill)
+    coverage_period — period used for forward pipeline coverage snapshot
 
     Includes aggregated totals and a per-rep attainment breakdown so the
     team summary can identify concentration, outliers, and systemic patterns.
     """
-    won  = analytics.compute_deals_won("last_month")
-    call = analytics.compute_call_stats("last_month")
-    pg   = analytics.compute_pipeline_generated("last_month")
-    lost = analytics.compute_deals_lost("last_month")
-    adv  = analytics.compute_deal_advancement("last_month")
-    cov  = analytics.compute_pipeline_coverage("this_month")
-    sc   = analytics.compute_scorecard("last_month")
+    won  = analytics.compute_deals_won(period)
+    call = analytics.compute_call_stats(period)
+    pg   = analytics.compute_pipeline_generated(period)
+    lost = analytics.compute_deals_lost(period)
+    adv  = analytics.compute_deal_advancement(period)
+    cov  = analytics.compute_pipeline_coverage(coverage_period)
+    sc   = analytics.compute_scorecard(period)
 
     wt = won["totals"]
     ct = call["totals"]
@@ -1144,6 +1153,21 @@ def generate_team_summary(m, month_label):
 
 # ── Public entry points ───────────────────────────────────────────────────────
 
+def _periods_for(year, month):
+    """Return (data_period, coverage_period) for a given year/month.
+
+    For the most-recently completed calendar month the named periods are used
+    so the TTL cache keys stay stable.  For any other month the explicit
+    "month:YYYY-MM" form is used.
+    """
+    cur_year, cur_month = store.last_completed_month()
+    if year == cur_year and month == cur_month:
+        return "last_month", "this_month"
+    cov_year  = year + (month // 12)
+    cov_month = (month % 12) + 1
+    return f"month:{year:04d}-{month:02d}", f"month:{cov_year:04d}-{cov_month:02d}"
+
+
 def generate_and_save_rep(owner_id, label, year, month):
     """Generate and persist a locked monthly summary for one rep.
 
@@ -1154,7 +1178,8 @@ def generate_and_save_rep(owner_id, label, year, month):
         if rec["year"] == year and rec["month"] == month:
             return False
 
-    metrics     = collect_rep_snapshot(owner_id)
+    data_period, coverage_period = _periods_for(year, month)
+    metrics     = collect_rep_snapshot(owner_id, data_period, coverage_period)
     month_label = f"{_month_name(month)} {year}"
     summary     = generate_rep_summary(metrics, label, month_label)
 
@@ -1181,7 +1206,8 @@ def generate_and_save_team(year, month):
         if rec["year"] == year and rec["month"] == month:
             return False
 
-    metrics     = collect_team_snapshot()
+    data_period, coverage_period = _periods_for(year, month)
+    metrics     = collect_team_snapshot(data_period, coverage_period)
     month_label = f"{_month_name(month)} {year}"
     summary     = generate_team_summary(metrics, month_label)
 

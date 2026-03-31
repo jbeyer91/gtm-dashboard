@@ -263,6 +263,15 @@ def get_date_range(period: str):
     elif period.startswith("prior_"):
         p_start, p_end, _ = get_prior_range(period[6:])
         return p_start, p_end
+    elif period.startswith("month:"):
+        # "month:YYYY-MM" — exact calendar month, UTC midnight boundaries
+        yr, mo = (int(x) for x in period[6:].split("-"))
+        start = datetime(yr, mo, 1, tzinfo=timezone.utc)
+        if mo == 12:
+            end = datetime(yr + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+        else:
+            end = datetime(yr, mo + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+        return start, end
     else:
         return now - timedelta(days=30), now
 
