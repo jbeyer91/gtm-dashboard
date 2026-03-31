@@ -105,8 +105,10 @@ SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
     {"type": "link",  "endpoint": "home",               "label": "Home"},
-    {"type": "link",  "endpoint": "scorecard",         "label": "Scorecard"},
-    {"type": "link",  "endpoint": "scorecard_history", "label": "Scorecard History"},
+    {"type": "group", "label": "Scorecard", "children": [
+        {"endpoint": "scorecard",         "label": "This Month Live Scorecard"},
+        {"endpoint": "scorecard_history", "label": "Scorecard History"},
+    ]},
     {"type": "group", "label": "Deals", "children": [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
@@ -299,17 +301,17 @@ def _annotate_live_row(row: dict) -> dict:
 
 def _grade_sort_value(grade: str) -> int:
     order = {
-        "D": 0,
-        "D+": 1,
-        "C-": 2,
-        "C": 3,
-        "C+": 4,
+        "A+": 0,
+        "A": 1,
+        "A-": 2,
+        "B+": 3,
+        "B": 4,
         "B-": 5,
-        "B": 6,
-        "B+": 7,
-        "A-": 8,
-        "A": 9,
-        "A+": 10,
+        "C+": 6,
+        "C": 7,
+        "C-": 8,
+        "D+": 9,
+        "D": 10,
     }
     return order.get((grade or "").strip(), 999)
 

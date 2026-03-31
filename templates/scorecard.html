@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import fmt_pct, fmt_money, fmt_num, csv_link, grade_badge as monthly_grade_badge, why_list, next_focus_list %}
-{% block title %} — Scorecard{% endblock %}
+{% from "macros.html" import fmt_pct, fmt_money, csv_link %}
+{% block title %} — This Month Live Scorecard{% endblock %}
 
 {% macro scorecard_grade_badge(grade) %}
   {% if grade in ("A+","A","A-") %}
@@ -35,73 +35,15 @@
   </div>
 {% endmacro %}
 
-{% macro snapshot_metric(label, value) %}
-  <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-    <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{{ label }}</p>
-    <p class="mt-1 text-base font-semibold tabular-nums text-slate-800">{{ value }}</p>
-  </div>
-{% endmacro %}
-
-{% macro monthly_review_body(record, meta) %}
-  {% set m = record.metrics %}
-  <div class="space-y-5">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <div class="flex flex-wrap items-center gap-2.5">
-          <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Locked Monthly Snapshot</span>
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ meta.month_label }}</span>
-        </div>
-        <p class="mt-1.5 text-sm text-slate-500">Based on data through {{ meta.cutoff_label }}</p>
-      </div>
-      <div class="shrink-0">{{ monthly_grade_badge(record.final_grade) }}</div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-      {{ snapshot_metric("Attain", fmt_pct(m.attain_pct) if m.attain_pct is not none else "—") }}
-      {{ snapshot_metric("Won", fmt_money(m.won_amt)) }}
-      {{ snapshot_metric("Dials", fmt_num(m.dials)) }}
-      {{ snapshot_metric("Avg Dials / Day", m.score_avg_dials) }}
-      {{ snapshot_metric("Connect Rate", fmt_pct(m.connect_rate)) }}
-      {{ snapshot_metric("Deals Created", m.score_deals_created) }}
-      {{ snapshot_metric("$ Advanced to S2", fmt_money(m.score_s2_amt)) }}
-      {{ snapshot_metric("Stale Accounts", m.score_stale_count) }}
-    </div>
-
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Main Takeaway</p>
-      <p class="mt-2 text-sm font-semibold leading-snug text-slate-800">{{ record.main_takeaway }}</p>
-    </div>
-    {{ why_list(record.why) }}
-    {{ next_focus_list(record.next_focus) }}
-  </div>
-{% endmacro %}
-
 {% block content %}
 {% set t = data.team %}
-<div class="mb-8 rounded-[28px] px-8 py-7 shadow-sm" style="background: linear-gradient(135deg, #1E3A6D 0%, #4F46E5 55%, #7C3AED 100%);">
-  <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.22em]" style="color: rgba(255,255,255,0.72);">
-        {% if is_admin %}Sales Management View{% else %}My Scorecard{% endif %}
-      </p>
-      <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">Scorecard</h1>
-      <p class="mt-2 text-sm" style="color: rgba(255,255,255,0.72);">
-        {% if is_admin %}Current performance plus the most recent locked monthly review.{% else %}Your current performance plus your latest locked monthly review.{% endif %}
-      </p>
-    </div>
-    <div class="max-w-xl rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white/85 backdrop-blur-sm">
-      Action page only. Older months live in Scorecard History.
-    </div>
-  </div>
-</div>
-
-<section class="mb-12">
+<section class="mb-10">
   <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
     <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Section A</p>
-      <h2 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-        {% if is_admin %}Current Month Live Scorecard{% else %}My Current Month Scorecard{% endif %}
-      </h2>
+      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Scorecard</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+        {% if is_admin %}This Month Live Scorecard{% else %}My This Month Live Scorecard{% endif %}
+      </h1>
       <p class="mt-1 text-sm text-slate-500">{{ month_label }} · Live through {{ live_cutoff_label }}</p>
     </div>
     {{ csv_link(url_for('scorecard_csv')) }}
@@ -111,12 +53,8 @@
   <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p class="text-sm font-semibold text-slate-800">
-          Team at {{ "%.1f"|format(t.attain_pct) }}% to quota this month.
-        </p>
-        <p class="mt-1 text-sm text-slate-500">
-          {{ live_grade_summary.strong }} strong · {{ live_grade_summary.mixed }} mixed · {{ live_grade_summary.at_risk }} at risk
-        </p>
+        <p class="text-sm font-semibold text-slate-800">Team at {{ "%.1f"|format(t.attain_pct) }}% to quota this month.</p>
+        <p class="mt-1 text-sm text-slate-500">{{ live_grade_summary.strong }} strong · {{ live_grade_summary.mixed }} mixed · {{ live_grade_summary.at_risk }} at risk</p>
       </div>
       <div class="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
         {{ bdays_elapsed }} of {{ bdays_total }} business days elapsed · {{ pace_pct }}% of month complete
@@ -133,8 +71,8 @@
   <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
     <div class="border-b border-slate-200 px-5 py-4">
       <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Live Rep Scorecard</p>
-      <h3 class="mt-1 text-lg font-semibold text-slate-900">Current-month coaching view</h3>
-      <p class="mt-1 text-sm text-slate-500">Sorted by grade first so the lowest-performing reps surface first without another alert system.</p>
+      <h2 class="mt-1 text-lg font-semibold text-slate-900">Current-month ranking</h2>
+      <p class="mt-1 text-sm text-slate-500">Sorted by grade from best to worst.</p>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
@@ -146,24 +84,19 @@
             <th class="px-5 py-3 text-right">Won $</th>
             <th class="px-5 py-3 text-right">Deals Created</th>
             <th class="px-5 py-3 text-right">$ Adv. to S2</th>
-            <th class="px-5 py-3 text-left">Manager Read</th>
+            <th class="px-5 py-3 text-right">Connect Rate</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           {% for row in data.rows %}
-          <tr class="align-top">
-            <td class="px-5 py-4">
-              <div>
-                <p class="font-semibold text-slate-900">{{ row.ae }}</p>
-                <p class="text-xs text-slate-500">Connect {{ "%.1f"|format(row.connect_rate) }}% · Stale {{ row.stale_count }}</p>
-              </div>
-            </td>
+          <tr>
+            <td class="px-5 py-4 font-semibold text-slate-900">{{ row.ae }}</td>
             <td class="px-5 py-4">{{ scorecard_grade_badge(row.grade) }}</td>
             <td class="px-5 py-4 text-right font-semibold tabular-nums {% if row.attain_pct >= 80 %}text-green-600{% elif row.attain_pct >= 60 %}text-amber-600{% else %}text-red-500{% endif %}">{{ "%.1f"|format(row.attain_pct) }}%</td>
             <td class="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">{{ fmt_money(row.won_amt) }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.deals_created }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ fmt_money(row.s2_amt) }}</td>
-            <td class="px-5 py-4 text-slate-600">{{ row.attention_note }}</td>
+            <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.connect_rate) }}%</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -175,146 +108,16 @@
   {% if me %}
   <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
     <p class="text-sm font-semibold text-slate-800">You are at {{ "%.1f"|format(me.attain_pct) }}% to quota this month.</p>
-    <p class="mt-1 text-sm text-slate-500">{{ me.attention_note }}</p>
+    <p class="mt-1 text-sm text-slate-500">Connect rate is {{ "%.1f"|format(me.connect_rate) }}% this month.</p>
   </div>
 
   <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
     {{ live_card("Quota Attainment", fmt_pct(me.attain_pct), fmt_money(me.won_amt) ~ " of " ~ fmt_money(me.quota_amt) ~ " quota", "green" if me.attain_pct >= 80 else "amber" if me.attain_pct >= 60 else "red") }}
     {{ live_card("Deals Created", me.deals_created, "Current-month creation", "green" if me.deals_created >= 10 else "amber" if me.deals_created >= 6 else "red") }}
     {{ live_card("$ Advanced to S2", fmt_money(me.s2_amt), "Target " ~ fmt_money(me.s2_target), "green" if (me.s2_target and (me.s2_amt / me.s2_target * 100) >= 80) else "amber" if (me.s2_target and (me.s2_amt / me.s2_target * 100) >= 60) else "red") }}
-    {{ live_card("Avg Dials / Day", me.avg_dials, "Connect " ~ "%.1f"|format(me.connect_rate) ~ "%", "green" if me.avg_dials >= 30 else "amber" if me.avg_dials >= 20 else "red") }}
+    {{ live_card("Connect Rate", "%.1f"|format(me.connect_rate) ~ "%", "Avg dials / day " ~ me.avg_dials, "green" if me.connect_rate >= 10 else "amber" if me.connect_rate >= 8 else "red") }}
   </div>
   {% endif %}
   {% endif %}
 </section>
-
-<section class="border-t border-slate-200 pt-8">
-  <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Section B</p>
-      <h2 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-        {% if is_admin %}Most Recent Locked Monthly Review{% else %}My Most Recent Locked Monthly Review{% endif %}
-      </h2>
-      <p class="mt-1 text-sm text-slate-500">Latest completed month only. Older locked months live in Scorecard History.</p>
-    </div>
-    <a href="{{ url_for('scorecard_history') }}" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-      View Full History
-    </a>
-  </div>
-
-  {% if is_admin and team_summary %}
-  <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
-    <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Team Monthly Review</p>
-        <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ team_summary_meta.month_label }} · Locked monthly snapshot</h3>
-        <p class="mt-1 text-sm text-slate-500">Based on data through {{ team_summary_meta.cutoff_label }}</p>
-      </div>
-      <div class="max-w-lg text-sm text-slate-500">Keep this on the working page for 1:1 prep and CEO updates. Use history for older months.</div>
-    </div>
-    <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      {{ monthly_review_body(team_summary, team_summary_meta) }}
-    </div>
-  </div>
-
-  <div class="mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-    <div class="border-b border-slate-200 px-5 py-4">
-      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Latest Monthly Review By Rep</p>
-      <h3 class="mt-1 text-lg font-semibold text-slate-900">Most recent coaching briefs</h3>
-      <p class="mt-1 text-sm text-slate-500">Only the latest locked month appears here. Use history for older months.</p>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          <tr>
-            <th class="px-5 py-3 text-left">Rep</th>
-            <th class="px-5 py-3 text-left">Grade</th>
-            <th class="px-5 py-3 text-right">Attain</th>
-            <th class="px-5 py-3 text-right">Won</th>
-            <th class="px-5 py-3 text-left">Main Takeaway</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {% for row in data.rows %}
-            {% set rd = rep_data.get(row.owner_id) %}
-            {% set rec = rd.summary if rd else none %}
-            {% set meta = rd.meta if rd else {} %}
-            {% if rec %}
-            <tr id="latest-row-{{ row.owner_id }}" onclick="toggleLatestReviewPanel('{{ row.owner_id }}')" class="cursor-pointer transition-colors hover:bg-indigo-50/40">
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-3">
-                  <span class="font-semibold text-slate-900">{{ row.ae }}</span>
-                  <span class="text-xs text-slate-500">{{ meta.month_label }}</span>
-                </div>
-              </td>
-              <td class="px-5 py-4">{{ monthly_grade_badge(rec.final_grade) }}</td>
-              <td class="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">{{ fmt_pct(rec.metrics.attain_pct) if rec.metrics.attain_pct is not none else "—" }}</td>
-              <td class="px-5 py-4 text-right tabular-nums text-slate-800">{{ fmt_money(rec.metrics.won_amt) }}</td>
-              <td class="px-5 py-4 text-slate-600">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="truncate">{{ rec.main_takeaway }}</span>
-                  <svg id="latest-chev-{{ row.owner_id }}" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </div>
-              </td>
-            </tr>
-            <tr id="latest-panel-{{ row.owner_id }}" class="hidden" data-latest-panel>
-              <td colspan="5" class="bg-slate-50 px-5 py-5">
-                <div class="rounded-2xl border border-slate-200 bg-white p-5">
-                  {{ monthly_review_body(rec, meta) }}
-                </div>
-              </td>
-            </tr>
-            {% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% else %}
-    {% set me = data.rows[0] if data.rows else none %}
-    {% if me %}
-      {% set rd = rep_data.get(me.owner_id) %}
-      {% if rd and rd.summary %}
-      <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
-        <div class="mb-5 flex items-end justify-between gap-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Monthly Review</p>
-            <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ rd.meta.month_label }} · Locked monthly snapshot</h3>
-            <p class="mt-1 text-sm text-slate-500">Based on data through {{ rd.meta.cutoff_label }}</p>
-          </div>
-        </div>
-        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          {{ monthly_review_body(rd.summary, rd.meta) }}
-        </div>
-      </div>
-      {% endif %}
-    {% endif %}
-  {% endif %}
-</section>
-
-<script>
-function toggleLatestReviewPanel(ownerId) {
-  const panel = document.getElementById(`latest-panel-${ownerId}`);
-  const row = document.getElementById(`latest-row-${ownerId}`);
-  const chev = document.getElementById(`latest-chev-${ownerId}`);
-  if (!panel || !row || !chev) return;
-
-  const isOpen = !panel.classList.contains("hidden");
-  document.querySelectorAll("[data-latest-panel]").forEach((el) => el.classList.add("hidden"));
-  document.querySelectorAll('[id^="latest-row-"]').forEach((el) => el.classList.remove("bg-indigo-50/80"));
-  document.querySelectorAll('[id^="latest-chev-"]').forEach((el) => {
-    el.classList.remove("rotate-180", "text-indigo-500");
-    el.classList.add("text-slate-300");
-  });
-
-  if (!isOpen) {
-    panel.classList.remove("hidden");
-    row.classList.add("bg-indigo-50/80");
-    chev.classList.add("rotate-180", "text-indigo-500");
-    chev.classList.remove("text-slate-300");
-  }
-}
-</script>
 {% endblock %}
