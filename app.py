@@ -614,10 +614,23 @@ def scorecard_history():
 
         rep_data = {}
         rep_locked_months = []
+        active_oids = {row["owner_id"] for row in data["rows"]}
+
+        # Include departed reps who have locked history records but are no
+        # longer on the active team — their records stay permanently visible.
+        all_history_reps = monthly_store.get_all_rep_ids_with_history()
+        departed_oids = {oid for oid in all_history_reps if oid not in active_oids}
+        for oid in departed_oids:
+            data["rows"].append({
+                "owner_id": oid,
+                "ae": all_history_reps[oid],
+                "_departed": True,
+            })
+
         for row in data["rows"]:
             oid = row["owner_id"]
             history = monthly_store.get_rep_history(oid)
-            if not history:
+            if not history and not row.get("_departed"):
                 rec = summary_engine.get_or_generate_rep_summary(oid)
                 history = [rec] if rec else []
             history_entries = [
@@ -1618,6 +1631,33 @@ def monthly_summary_backfill():
     result  = summary_engine.generate_all_for_month(year, month)
     n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
     return jsonify({"year": year, "month": month, "records_saved": n_saved})
+
+
+@app.route("/api/scorecard/mark-departed", methods=["POST"])
+@login_required
+def scorecard_mark_departed():
+    """Add a rep to the grace period so they stay in analytics through month-end.
+
+    Body: {"owner_id": "12345", "label": "Clayton"}
+
+    After their month-end summary is locked, call this endpoint again with
+    {"owner_id": "12345", "remove": true} to clear them from the grace list.
+    """
+    import monthly_store
+    data   = request.get_json() or {}
+    oid    = str(data.get("owner_id", "")).strip()
+    label  = str(data.get("label", "")).strip()
+    remove = bool(data.get("remove", False))
+    if not oid:
+        return jsonify({"error": "owner_id required"}), 400
+    if remove:
+        monthly_store.remove_grace_rep(oid)
+        return jsonify({"owner_id": oid, "status": "removed from grace list"})
+    if not label:
+        return jsonify({"error": "label required when adding"}), 400
+    monthly_store.add_grace_rep(oid, label)
+    return jsonify({"owner_id": oid, "label": label,
+                    "status": "added to grace list — will remain in analytics through month-end"})
 
 
 @app.route("/api/monthly-summary/delete", methods=["POST"])
