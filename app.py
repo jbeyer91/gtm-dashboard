@@ -134,9 +134,14 @@ NAV = [
 @app.context_processor
 def inject_cache_info():
     """Make last_refreshed available in every template automatically."""
+    import cache_scheduler
     ts = last_refreshed_ts()
     stale = ts > 0 and (time.time() - ts) > 7200  # >2 hours = stale
-    return {"last_refreshed": last_refreshed_str(), "cache_stale": stale}
+    return {
+        "last_refreshed": last_refreshed_str(),
+        "cache_stale": stale,
+        "cache_syncing": cache_scheduler.is_syncing(),
+    }
 
 
 @app.before_request
