@@ -114,9 +114,9 @@ TEAM_MANAGER = {
 # Manual owner overrides for reps who should remain visible through a specific
 # business date even if their HubSpot team membership changes first.
 MANUAL_OWNER_SCOPE_OVERRIDES = {
-    "1620316593": {
+    "81784061": {
         "first_name": "Jackie",
-        "last_name": "Sperling",
+        "last_name": "Clayton",
         "email": "",
         "include_through": "2026-03-31",
     },
