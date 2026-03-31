@@ -479,6 +479,7 @@ def home():
 @login_required
 def scorecard():
     from datetime import datetime, timezone, date, timedelta
+    import calendar
     data = get_cached(analytics.compute_scorecard, "this_month")
     if data is None:
         return render_template("loading.html", nav=NAV, active="scorecard"), 202
