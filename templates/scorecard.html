@@ -84,7 +84,9 @@
             <th class="px-5 py-3 text-right">Won $</th>
             <th class="px-5 py-3 text-right">Deals Created</th>
             <th class="px-5 py-3 text-right">$ Adv. to S2</th>
+            <th class="px-5 py-3 text-right">Avg Dials / Day</th>
             <th class="px-5 py-3 text-right">Connect Rate</th>
+            <th class="px-5 py-3 text-right">Stale Accounts</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -96,7 +98,9 @@
             <td class="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">{{ fmt_money(row.won_amt) }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.deals_created }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ fmt_money(row.s2_amt) }}</td>
+            <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.avg_dials }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.connect_rate) }}%</td>
+            <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.stale_count }}</td>
           </tr>
           {% endfor %}
         </tbody>
