@@ -106,7 +106,7 @@ SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 NAV = [
     {"type": "link",  "endpoint": "home",               "label": "Home"},
     {"type": "group", "label": "Scorecard", "children": [
-        {"endpoint": "scorecard",         "label": "This Month Live Scorecard"},
+        {"endpoint": "scorecard",         "label": "This Month"},
         {"endpoint": "scorecard_history", "label": "Scorecard History"},
     ]},
     {"type": "group", "label": "Deals", "children": [
