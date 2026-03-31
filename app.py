@@ -244,15 +244,10 @@ def _summary_meta(record) -> dict:
     year = int(record["year"])
     month = int(record["month"])
     last_day = calendar.monthrange(year, month)[1]
-    business_days = max(_business_days_in_month(year, month), 1)
-    metrics = record.get("metrics") or {}
-    dials = int(metrics.get("dials", 0) or 0)
 
     return {
         "month_label": date(year, month, 1).strftime("%B %Y"),
         "cutoff_label": date(year, month, last_day).strftime("%B %-d, %Y"),
-        "business_days": business_days,
-        "avg_dials_day": round(dials / business_days, 1) if dials else 0.0,
     }
 
 

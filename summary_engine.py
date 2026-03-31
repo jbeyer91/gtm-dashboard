@@ -24,8 +24,7 @@ from datetime import datetime
 
 import analytics
 import monthly_store as store
-from hubspot import get_owners, get_team_owner_ids, get_calls, get_date_range
-from analytics import CALL_CONNECTED_GUIDS
+from hubspot import get_owners, get_team_owner_ids
 
 # ── Thresholds (match template colour breakpoints where they exist) ────────────
 _WIN_RATE_WARN      = 20.0   # pct — below this flags a close-quality issue
@@ -110,71 +109,6 @@ def _top_lost_reason(lost_row):
     return best_label, best_n
 
 
-# ── Raw call counting ─────────────────────────────────────────────────────────
-
-def _raw_call_counts(period: str, owner_id: str = None) -> dict:
-    """Count all outbound calls for the period without the contact-window filter.
-
-    compute_call_stats() excludes calls to contacts at companies with any deal
-    in the last 12 months, which is correct for the Call Stats dashboard (cold
-    prospecting view) but produces non-deterministic and highly deflated numbers
-    for snapshot storage (the filter result varies by cache state at generation
-    time).
-
-    This function counts every outbound call logged by the team (or a single rep
-    if owner_id is given), giving a stable and user-legible activity figure.
-
-    Returns {"dials": int, "connects": int, "connect_rate": float,
-             "conversations": int}.
-    """
-    start, end = get_date_range(period)
-    calls = get_calls(start, end)
-
-    allowed = get_team_owner_ids()
-
-    per_owner: dict = {}  # owner_id → {"dials", "connects", "conversations"}
-
-    for call in calls:
-        oid = call["properties"].get("hubspot_owner_id", "")
-        if not oid:
-            continue
-        if allowed and oid not in allowed:
-            continue
-        if (call["properties"].get("hs_call_direction") or "").upper() != "OUTBOUND":
-            continue
-
-        if oid not in per_owner:
-            per_owner[oid] = {"dials": 0, "connects": 0, "conversations": 0}
-
-        per_owner[oid]["dials"] += 1
-        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
-        if disposition in CALL_CONNECTED_GUIDS:
-            per_owner[oid]["connects"] += 1
-        duration_ms = int(call["properties"].get("hs_call_duration") or 0)
-        if disposition in CALL_CONNECTED_GUIDS and duration_ms >= 60000:
-            per_owner[oid]["conversations"] += 1
-
-    if owner_id is not None:
-        c = per_owner.get(owner_id, {"dials": 0, "connects": 0, "conversations": 0})
-    else:
-        # Aggregate across all allowed owners
-        c = {"dials": 0, "connects": 0, "conversations": 0}
-        for v in per_owner.values():
-            c["dials"]         += v["dials"]
-            c["connects"]      += v["connects"]
-            c["conversations"] += v["conversations"]
-
-    dials = c["dials"]
-    connects = c["connects"]
-    connect_rate = round(connects / dials * 100, 1) if dials else 0.0
-    return {
-        "dials":        dials,
-        "connects":     connects,
-        "connect_rate": connect_rate,
-        "conversations": c["conversations"],
-    }
-
-
 # ── Snapshot collection ───────────────────────────────────────────────────────
 
 def collect_rep_snapshot(owner_id):
@@ -190,7 +124,6 @@ def collect_rep_snapshot(owner_id):
     adv  = analytics.compute_deal_advancement("last_month")
     cov  = analytics.compute_pipeline_coverage("this_month")
     sc   = analytics.compute_scorecard("last_month")
-    raw  = _raw_call_counts("last_month", owner_id)
 
     wr = _row(won["rows"],  owner_id)
     cr = _row(call["rows"], owner_id)
@@ -220,11 +153,11 @@ def collect_rep_snapshot(owner_id):
         "lost_n":           wr.get("total_lost_n",   0),
         "top_lost_reason":  top_reason,
         "top_lost_n":       top_reason_n,
-        # Activity — all outbound calls (no contact-window exclusion; see _raw_call_counts)
-        "dials":            raw["dials"],
-        "connects":         raw["connects"],
-        "connect_rate":     raw["connect_rate"],
-        "conversations":    raw["conversations"],
+        # Activity — use the same filtered call metrics as the Call Stats page
+        "dials":            cr.get("dials",              0),
+        "connects":         cr.get("connects",           0),
+        "connect_rate":     cr.get("pct_connect",        0.0),
+        "conversations":    cr.get("conversations",      0),
         "co_deals_created": cr.get("outbound_deals_created", 0),
         "co_deals_to_s2":   cr.get("outbound_deals_to_s2",   0),
         "dial_to_deal_pct": cr.get("pct_deals",      0.0),
@@ -267,7 +200,6 @@ def collect_team_snapshot():
     adv  = analytics.compute_deal_advancement("last_month")
     cov  = analytics.compute_pipeline_coverage("this_month")
     sc   = analytics.compute_scorecard("last_month")
-    raw  = _raw_call_counts("last_month")
 
     wt = won["totals"]
     ct = call["totals"]
@@ -310,11 +242,11 @@ def collect_team_snapshot():
         "cold_won_n":       wt.get("cold_n",         0),
         "inbound_won_amt":  wt.get("inbound_amt",    0.0),
         "inbound_won_n":    wt.get("inbound_n",      0),
-        # Activity — all outbound calls (no contact-window exclusion; see _raw_call_counts)
-        "dials":            raw["dials"],
-        "connect_rate":     raw["connect_rate"],
-        "connects":         raw["connects"],
-        "conversations":    raw["conversations"],
+        # Activity — use the same filtered call metrics as the Call Stats page
+        "dials":            ct.get("dials",         0),
+        "connect_rate":     ct.get("pct_connect",   0.0),
+        "connects":         ct.get("connects",      0),
+        "conversations":    ct.get("conversations", 0),
         "co_deals_created": ct.get("outbound_deals_created", 0),
         # Pipeline generated
         "pg_cold_n":        pt.get("cold_outreach_n", 0),
