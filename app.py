@@ -1560,6 +1560,38 @@ def monthly_summary_rep_history(owner_id):
     return jsonify(monthly_store.get_rep_history(owner_id))
 
 
+@app.route("/api/monthly-summary/backfill", methods=["POST"])
+@login_required
+def monthly_summary_backfill():
+    """Generate any missing summary records for a specific historical month."""
+    import cache_scheduler
+    import summary_engine
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        year = int(payload["year"])
+        month = int(payload["month"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "year and month are required integers"}), 400
+
+    if month < 1 or month > 12:
+        return jsonify({"error": "month must be between 1 and 12"}), 400
+
+    period = f"month:{year:04d}-{month:02d}"
+    if month == 12:
+        coverage_period = f"month:{year + 1:04d}-01"
+    else:
+        coverage_period = f"month:{year:04d}-{month + 1:02d}"
+
+    cache_scheduler._refresh_base_data()
+    cache_scheduler._refresh_period_data(period)
+    cache_scheduler._refresh_period_data(coverage_period)
+
+    result = summary_engine.generate_all_for_month(year, month)
+    n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
+    return jsonify({"year": year, "month": month, "records_saved": n_saved})
+
+
 @app.route("/api/monthly-summary/generate", methods=["POST"])
 @login_required
 def monthly_summary_generate():

@@ -6,6 +6,7 @@ from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
+    get_scoped_team_owner_ids,
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
@@ -197,17 +198,16 @@ def _parse_amount(val):
         return 0.0
 
 
-def _owner_allowed(oid: str) -> bool:
-    """Return True if this owner is on a TEAM_FILTER team (or if no teams are configured).
+def _owner_allowed(oid: str, as_of=None) -> bool:
+    """Return True if this owner is in scope for the specified date.
 
-    Reps in the monthly_store grace list are also allowed — this keeps their
-    data visible in analytics through the end of their last active month even
-    after they have been removed from the HubSpot team.
+    Reps in the monthly_store grace list are also allowed so they remain
+    visible through their post-departure grace window.
     """
     import monthly_store
     if oid in monthly_store.get_grace_rep_ids():
         return True
-    allowed = get_team_owner_ids()
+    allowed = get_scoped_team_owner_ids(as_of)
     return not allowed or oid in allowed
 
 
@@ -244,6 +244,7 @@ def compute_call_stats(period: str) -> dict:
     )
     period_bdays = max(period_bdays, 1)
     owners = get_owners()
+    scope_end = end
     calls = get_calls(start, end)
     log.info("compute_call_stats(%s): range %s → %s, raw calls=%d",
              period, start.isoformat(), end.isoformat(), len(calls))
@@ -261,7 +262,7 @@ def compute_call_stats(period: str) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         src = _deal_source(d)
         if src == "Cold outreach":
@@ -277,7 +278,7 @@ def compute_call_stats(period: str) -> dict:
         oid = call["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
@@ -557,6 +558,7 @@ def compute_connect_diagnostics(period: str) -> dict:
 def compute_pipeline_generated(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
+    scope_end = end
     deals = get_deals(start, end, "createdate")
 
     owner_data = defaultdict(lambda: {
@@ -570,7 +572,7 @@ def compute_pipeline_generated(period: str) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         amount = _parse_amount(d["properties"].get("amount"))
         src = _deal_source(d)
@@ -674,13 +676,15 @@ def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
     if period:
         start, end = get_date_range(period)
+        scope_end = _coverage_end(period, start, end)
         # Use the true period boundary for the open-deals query so deals with
         # expected close dates later in the period (e.g. March 18-31) are included.
-        open_deals = get_all_open_deals(start, _coverage_end(period, start, end))
+        open_deals = get_all_open_deals(start, scope_end)
         # Won deals are excluded by get_all_open_deals — fetch separately via closedate.
         # get_deals(…, "closedate") is already cached so no extra API call.
         closed_deals = get_deals(start, end, "closedate")
     else:
+        scope_end = datetime.now(timezone.utc)
         open_deals = get_all_open_deals()
         closed_deals = []
 
@@ -695,7 +699,7 @@ def compute_pipeline_coverage(period: str = None) -> dict:
         amount = _parse_amount(d["properties"].get("amount"))
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         if stage in owner_data[oid]:
             owner_data[oid][stage]["n"] += 1
@@ -708,7 +712,7 @@ def compute_pipeline_coverage(period: str = None) -> dict:
         amount = _parse_amount(d["properties"].get("amount"))
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         owner_won[oid]["n"] += 1
         owner_won[oid]["amt"] += amount
@@ -749,6 +753,7 @@ def compute_pipeline_coverage(period: str = None) -> dict:
 def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
+    scope_end = end
 
     # Cohort view: all deals created in the period, showing their CURRENT stage.
     # Uses dealstage (always populated) so this works on any HubSpot plan —
@@ -775,7 +780,7 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
         stage = d["properties"].get("dealstage", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         owner_data[oid]["created"] += 1
         # A deal at stage X has progressed through all earlier stages.
@@ -830,6 +835,7 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
 def compute_deals_won(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
+    scope_end = end
     quotas = get_quotas(start, end)  # {owner_id: quota_amount} — {} if scope missing
 
     won_deals = get_deals(start, end, "closedate")
@@ -849,7 +855,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         amount = _parse_amount(d["properties"].get("amount"))
         src = _deal_source(d)
@@ -877,7 +883,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
     for d in lost_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid):
+        if oid and _owner_allowed(oid, scope_end):
             owner_lost[oid] += 1
 
     all_owners = set(owner_won.keys()) | set(owner_lost.keys())
@@ -1119,6 +1125,7 @@ def compute_forecast(period: str) -> dict:
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
     owners = get_owners()
+    scope_end = end
 
     lost_deals = get_deals(start, end, "hs_v2_date_entered_71300363")
 
@@ -1130,7 +1137,7 @@ def compute_deals_lost(period: str) -> dict:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid:
             continue
-        if not _owner_allowed(oid):
+        if not _owner_allowed(oid, scope_end):
             continue
         reason = d["properties"].get("closed_lost_reason") or "Other"
         matched = next((r for r in REASONS if r.lower() in reason.lower()), "Other")
@@ -1311,7 +1318,7 @@ def compute_book_coverage() -> dict:
     for company in companies:
         props = company["properties"]
         oid = props.get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
+        if not oid or not _owner_allowed(oid, now):
             continue
 
         owner_data[oid]["total"] += 1
@@ -1354,7 +1361,7 @@ def compute_book_coverage() -> dict:
 
     for task in tasks:
         oid = task["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid):
+        if oid and _owner_allowed(oid, now):
             owner_data[oid]["overdue_tasks"] += 1
 
     rows = []
@@ -1423,7 +1430,7 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
     })
     for d in closed:
         oid  = d["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
+        if not oid or not _owner_allowed(oid, end):
             continue
         props  = d["properties"]
         is_won = props.get("hs_is_closed_won") == "true"
@@ -1463,6 +1470,7 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
 def compute_scorecard(period: str = "this_month") -> dict:
     """Scorecard: per-rep weighted grade across 8 KPIs for the given period."""
     start, end = get_date_range(period)
+    scope_end = end
     period_bdays = max(
         sum(1 for i in range((end - start).days + 1)
             if (start + timedelta(days=i)).weekday() < 5),
@@ -1498,14 +1506,14 @@ def compute_scorecard(period: str = "this_month") -> dict:
     owner_won   = defaultdict(float)
     for d in won_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
-        if oid and _owner_allowed(oid):
+        if oid and _owner_allowed(oid, scope_end):
             owner_won[oid] += _parse_amount(d["properties"].get("amount"))
 
     # Deals created this month (all sources)
     owner_created = defaultdict(int)
     for d in created_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
+        if not oid or not _owner_allowed(oid, scope_end):
             continue
         owner_created[oid] += 1
 
@@ -1517,7 +1525,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
     owner_s2_amt = defaultdict(float)
     for d in s2_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
-        if not oid or not _owner_allowed(oid):
+        if not oid or not _owner_allowed(oid, scope_end):
             continue
         owner_s2_amt[oid] += _parse_amount(d["properties"].get("amount"))
 
@@ -1537,7 +1545,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
     GRADE_ORDER = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-"]
 
     all_oids = {oid for oid in (set(owners) | set(quotas) | set(owner_won) | set(call_stats_by_owner))
-                if _owner_allowed(oid) and owners.get(oid)}
+                if _owner_allowed(oid, scope_end) and owners.get(oid)}
 
     rows = []
     for oid in all_oids:

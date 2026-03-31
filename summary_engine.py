@@ -20,11 +20,11 @@ generate_and_save_team(year, month)                  → bool
 generate_all_for_month(year, month)                  → {team: bool, reps: {}}
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import analytics
 import monthly_store as store
-from hubspot import get_owners, get_team_owner_ids
+from hubspot import get_date_range, get_owners, get_scoped_team_owner_ids
 
 # ── Thresholds (match template colour breakpoints where they exist) ────────────
 _WIN_RATE_WARN      = 20.0   # pct — below this flags a close-quality issue
@@ -65,6 +65,24 @@ def _n(v, singular, plural=None):
 
 def _month_name(month_int):
     return datetime(2000, int(month_int), 1).strftime("%B")
+
+
+def _month_period(year: int, month: int) -> str:
+    return f"month:{int(year):04d}-{int(month):02d}"
+
+
+def _next_month_period(year: int, month: int) -> str:
+    year = int(year)
+    month = int(month)
+    if month == 12:
+        return _month_period(year + 1, 1)
+    return _month_period(year, month + 1)
+
+
+def _month_scope_end(year: int, month: int) -> datetime:
+    period = _next_month_period(year, month)
+    start, _ = get_date_range(period)
+    return start - timedelta(seconds=1)
 
 
 # ── Grade ─────────────────────────────────────────────────────────────────────
@@ -133,7 +151,7 @@ def _prefetch_analytics(period, coverage_period):
 
 def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_month",
                          prefetched=None):
-    """Pull metrics for one rep across all analytics surfaces.
+    """Pull monthly metrics for one rep across all analytics surfaces.
 
     period          — data period for deals/calls/pipeline (default "last_month";
                       pass "month:YYYY-MM" for historical backfill)
@@ -226,10 +244,9 @@ def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_mo
         "cov_s4_n":         vr.get("s4_n",   0),  "cov_s4_amt": vr.get("s4_amt", 0.0),
     }
 
-
 def collect_team_snapshot(period="last_month", coverage_period="this_month",
                           prefetched=None):
-    """Pull metrics at the team level.
+    """Pull monthly metrics at the team level.
 
     period          — data period for deals/calls/pipeline (default "last_month";
                       pass "month:YYYY-MM" for historical backfill)
@@ -1280,7 +1297,7 @@ def generate_all_for_month(year, month):
     Returns {"team": bool, "reps": {owner_id: bool}}.
     """
     owners  = get_owners()
-    allowed = get_team_owner_ids()
+    allowed = get_scoped_team_owner_ids(_month_scope_end(year, month))
     # Grace reps (departed but still in analytics through month-end) must be
     # included even though they are no longer in the HubSpot team filter.
     grace_ids = store.get_grace_rep_ids()

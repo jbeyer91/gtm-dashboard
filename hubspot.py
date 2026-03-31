@@ -111,6 +111,51 @@ TEAM_MANAGER = {
     "Veterans": "Jordan",
 }
 
+# Manual owner overrides for reps who should remain visible through a specific
+# business date even if their HubSpot team membership changes first.
+MANUAL_OWNER_SCOPE_OVERRIDES = {
+    "1620316593": {
+        "first_name": "Jackie",
+        "last_name": "Sperling",
+        "email": "",
+        "include_through": "2026-03-31",
+    },
+}
+
+
+def _coerce_scope_date(as_of=None):
+    """Normalize a datetime/date/ISO-string into a UTC calendar date."""
+    if as_of is None:
+        return datetime.now(timezone.utc).date()
+    if isinstance(as_of, datetime):
+        return as_of.astimezone(timezone.utc).date()
+    if hasattr(as_of, "year") and hasattr(as_of, "month") and hasattr(as_of, "day"):
+        return as_of
+    return _parse_hs_datetime(str(as_of)).date()
+
+
+def _manual_owner_in_scope(owner_id: str, as_of=None) -> bool:
+    info = MANUAL_OWNER_SCOPE_OVERRIDES.get(str(owner_id))
+    if not info:
+        return False
+    scope_date = _coerce_scope_date(as_of)
+    include_from = info.get("include_from")
+    include_through = info.get("include_through")
+    if include_from and scope_date < _coerce_scope_date(include_from):
+        return False
+    if include_through and scope_date > _coerce_scope_date(include_through):
+        return False
+    return True
+
+
+def get_scoped_team_owner_ids(as_of=None) -> frozenset:
+    """Return allowed owner IDs plus any manual date-bound inclusions."""
+    allowed = set(get_team_owner_ids())
+    for owner_id in MANUAL_OWNER_SCOPE_OVERRIDES:
+        if _manual_owner_in_scope(owner_id, as_of):
+            allowed.add(owner_id)
+    return frozenset(allowed)
+
 
 @lru_cache(maxsize=1)
 def get_lifecyclestage_value(label: str) -> str:
@@ -205,6 +250,14 @@ def get_date_range(period: str):
     ET = ZoneInfo("America/Chicago")
     now = datetime.now(timezone.utc)
     now_et = now.astimezone(ET)
+    if period.startswith("month:"):
+        year, month = (int(part) for part in period.split(":", 1)[1].split("-", 1))
+        start = datetime(year, month, 1, tzinfo=timezone.utc)
+        if month == 12:
+            end = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+        else:
+            end = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+        return start, end
     if period == "this_month":
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         return start, now
@@ -418,6 +471,15 @@ def get_owners() -> dict:
             "email": o.get("email", ""),
             "user_id": str(o.get("userId", "")),  # portal user ID — needed to resolve goal assignees
         }
+    for owner_id, info in MANUAL_OWNER_SCOPE_OVERRIDES.items():
+        owners.setdefault(owner_id, {
+            "id": owner_id,
+            "name": f"{info.get('first_name', '')} {info.get('last_name', '')}".strip() or owner_id,
+            "last_name": info.get("last_name", ""),
+            "first_name": info.get("first_name", ""),
+            "email": info.get("email", ""),
+            "user_id": str(info.get("user_id", "")),
+        })
     return owners
 
 
