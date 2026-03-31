@@ -246,8 +246,53 @@ def _summary_meta(record) -> dict:
     last_day = calendar.monthrange(year, month)[1]
 
     return {
+        "key": f"{year:04d}-{month:02d}",
         "month_label": date(year, month, 1).strftime("%B %Y"),
         "cutoff_label": date(year, month, last_day).strftime("%B %-d, %Y"),
+    }
+
+
+def _annotate_live_row(row: dict) -> dict:
+    attain = float(row.get("attain_pct", 0) or 0)
+    deals_created = int(row.get("deals_created", 0) or 0)
+    connect_rate = float(row.get("connect_rate", 0) or 0)
+    s2_amt = float(row.get("s2_amt", 0) or 0)
+    s2_target = float(row.get("s2_target", 0) or 0)
+    ac_accounts = int(row.get("ac_accounts", 0) or 0)
+    stale_count = int(row.get("stale_count", 0) or 0)
+    stale_pct = (stale_count / ac_accounts * 100) if ac_accounts else 0.0
+
+    note = "Current pace looks healthy."
+    rank = 0
+    label = "On track"
+
+    if attain < 60:
+        label = "Needs attention"
+        rank = 2
+        note = "Below 60% to quota."
+    elif deals_created < 5:
+        label = "Needs attention"
+        rank = 2
+        note = "Pipeline creation is behind."
+    elif s2_target and (s2_amt / s2_target) < 0.4:
+        label = "Needs attention"
+        rank = 2
+        note = "Stage 2 progression is behind."
+    elif attain < 80 or connect_rate < 8 or stale_pct > 40:
+        label = "Watch"
+        rank = 1
+        if attain < 80:
+            note = "Pace is behind target."
+        elif connect_rate < 8:
+            note = "Connect rate is low."
+        else:
+            note = "Book discipline needs review."
+
+    return {
+        **row,
+        "attention_label": label,
+        "attention_rank": rank,
+        "attention_note": note,
     }
 
 
@@ -427,32 +472,72 @@ def scorecard():
         team_oids = get_team_owner_ids()
         is_admin = (owner_id in OWNER_EXCLUDE or
                     bool(team_oids and owner_id not in team_oids))
+        visible_rows = data["rows"]
         if not is_admin:
-            data = dict(data)
-            data["rows"] = [r for r in data["rows"] if r.get("owner_id") == owner_id]
+            visible_rows = [r for r in visible_rows if r.get("owner_id") == owner_id]
+
+        visible_rows = [_annotate_live_row(r) for r in visible_rows]
+        if is_admin:
+            visible_rows.sort(
+                key=lambda r: (
+                    -r["attention_rank"],
+                    float(r.get("attain_pct", 0) or 0),
+                    r.get("ae", ""),
+                )
+            )
+
+        data = dict(data)
+        data["rows"] = visible_rows
 
         import monthly_store
         import summary_engine
 
-        team_summary = summary_engine.get_or_generate_team_summary() if is_admin else None
-        team_summary_meta = _summary_meta(team_summary) if team_summary else None
+        team_history_entries = []
+        if is_admin:
+            team_history = monthly_store.get_team_history()
+            if not team_history:
+                generated = summary_engine.get_or_generate_team_summary()
+                team_history = [generated] if generated else []
+            team_history_entries = [
+                {"record": record, "meta": _summary_meta(record)}
+                for record in team_history
+            ]
+        team_summary = team_history_entries[0]["record"] if team_history_entries else None
+        team_summary_meta = team_history_entries[0]["meta"] if team_history_entries else None
 
         rep_data = {}
+        rep_locked_months = []
         for row in data["rows"]:
             oid = row["owner_id"]
-            rec = summary_engine.get_or_generate_rep_summary(oid)
             history = monthly_store.get_rep_history(oid)
+            if not history:
+                rec = summary_engine.get_or_generate_rep_summary(oid)
+                history = [rec] if rec else []
+            history_entries = [
+                {"record": hist, "meta": _summary_meta(hist)}
+                for hist in history
+            ]
+            if history_entries and not rep_locked_months:
+                rep_locked_months = [entry["meta"] for entry in history_entries]
             rep_data[oid] = {
-                "summary": rec,
-                "meta": _summary_meta(rec),
-                "prior_months": [
-                    {"record": hist, "meta": _summary_meta(hist)}
-                    for hist in history[1:]
-                ],
+                "summary": history[0] if history else None,
+                "meta": _summary_meta(history[0]) if history else {},
+                "history_entries": history_entries,
             }
+
+        locked_months = [entry["meta"] for entry in team_history_entries] if is_admin else rep_locked_months
+        selected_locked_key = locked_months[0]["key"] if locked_months else ""
+
+        live_attention = {
+            "needs_attention": sum(1 for row in data["rows"] if row["attention_rank"] == 2),
+            "watch": sum(1 for row in data["rows"] if row["attention_rank"] == 1),
+            "on_track": sum(1 for row in data["rows"] if row["attention_rank"] == 0),
+        }
+        live_focus_rows = [row for row in data["rows"] if row["attention_rank"] > 0][:3]
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
+    live_cutoff_label = date.today().strftime("%B %-d, %Y")
 
     # Business-day pace indicator
     today = date.today()
@@ -476,7 +561,11 @@ def scorecard():
                            deltas=deltas, prior_label=prior_label,
                            team_summary=team_summary, team_summary_meta=team_summary_meta,
                            rep_data=rep_data,
+                           team_history_entries=team_history_entries,
+                           locked_months=locked_months, selected_locked_key=selected_locked_key,
                            is_admin=is_admin,
+                           live_attention=live_attention, live_focus_rows=live_focus_rows,
+                           live_cutoff_label=live_cutoff_label,
                            pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            active="scorecard", nav=NAV)
 
