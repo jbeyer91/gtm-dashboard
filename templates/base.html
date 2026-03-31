@@ -249,6 +249,15 @@
   <!-- Footer utility area — clearly separate from nav destinations -->
   <div class="shrink-0 pt-2 pb-2" style="border-top:1px solid rgba(255,255,255,0.12);">
     {# Last refreshed timestamp — purely informational, lowest visual weight #}
+    {% if cache_syncing %}
+    <div title="Fetching fresh data from HubSpot…"
+         class="flex items-center gap-2.5 mx-2 px-2.5 py-1 text-blue-300">
+      <svg class="w-4 h-4 shrink-0 animate-spin" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      <span class="s-label text-xs whitespace-nowrap">Syncing…</span>
+    </div>
+    {% else %}
     <div title="{% if cache_stale %}Data is over 2 hours old{% else %}Refreshes hourly in the background{% endif %}"
          class="flex items-center gap-2.5 mx-2 px-2.5 py-1 {{ 'text-amber-300' if cache_stale else '' }}"
          style="{% if not cache_stale %}color:rgba(255,255,255,0.3);{% endif %}">
@@ -257,14 +266,16 @@
       </svg>
       <span class="s-label text-xs whitespace-nowrap">{{ last_refreshed }}{% if cache_stale %} ⚠{% endif %}</span>
     </div>
+    {% endif %}
     <form method="POST" action="{{ url_for('refresh_cache') }}">
-      <button type="submit" title="Fetch fresh data from HubSpot"
-              class="flex items-center gap-2.5 mx-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors duration-100 hover:bg-white/10 hover:text-white"
+      <button type="submit" title="{% if cache_syncing %}Sync already in progress{% else %}Fetch fresh data from HubSpot{% endif %}"
+              {% if cache_syncing %}disabled{% endif %}
+              class="flex items-center gap-2.5 mx-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors duration-100 {% if not cache_syncing %}hover:bg-white/10 hover:text-white{% endif %}"
               style="width:calc(100% - 1rem);color:rgba(255,255,255,0.4);">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
         </svg>
-        <span class="s-label">Refresh data</span>
+        <span class="s-label">{% if cache_syncing %}Syncing…{% else %}Refresh data{% endif %}</span>
       </button>
     </form>
     <a href="{{ url_for('logout') }}" title="Logout"

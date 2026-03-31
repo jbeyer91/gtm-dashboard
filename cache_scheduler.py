@@ -142,7 +142,11 @@ def _refresh_period_data(period: str):
 
     # get_all_open_deals uses the extended coverage boundary so deals with
     # close dates later in the period (e.g. March 18-31) are included.
-    coverage = _coverage_end(period, start, end)
+    try:
+        coverage = _coverage_end(period, start, end)
+    except Exception as exc:
+        log.warning("  ✗ _coverage_end(%s): %s", period, exc)
+        coverage = end
 
     for fn, kwargs in [
         (hubspot.get_deals,            {"date_field": "createdate"}),
@@ -179,8 +183,11 @@ def _sync():
         return
     try:
         _sync_body()
+    except Exception as exc:
+        log.error("Cache sync crashed unexpectedly: %s", exc, exc_info=True)
     finally:
         _sync_lock.release()
+        _schedule_next()
 
 
 def _sync_body():
@@ -269,7 +276,6 @@ def _sync_body():
         total, failed, SYNC_INTERVAL_S / 60,
     )
     _maybe_generate_summaries()
-    _schedule_next()
 
 
 def _maybe_generate_summaries():
@@ -308,6 +314,15 @@ def _schedule_next():
     _timer = threading.Timer(SYNC_INTERVAL_S, _sync)
     _timer.daemon = True
     _timer.start()
+
+
+def is_syncing() -> bool:
+    """Return True if a cache sync is currently running."""
+    acquired = _sync_lock.acquire(blocking=False)
+    if acquired:
+        _sync_lock.release()
+        return False
+    return True
 
 
 def trigger():
