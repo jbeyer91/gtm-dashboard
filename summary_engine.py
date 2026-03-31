@@ -114,24 +114,54 @@ def _top_lost_reason(lost_row):
 
 # ── Snapshot collection ───────────────────────────────────────────────────────
 
-def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_month"):
+def _prefetch_analytics(period, coverage_period):
+    """Fetch all analytics datasets needed for snapshot generation.
+
+    Call this once per (period, coverage_period) pair when generating summaries
+    for multiple reps so HubSpot API calls are not duplicated per rep.
+    """
+    return {
+        "won":  analytics.compute_deals_won(period),
+        "call": analytics.compute_call_stats(period),
+        "pg":   analytics.compute_pipeline_generated(period),
+        "lost": analytics.compute_deals_lost(period),
+        "adv":  analytics.compute_deal_advancement(period),
+        "cov":  analytics.compute_pipeline_coverage(coverage_period),
+        "sc":   analytics.compute_scorecard(period),
+    }
+
+
+def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_month",
+                         prefetched=None):
     """Pull metrics for one rep across all analytics surfaces.
 
     period          — data period for deals/calls/pipeline (default "last_month";
                       pass "month:YYYY-MM" for historical backfill)
     coverage_period — period used for forward pipeline coverage snapshot
                       (default "this_month"; pass "month:YYYY-MM" for backfill)
+    prefetched      — optional dict from _prefetch_analytics(); when supplied the
+                      analytics API calls are skipped (used by generate_all_for_month
+                      to avoid N×7 HubSpot round-trips for a team-wide backfill)
 
     Returns a flat dict of numbers.  All values default to 0 / 0.0 / None
     so the caller never needs to guard against missing keys.
     """
-    won  = analytics.compute_deals_won(period)
-    call = analytics.compute_call_stats(period)
-    pg   = analytics.compute_pipeline_generated(period)
-    lost = analytics.compute_deals_lost(period)
-    adv  = analytics.compute_deal_advancement(period)
-    cov  = analytics.compute_pipeline_coverage(coverage_period)
-    sc   = analytics.compute_scorecard(period)
+    if prefetched is not None:
+        won  = prefetched["won"]
+        call = prefetched["call"]
+        pg   = prefetched["pg"]
+        lost = prefetched["lost"]
+        adv  = prefetched["adv"]
+        cov  = prefetched["cov"]
+        sc   = prefetched["sc"]
+    else:
+        won  = analytics.compute_deals_won(period)
+        call = analytics.compute_call_stats(period)
+        pg   = analytics.compute_pipeline_generated(period)
+        lost = analytics.compute_deals_lost(period)
+        adv  = analytics.compute_deal_advancement(period)
+        cov  = analytics.compute_pipeline_coverage(coverage_period)
+        sc   = analytics.compute_scorecard(period)
 
     wr = _row(won["rows"],  owner_id)
     cr = _row(call["rows"], owner_id)
@@ -197,23 +227,34 @@ def collect_rep_snapshot(owner_id, period="last_month", coverage_period="this_mo
     }
 
 
-def collect_team_snapshot(period="last_month", coverage_period="this_month"):
+def collect_team_snapshot(period="last_month", coverage_period="this_month",
+                          prefetched=None):
     """Pull metrics at the team level.
 
     period          — data period for deals/calls/pipeline (default "last_month";
                       pass "month:YYYY-MM" for historical backfill)
     coverage_period — period used for forward pipeline coverage snapshot
+    prefetched      — optional dict from _prefetch_analytics(); skips API calls
 
     Includes aggregated totals and a per-rep attainment breakdown so the
     team summary can identify concentration, outliers, and systemic patterns.
     """
-    won  = analytics.compute_deals_won(period)
-    call = analytics.compute_call_stats(period)
-    pg   = analytics.compute_pipeline_generated(period)
-    lost = analytics.compute_deals_lost(period)
-    adv  = analytics.compute_deal_advancement(period)
-    cov  = analytics.compute_pipeline_coverage(coverage_period)
-    sc   = analytics.compute_scorecard(period)
+    if prefetched is not None:
+        won  = prefetched["won"]
+        call = prefetched["call"]
+        pg   = prefetched["pg"]
+        lost = prefetched["lost"]
+        adv  = prefetched["adv"]
+        cov  = prefetched["cov"]
+        sc   = prefetched["sc"]
+    else:
+        won  = analytics.compute_deals_won(period)
+        call = analytics.compute_call_stats(period)
+        pg   = analytics.compute_pipeline_generated(period)
+        lost = analytics.compute_deals_lost(period)
+        adv  = analytics.compute_deal_advancement(period)
+        cov  = analytics.compute_pipeline_coverage(coverage_period)
+        sc   = analytics.compute_scorecard(period)
 
     wt = won["totals"]
     ct = call["totals"]
@@ -1168,18 +1209,20 @@ def _periods_for(year, month):
     return f"month:{year:04d}-{month:02d}", f"month:{cov_year:04d}-{cov_month:02d}"
 
 
-def generate_and_save_rep(owner_id, label, year, month):
+def generate_and_save_rep(owner_id, label, year, month, prefetched=None):
     """Generate and persist a locked monthly summary for one rep.
 
     Skips silently if a summary for this owner/month already exists.
     Returns True if a new record was saved, False if already locked.
+    prefetched — optional dict from _prefetch_analytics(); avoids redundant API calls.
     """
     for rec in store.get_rep_history(owner_id):
         if rec["year"] == year and rec["month"] == month:
             return False
 
     data_period, coverage_period = _periods_for(year, month)
-    metrics     = collect_rep_snapshot(owner_id, data_period, coverage_period)
+    metrics     = collect_rep_snapshot(owner_id, data_period, coverage_period,
+                                       prefetched=prefetched)
     month_label = f"{_month_name(month)} {year}"
     summary     = generate_rep_summary(metrics, label, month_label)
 
@@ -1197,17 +1240,19 @@ def generate_and_save_rep(owner_id, label, year, month):
     })
 
 
-def generate_and_save_team(year, month):
+def generate_and_save_team(year, month, prefetched=None):
     """Generate and persist a locked monthly summary for the whole team.
 
     Returns True if saved, False if already locked for this month.
+    prefetched — optional dict from _prefetch_analytics(); avoids redundant API calls.
     """
     for rec in store.get_team_history():
         if rec["year"] == year and rec["month"] == month:
             return False
 
     data_period, coverage_period = _periods_for(year, month)
-    metrics     = collect_team_snapshot(data_period, coverage_period)
+    metrics     = collect_team_snapshot(data_period, coverage_period,
+                                        prefetched=prefetched)
     month_label = f"{_month_name(month)} {year}"
     summary     = generate_team_summary(metrics, month_label)
 
@@ -1229,27 +1274,35 @@ def generate_all_for_month(year, month):
     """Generate and save summaries for every active rep and the team.
 
     Safe to call multiple times — already-locked records are skipped.
-    Intended to be called from the Flask app on first page load of a new
-    month, or from an admin endpoint.
+    Fetches all HubSpot analytics data once and distributes to each rep/team
+    snapshot to avoid N×7 redundant API calls during a backfill.
 
     Returns {"team": bool, "reps": {owner_id: bool}}.
     """
     owners  = get_owners()
     allowed = get_team_owner_ids()
+    # Grace reps (departed but still in analytics through month-end) must be
+    # included even though they are no longer in the HubSpot team filter.
+    grace_ids = store.get_grace_rep_ids()
+    effective_allowed = allowed | grace_ids if allowed else allowed
+
+    data_period, coverage_period = _periods_for(year, month)
+    prefetched = _prefetch_analytics(data_period, coverage_period)
 
     rep_results = {}
     for oid, info in owners.items():
-        if allowed and oid not in allowed:
+        if effective_allowed and oid not in effective_allowed:
             continue
         label = info.get("last_name") or info.get("name", oid)
         try:
-            rep_results[oid] = generate_and_save_rep(oid, label, year, month)
+            rep_results[oid] = generate_and_save_rep(oid, label, year, month,
+                                                     prefetched=prefetched)
         except Exception:
             rep_results[oid] = False
 
     team_result = False
     try:
-        team_result = generate_and_save_team(year, month)
+        team_result = generate_and_save_team(year, month, prefetched=prefetched)
     except Exception:
         pass
 
