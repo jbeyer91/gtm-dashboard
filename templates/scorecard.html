@@ -12,22 +12,10 @@
   {% else %}
     {% set cls = "bg-red-100 text-red-700 ring-red-200" %}
   {% endif %}
-  <span class="inline-flex items-center justify-center min-w-12 font-bold text-sm rounded-lg px-2 py-1 ring-1 {{ cls }}">
-    {{ grade }}
-  </span>
+  <span class="inline-flex items-center justify-center min-w-12 rounded-lg px-2 py-1 text-sm font-bold ring-1 {{ cls }}">{{ grade }}</span>
 {% endmacro %}
 
-{% macro attention_badge(label) %}
-  {% if label == "Needs attention" %}
-    <span class="inline-flex items-center rounded-full bg-red-50 text-red-700 px-2.5 py-1 text-xs font-semibold">Needs attention</span>
-  {% elif label == "Watch" %}
-    <span class="inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-2.5 py-1 text-xs font-semibold">Watch</span>
-  {% else %}
-    <span class="inline-flex items-center rounded-full bg-green-50 text-green-700 px-2.5 py-1 text-xs font-semibold">On track</span>
-  {% endif %}
-{% endmacro %}
-
-{% macro live_card(eyebrow, value, note, tone="slate") %}
+{% macro live_card(label, value, note, tone="slate") %}
   {% if tone == "green" %}
     {% set dot_cls = "bg-green-500" %}
   {% elif tone == "amber" %}
@@ -38,7 +26,7 @@
     {% set dot_cls = "bg-slate-400" %}
   {% endif %}
   <div class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-    <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ eyebrow }}</p>
+    <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ label }}</p>
     <div class="mt-2 flex items-center gap-2">
       <span class="inline-block h-2.5 w-2.5 rounded-full {{ dot_cls }}"></span>
       <p class="text-2xl font-bold tracking-tight text-slate-900">{{ value }}</p>
@@ -48,7 +36,7 @@
 {% endmacro %}
 
 {% macro snapshot_metric(label, value) %}
-  <div class="rounded-xl bg-white border border-slate-200 px-3 py-2.5">
+  <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
     <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{{ label }}</p>
     <p class="mt-1 text-base font-semibold tabular-nums text-slate-800">{{ value }}</p>
   </div>
@@ -58,7 +46,7 @@
   {% set m = record.metrics %}
   <div class="space-y-5">
     <div class="flex items-start justify-between gap-4">
-      <div class="min-w-0">
+      <div>
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Locked Monthly Snapshot</span>
           <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ meta.month_label }}</span>
@@ -90,23 +78,19 @@
 
 {% block content %}
 {% set t = data.team %}
-<div class="rounded-[28px] px-8 py-7 mb-8 shadow-sm" style="background: linear-gradient(135deg, #1E3A6D 0%, #4F46E5 55%, #7C3AED 100%);">
+<div class="mb-8 rounded-[28px] px-8 py-7 shadow-sm" style="background: linear-gradient(135deg, #1E3A6D 0%, #4F46E5 55%, #7C3AED 100%);">
   <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-[0.22em]" style="color: rgba(255,255,255,0.72);">
         {% if is_admin %}Sales Management View{% else %}My Scorecard{% endif %}
       </p>
-      <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">
-        {% if is_admin %}Current Month Scorecard{% else %}My Current Month Scorecard{% endif %}
-      </h1>
-      <p class="mt-2 text-sm" style="color: rgba(255,255,255,0.72);">{{ month_label }} · Live through {{ live_cutoff_label }}</p>
+      <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">Scorecard</h1>
+      <p class="mt-2 text-sm" style="color: rgba(255,255,255,0.72);">
+        {% if is_admin %}Current performance plus the most recent locked monthly review.{% else %}Your current performance plus your latest locked monthly review.{% endif %}
+      </p>
     </div>
     <div class="max-w-xl rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white/85 backdrop-blur-sm">
-      {% if is_admin %}
-        Team performance now first. Locked monthly review lives below as a separate coaching and reporting workspace.
-      {% else %}
-        Your live scorecard is separate from your locked monthly review so current pace and last month’s diagnosis do not get mixed together.
-      {% endif %}
+      Action page only. Older months live in Scorecard History.
     </div>
   </div>
 </div>
@@ -129,16 +113,9 @@
       <div>
         <p class="text-sm font-semibold text-slate-800">
           Team at {{ "%.1f"|format(t.attain_pct) }}% to quota this month.
-          {% if t.attain_pct >= 100 %}
-            Team is already at goal.
-          {% elif t.attain_pct >= 80 %}
-            Current pace is healthy.
-          {% else %}
-            Current pace needs intervention this month.
-          {% endif %}
         </p>
         <p class="mt-1 text-sm text-slate-500">
-          {{ live_attention.needs_attention }} need attention · {{ live_attention.watch }} to watch · {{ live_attention.on_track }} on track
+          {{ live_grade_summary.strong }} strong · {{ live_grade_summary.mixed }} mixed · {{ live_grade_summary.at_risk }} at risk
         </p>
       </div>
       <div class="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
@@ -147,92 +124,46 @@
     </div>
   </div>
 
-  <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+  <div class="mt-5 grid gap-4 md:grid-cols-3">
     {{ live_card("Team Quota Attainment", fmt_pct(t.attain_pct), fmt_money(t.won_amt) ~ " of " ~ fmt_money(t.quota_amt) ~ " quota", "green" if t.attain_pct >= 80 else "amber" if t.attain_pct >= 60 else "red") }}
     {{ live_card("Pipeline Created", t.deals_created, "Current-month deals created", "green" if t.deals_created >= (data.rows|length * 10) else "amber") }}
     {{ live_card("$ Advanced to S2", fmt_money(t.s2_amt), "Target " ~ fmt_money(t.s2_target), "green" if (t.s2_target and (t.s2_amt / t.s2_target * 100) >= 80) else "amber" if (t.s2_target and (t.s2_amt / t.s2_target * 100) >= 60) else "red") }}
-    {{ live_card("Needs Attention", live_attention.needs_attention, "Reps needing a closer manager read right now", "red" if live_attention.needs_attention else "green") }}
   </div>
-
-  {% if live_focus_rows %}
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Where To Look First</p>
-        <h3 class="mt-1 text-lg font-semibold text-slate-900">Manager attention queue</h3>
-      </div>
-      <p class="text-sm text-slate-500">The first click should be obvious.</p>
-    </div>
-    <div class="mt-4 grid gap-3 lg:grid-cols-3">
-      {% for row in live_focus_rows %}
-      <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-sm font-semibold text-slate-900">{{ row.ae }}</p>
-            <p class="mt-1 text-sm text-slate-500">{{ row.attention_note }}</p>
-          </div>
-          {{ attention_badge(row.attention_label) }}
-        </div>
-        <div class="mt-4 grid grid-cols-3 gap-3 text-sm">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">Quota</p>
-            <p class="mt-1 font-semibold text-slate-800">{{ "%.1f"|format(row.attain_pct) }}%</p>
-          </div>
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">Won</p>
-            <p class="mt-1 font-semibold text-slate-800">{{ fmt_money(row.won_amt) }}</p>
-          </div>
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">Deals</p>
-            <p class="mt-1 font-semibold text-slate-800">{{ row.deals_created }}</p>
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
 
   <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
     <div class="border-b border-slate-200 px-5 py-4">
       <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Live Rep Scorecard</p>
       <h3 class="mt-1 text-lg font-semibold text-slate-900">Current-month coaching view</h3>
-      <p class="mt-1 text-sm text-slate-500">Sorted by attention priority so the next follow-up is clear.</p>
+      <p class="mt-1 text-sm text-slate-500">Sorted by grade first so the lowest-performing reps surface first without another alert system.</p>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           <tr>
             <th class="px-5 py-3 text-left">Rep</th>
-            <th class="px-5 py-3 text-left">Status</th>
+            <th class="px-5 py-3 text-left">Grade</th>
             <th class="px-5 py-3 text-right">Quota %</th>
             <th class="px-5 py-3 text-right">Won $</th>
             <th class="px-5 py-3 text-right">Deals Created</th>
             <th class="px-5 py-3 text-right">$ Adv. to S2</th>
-            <th class="px-5 py-3 text-right">Avg Dials</th>
+            <th class="px-5 py-3 text-left">Manager Read</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           {% for row in data.rows %}
           <tr class="align-top">
             <td class="px-5 py-4">
-              <div class="flex items-center gap-3">
-                {{ scorecard_grade_badge(row.grade) }}
-                <div>
-                  <p class="font-semibold text-slate-900">{{ row.ae }}</p>
-                  <p class="text-xs text-slate-500">Connect {{ "%.1f"|format(row.connect_rate) }}% · Stale {{ row.stale_count }}</p>
-                </div>
+              <div>
+                <p class="font-semibold text-slate-900">{{ row.ae }}</p>
+                <p class="text-xs text-slate-500">Connect {{ "%.1f"|format(row.connect_rate) }}% · Stale {{ row.stale_count }}</p>
               </div>
             </td>
-            <td class="px-5 py-4">
-              {{ attention_badge(row.attention_label) }}
-              <p class="mt-1 text-xs text-slate-500">{{ row.attention_note }}</p>
-            </td>
+            <td class="px-5 py-4">{{ scorecard_grade_badge(row.grade) }}</td>
             <td class="px-5 py-4 text-right font-semibold tabular-nums {% if row.attain_pct >= 80 %}text-green-600{% elif row.attain_pct >= 60 %}text-amber-600{% else %}text-red-500{% endif %}">{{ "%.1f"|format(row.attain_pct) }}%</td>
             <td class="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">{{ fmt_money(row.won_amt) }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.deals_created }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ fmt_money(row.s2_amt) }}</td>
-            <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.avg_dials }}</td>
+            <td class="px-5 py-4 text-slate-600">{{ row.attention_note }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -243,15 +174,8 @@
   {% set me = data.rows[0] if data.rows else none %}
   {% if me %}
   <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-      <div>
-        <p class="text-sm font-semibold text-slate-800">
-          You are at {{ "%.1f"|format(me.attain_pct) }}% to quota this month.
-        </p>
-        <p class="mt-1 text-sm text-slate-500">{{ me.attention_note }}</p>
-      </div>
-      {{ attention_badge(me.attention_label) }}
-    </div>
+    <p class="text-sm font-semibold text-slate-800">You are at {{ "%.1f"|format(me.attain_pct) }}% to quota this month.</p>
+    <p class="mt-1 text-sm text-slate-500">{{ me.attention_note }}</p>
   </div>
 
   <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -264,129 +188,106 @@
   {% endif %}
 </section>
 
-<section class="pt-8 border-t border-slate-200">
+<section class="border-t border-slate-200 pt-8">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Section B</p>
       <h2 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-        {% if is_admin %}Locked Monthly Review{% else %}My Locked Monthly Review{% endif %}
+        {% if is_admin %}Most Recent Locked Monthly Review{% else %}My Most Recent Locked Monthly Review{% endif %}
       </h2>
-      <p class="mt-1 text-sm text-slate-500">Official month-end snapshot. Stable retrospective review for coaching and reporting.</p>
+      <p class="mt-1 text-sm text-slate-500">Latest completed month only. Older locked months live in Scorecard History.</p>
     </div>
-    {% if locked_months %}
-    <div class="flex items-center gap-3">
-      <label for="locked-month-selector" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Viewing Month</label>
-      <select id="locked-month-selector" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
-        {% for meta in locked_months %}
-        <option value="{{ meta.key }}" {% if meta.key == selected_locked_key %}selected{% endif %}>{{ meta.month_label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
+    <a href="{{ url_for('scorecard_history') }}" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+      View Full History
+    </a>
   </div>
 
-  {% if is_admin %}
-  <div class="mt-6 space-y-5">
-    {% for entry in team_history_entries %}
-    <div data-locked-team="{{ entry.meta.key }}" class="{% if entry.meta.key != selected_locked_key %}hidden{% endif %} rounded-3xl border border-slate-200 bg-slate-50 p-6">
-      <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Team Monthly Review</p>
-          <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ entry.meta.month_label }} · Locked monthly snapshot</h3>
-          <p class="mt-1 text-sm text-slate-500">Based on data through {{ entry.meta.cutoff_label }}</p>
-        </div>
-        <div class="max-w-lg text-sm text-slate-500">
-          Use this as the stable team story for 1:1s and CEO updates. It should explain what happened last month without being confused with live current-month metrics.
-        </div>
+  {% if is_admin and team_summary %}
+  <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+    <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Team Monthly Review</p>
+        <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ team_summary_meta.month_label }} · Locked monthly snapshot</h3>
+        <p class="mt-1 text-sm text-slate-500">Based on data through {{ team_summary_meta.cutoff_label }}</p>
       </div>
-      <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        {{ monthly_review_body(entry.record, entry.meta) }}
-      </div>
+      <div class="max-w-lg text-sm text-slate-500">Keep this on the working page for 1:1 prep and CEO updates. Use history for older months.</div>
     </div>
-    {% endfor %}
+    <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      {{ monthly_review_body(team_summary, team_summary_meta) }}
+    </div>
+  </div>
 
-    <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div class="border-b border-slate-200 px-5 py-4">
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Monthly Review By Rep</p>
-        <h3 class="mt-1 text-lg font-semibold text-slate-900">Coaching briefs for the selected locked month</h3>
-        <p class="mt-1 text-sm text-slate-500">One expanded rep at a time. Built for quick 1:1 preparation.</p>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            <tr>
-              <th class="px-5 py-3 text-left">Rep</th>
-              <th class="px-5 py-3 text-left">Grade</th>
-              <th class="px-5 py-3 text-right">Attain</th>
-              <th class="px-5 py-3 text-right">Won</th>
-              <th class="px-5 py-3 text-left">Main Takeaway</th>
+  <div class="mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div class="border-b border-slate-200 px-5 py-4">
+      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Latest Monthly Review By Rep</p>
+      <h3 class="mt-1 text-lg font-semibold text-slate-900">Most recent coaching briefs</h3>
+      <p class="mt-1 text-sm text-slate-500">Only the latest locked month appears here. Use history for older months.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <tr>
+            <th class="px-5 py-3 text-left">Rep</th>
+            <th class="px-5 py-3 text-left">Grade</th>
+            <th class="px-5 py-3 text-right">Attain</th>
+            <th class="px-5 py-3 text-right">Won</th>
+            <th class="px-5 py-3 text-left">Main Takeaway</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for row in data.rows %}
+            {% set rd = rep_data.get(row.owner_id) %}
+            {% set rec = rd.summary if rd else none %}
+            {% set meta = rd.meta if rd else {} %}
+            {% if rec %}
+            <tr id="latest-row-{{ row.owner_id }}" onclick="toggleLatestReviewPanel('{{ row.owner_id }}')" class="cursor-pointer transition-colors hover:bg-indigo-50/40">
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-3">
+                  <span class="font-semibold text-slate-900">{{ row.ae }}</span>
+                  <span class="text-xs text-slate-500">{{ meta.month_label }}</span>
+                </div>
+              </td>
+              <td class="px-5 py-4">{{ monthly_grade_badge(rec.final_grade) }}</td>
+              <td class="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">{{ fmt_pct(rec.metrics.attain_pct) if rec.metrics.attain_pct is not none else "—" }}</td>
+              <td class="px-5 py-4 text-right tabular-nums text-slate-800">{{ fmt_money(rec.metrics.won_amt) }}</td>
+              <td class="px-5 py-4 text-slate-600">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="truncate">{{ rec.main_takeaway }}</span>
+                  <svg id="latest-chev-{{ row.owner_id }}" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            {% for row in data.rows %}
-              {% set rd = rep_data.get(row.owner_id) %}
-              {% if rd %}
-                {% for hist in rd.history_entries %}
-                  {% set rec = hist.record %}
-                  {% set meta = hist.meta %}
-                  <tr id="locked-row-{{ row.owner_id }}-{{ meta.key }}"
-                      data-locked-row="{{ meta.key }}"
-                      data-row-owner="{{ row.owner_id }}"
-                      onclick="toggleLockedReviewPanel('{{ row.owner_id }}','{{ meta.key }}')"
-                      class="{% if meta.key != selected_locked_key %}hidden {% endif %}cursor-pointer transition-colors hover:bg-indigo-50/40">
-                    <td class="px-5 py-4">
-                      <div class="flex items-center gap-3">
-                        <span class="font-semibold text-slate-900">{{ row.ae }}</span>
-                        <span class="text-xs text-slate-500">{{ meta.month_label }}</span>
-                      </div>
-                    </td>
-                    <td class="px-5 py-4">{{ monthly_grade_badge(rec.final_grade) }}</td>
-                    <td class="px-5 py-4 text-right tabular-nums font-semibold text-slate-800">{{ fmt_pct(rec.metrics.attain_pct) if rec.metrics.attain_pct is not none else "—" }}</td>
-                    <td class="px-5 py-4 text-right tabular-nums text-slate-800">{{ fmt_money(rec.metrics.won_amt) }}</td>
-                    <td class="px-5 py-4 text-slate-600">
-                      <div class="flex items-center justify-between gap-3">
-                        <span class="truncate">{{ rec.main_takeaway }}</span>
-                        <svg id="locked-chev-{{ row.owner_id }}-{{ meta.key }}" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                        </svg>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr id="locked-panel-{{ row.owner_id }}-{{ meta.key }}"
-                      data-locked-panel="{{ meta.key }}"
-                      class="hidden">
-                    <td colspan="5" class="bg-slate-50 px-5 py-5">
-                      <div class="rounded-2xl border border-slate-200 bg-white p-5">
-                        {{ monthly_review_body(rec, meta) }}
-                      </div>
-                    </td>
-                  </tr>
-                {% endfor %}
-              {% endif %}
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+            <tr id="latest-panel-{{ row.owner_id }}" class="hidden" data-latest-panel>
+              <td colspan="5" class="bg-slate-50 px-5 py-5">
+                <div class="rounded-2xl border border-slate-200 bg-white p-5">
+                  {{ monthly_review_body(rec, meta) }}
+                </div>
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
   {% else %}
     {% set me = data.rows[0] if data.rows else none %}
     {% if me %}
       {% set rd = rep_data.get(me.owner_id) %}
-      {% if rd %}
-      <div class="mt-6 space-y-4">
-        {% for hist in rd.history_entries %}
-        <div data-locked-self="{{ hist.meta.key }}" class="{% if hist.meta.key != selected_locked_key %}hidden{% endif %} rounded-3xl border border-slate-200 bg-slate-50 p-6">
-          <div class="mb-5">
+      {% if rd and rd.summary %}
+      <div class="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+        <div class="mb-5 flex items-end justify-between gap-4">
+          <div>
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Monthly Review</p>
-            <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ hist.meta.month_label }} · Locked monthly snapshot</h3>
-            <p class="mt-1 text-sm text-slate-500">Based on data through {{ hist.meta.cutoff_label }}</p>
-          </div>
-          <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            {{ monthly_review_body(hist.record, hist.meta) }}
+            <h3 class="mt-1 text-xl font-semibold text-slate-900">{{ rd.meta.month_label }} · Locked monthly snapshot</h3>
+            <p class="mt-1 text-sm text-slate-500">Based on data through {{ rd.meta.cutoff_label }}</p>
           </div>
         </div>
-        {% endfor %}
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          {{ monthly_review_body(rd.summary, rd.meta) }}
+        </div>
       </div>
       {% endif %}
     {% endif %}
@@ -394,36 +295,16 @@
 </section>
 
 <script>
-function syncLockedMonth(key) {
-  document.querySelectorAll("[data-locked-team]").forEach((el) => {
-    el.classList.toggle("hidden", el.dataset.lockedTeam !== key);
-  });
-  document.querySelectorAll("[data-locked-self]").forEach((el) => {
-    el.classList.toggle("hidden", el.dataset.lockedSelf !== key);
-  });
-  document.querySelectorAll("[data-locked-row]").forEach((el) => {
-    el.classList.toggle("hidden", el.dataset.lockedRow !== key);
-    el.classList.remove("bg-indigo-50/80");
-  });
-  document.querySelectorAll("[data-locked-panel]").forEach((el) => {
-    el.classList.add("hidden");
-  });
-  document.querySelectorAll('[id^="locked-chev-"]').forEach((el) => {
-    el.classList.remove("rotate-180", "text-indigo-500");
-    el.classList.add("text-slate-300");
-  });
-}
-
-function toggleLockedReviewPanel(ownerId, monthKey) {
-  const panel = document.getElementById(`locked-panel-${ownerId}-${monthKey}`);
-  const row = document.getElementById(`locked-row-${ownerId}-${monthKey}`);
-  const chev = document.getElementById(`locked-chev-${ownerId}-${monthKey}`);
+function toggleLatestReviewPanel(ownerId) {
+  const panel = document.getElementById(`latest-panel-${ownerId}`);
+  const row = document.getElementById(`latest-row-${ownerId}`);
+  const chev = document.getElementById(`latest-chev-${ownerId}`);
   if (!panel || !row || !chev) return;
 
   const isOpen = !panel.classList.contains("hidden");
-  document.querySelectorAll("[data-locked-panel]").forEach((el) => el.classList.add("hidden"));
-  document.querySelectorAll("[data-locked-row]").forEach((el) => el.classList.remove("bg-indigo-50/80"));
-  document.querySelectorAll('[id^="locked-chev-"]').forEach((el) => {
+  document.querySelectorAll("[data-latest-panel]").forEach((el) => el.classList.add("hidden"));
+  document.querySelectorAll('[id^="latest-row-"]').forEach((el) => el.classList.remove("bg-indigo-50/80"));
+  document.querySelectorAll('[id^="latest-chev-"]').forEach((el) => {
     el.classList.remove("rotate-180", "text-indigo-500");
     el.classList.add("text-slate-300");
   });
@@ -434,14 +315,6 @@ function toggleLockedReviewPanel(ownerId, monthKey) {
     chev.classList.add("rotate-180", "text-indigo-500");
     chev.classList.remove("text-slate-300");
   }
-}
-
-const lockedMonthSelector = document.getElementById("locked-month-selector");
-if (lockedMonthSelector) {
-  syncLockedMonth(lockedMonthSelector.value);
-  lockedMonthSelector.addEventListener("change", (event) => {
-    syncLockedMonth(event.target.value);
-  });
 }
 </script>
 {% endblock %}

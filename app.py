@@ -106,6 +106,7 @@ SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 NAV = [
     {"type": "link",  "endpoint": "home",               "label": "Home"},
     {"type": "link",  "endpoint": "scorecard",         "label": "Scorecard"},
+    {"type": "link",  "endpoint": "scorecard_history", "label": "Scorecard History"},
     {"type": "group", "label": "Deals", "children": [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
@@ -296,6 +297,36 @@ def _annotate_live_row(row: dict) -> dict:
     }
 
 
+def _grade_sort_value(grade: str) -> int:
+    order = {
+        "D": 0,
+        "D+": 1,
+        "C-": 2,
+        "C": 3,
+        "C+": 4,
+        "B-": 5,
+        "B": 6,
+        "B+": 7,
+        "A-": 8,
+        "A": 9,
+        "A+": 10,
+    }
+    return order.get((grade or "").strip(), 999)
+
+
+def _grade_summary(rows: list[dict]) -> dict:
+    summary = {"strong": 0, "mixed": 0, "at_risk": 0}
+    for row in rows:
+        grade = (row.get("grade") or "").strip()
+        if grade.startswith("A") or grade.startswith("B"):
+            summary["strong"] += 1
+        elif grade.startswith("C"):
+            summary["mixed"] += 1
+        else:
+            summary["at_risk"] += 1
+    return summary
+
+
 def _filter_by_team(data: dict, team: str) -> dict:
     """Filter rows to a specific team and recompute totals from the filtered set."""
     if team == "all":
@@ -448,26 +479,11 @@ def home():
 @login_required
 def scorecard():
     from datetime import datetime, timezone, date, timedelta
-    import calendar
     data = get_cached(analytics.compute_scorecard, "this_month")
     if data is None:
         return render_template("loading.html", nav=NAV, active="scorecard"), 202
     try:
         t     = data["team"]
-        _, _, prior_label = get_prior_range("this_month")
-        prior_data = get_cached(analytics.compute_scorecard, "prior_this_month")
-        lt = (prior_data or {}).get("team") or {}
-        def _delta(key): return round((t.get(key) or 0) - (lt.get(key) or 0), 1)
-        deltas = {
-            "attain_pct":    _delta("attain_pct"),
-            "deals_created": _delta("deals_created"),
-            "s2_amt":        _delta("s2_amt"),
-            "avg_dials":     _delta("avg_dials"),
-            "connect_rate":  _delta("connect_rate"),
-            "stale_count":   _delta("stale_count"),
-        }
-        # AEs see only their own row; admins see everyone.
-        # Re-evaluate at request time so session values from before a deploy don't stick.
         owner_id = session.get("owner_id", "")
         team_oids = get_team_owner_ids()
         is_admin = (owner_id in OWNER_EXCLUDE or
@@ -477,14 +493,13 @@ def scorecard():
             visible_rows = [r for r in visible_rows if r.get("owner_id") == owner_id]
 
         visible_rows = [_annotate_live_row(r) for r in visible_rows]
-        if is_admin:
-            visible_rows.sort(
-                key=lambda r: (
-                    -r["attention_rank"],
-                    float(r.get("attain_pct", 0) or 0),
-                    r.get("ae", ""),
-                )
+        visible_rows.sort(
+            key=lambda r: (
+                _grade_sort_value(r.get("grade", "")),
+                float(r.get("attain_pct", 0) or 0),
+                r.get("ae", ""),
             )
+        )
 
         data = dict(data)
         data["rows"] = visible_rows
@@ -492,48 +507,35 @@ def scorecard():
         import monthly_store
         import summary_engine
 
-        team_history_entries = []
+        team_summary = None
+        team_summary_meta = None
+        team_history_count = 0
         if is_admin:
             team_history = monthly_store.get_team_history()
             if not team_history:
                 generated = summary_engine.get_or_generate_team_summary()
                 team_history = [generated] if generated else []
-            team_history_entries = [
-                {"record": record, "meta": _summary_meta(record)}
-                for record in team_history
-            ]
-        team_summary = team_history_entries[0]["record"] if team_history_entries else None
-        team_summary_meta = team_history_entries[0]["meta"] if team_history_entries else None
+            team_history_count = len(team_history)
+            if team_history:
+                team_summary = team_history[0]
+                team_summary_meta = _summary_meta(team_history[0])
 
         rep_data = {}
-        rep_locked_months = []
+        rep_history_available = False
         for row in data["rows"]:
             oid = row["owner_id"]
             history = monthly_store.get_rep_history(oid)
             if not history:
                 rec = summary_engine.get_or_generate_rep_summary(oid)
                 history = [rec] if rec else []
-            history_entries = [
-                {"record": hist, "meta": _summary_meta(hist)}
-                for hist in history
-            ]
-            if history_entries and not rep_locked_months:
-                rep_locked_months = [entry["meta"] for entry in history_entries]
+            if len(history) > 1:
+                rep_history_available = True
             rep_data[oid] = {
                 "summary": history[0] if history else None,
                 "meta": _summary_meta(history[0]) if history else {},
-                "history_entries": history_entries,
             }
-
-        locked_months = [entry["meta"] for entry in team_history_entries] if is_admin else rep_locked_months
-        selected_locked_key = locked_months[0]["key"] if locked_months else ""
-
-        live_attention = {
-            "needs_attention": sum(1 for row in data["rows"] if row["attention_rank"] == 2),
-            "watch": sum(1 for row in data["rows"] if row["attention_rank"] == 1),
-            "on_track": sum(1 for row in data["rows"] if row["attention_rank"] == 0),
-        }
-        live_focus_rows = [row for row in data["rows"] if row["attention_rank"] > 0][:3]
+        live_grade_summary = _grade_summary(data["rows"])
+        has_history = team_history_count > 1 if is_admin else rep_history_available
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="scorecard")
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
@@ -558,16 +560,97 @@ def scorecard():
     pace_pct      = round(bdays_elapsed / bdays_total * 100, 1) if bdays_total else 0
 
     return render_template("scorecard.html", data=data, month_label=month_label,
-                           deltas=deltas, prior_label=prior_label,
                            team_summary=team_summary, team_summary_meta=team_summary_meta,
                            rep_data=rep_data,
-                           team_history_entries=team_history_entries,
-                           locked_months=locked_months, selected_locked_key=selected_locked_key,
                            is_admin=is_admin,
-                           live_attention=live_attention, live_focus_rows=live_focus_rows,
+                           live_grade_summary=live_grade_summary,
+                           has_history=has_history,
                            live_cutoff_label=live_cutoff_label,
                            pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            active="scorecard", nav=NAV)
+
+
+@app.route("/scorecard/history")
+@login_required
+def scorecard_history():
+    from datetime import date
+    data = get_cached(analytics.compute_scorecard, "this_month")
+    if data is None:
+        return render_template("loading.html", nav=NAV, active="scorecard_history"), 202
+    try:
+        owner_id = session.get("owner_id", "")
+        team_oids = get_team_owner_ids()
+        is_admin = (owner_id in OWNER_EXCLUDE or
+                    bool(team_oids and owner_id not in team_oids))
+        visible_rows = data["rows"]
+        if not is_admin:
+            visible_rows = [r for r in visible_rows if r.get("owner_id") == owner_id]
+        visible_rows = [_annotate_live_row(r) for r in visible_rows]
+        visible_rows.sort(key=lambda r: (r.get("ae", ""),))
+        data = dict(data)
+        data["rows"] = visible_rows
+
+        import monthly_store
+        import summary_engine
+
+        team_history_entries = []
+        if is_admin:
+            team_history = monthly_store.get_team_history()
+            if not team_history:
+                generated = summary_engine.get_or_generate_team_summary()
+                team_history = [generated] if generated else []
+            team_history_entries = [
+                {"record": record, "meta": _summary_meta(record)}
+                for record in team_history
+            ]
+
+        rep_data = {}
+        rep_locked_months = []
+        for row in data["rows"]:
+            oid = row["owner_id"]
+            history = monthly_store.get_rep_history(oid)
+            if not history:
+                rec = summary_engine.get_or_generate_rep_summary(oid)
+                history = [rec] if rec else []
+            history_entries = [
+                {"record": hist, "meta": _summary_meta(hist)}
+                for hist in history
+            ]
+            if history_entries and not rep_locked_months:
+                rep_locked_months = [entry["meta"] for entry in history_entries]
+            rep_data[oid] = {
+                "summary": history[0] if history else None,
+                "meta": _summary_meta(history[0]) if history else {},
+                "history_entries": history_entries,
+            }
+
+        locked_months = [entry["meta"] for entry in team_history_entries] if is_admin else rep_locked_months
+        if not locked_months:
+            selected_locked_key = ""
+        else:
+            requested_key = request.args.get("month", "").strip()
+            valid_keys = {meta["key"] for meta in locked_months}
+            selected_locked_key = requested_key if requested_key in valid_keys else locked_months[0]["key"]
+
+        selected_team_entry = next(
+            (entry for entry in team_history_entries if entry["meta"]["key"] == selected_locked_key),
+            team_history_entries[0] if team_history_entries else None,
+        )
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="scorecard_history")
+
+    return render_template(
+        "scorecard_history.html",
+        data=data,
+        rep_data=rep_data,
+        is_admin=is_admin,
+        locked_months=locked_months,
+        selected_locked_key=selected_locked_key,
+        selected_team_entry=selected_team_entry,
+        today_label=date.today().strftime("%B %-d, %Y"),
+        active="scorecard_history",
+        nav=NAV,
+    )
 
 
 @app.route("/call-stats")
