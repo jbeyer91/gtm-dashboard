@@ -1467,6 +1467,20 @@ def compute_scorecard(period: str = "this_month") -> dict:
     won_deals     = [d for d in get_deals(start, end, "closedate")
                      if d["properties"].get("hs_is_closed_won") == "true"]
     created_deals = get_deals(start, end, "createdate")
+
+    # Open deals for Next Steps % metric
+    open_deals = get_all_open_deals()
+    owner_open_total      = defaultdict(int)
+    owner_open_with_steps = defaultdict(int)
+    for d in open_deals:
+        oid = d["properties"].get("hubspot_owner_id", "")
+        if not oid or not _owner_allowed(oid):
+            continue
+        owner_open_total[oid] += 1
+        ns = d["properties"].get("hs_next_step") or ""
+        if ns.strip():
+            owner_open_with_steps[oid] += 1
+
     book             = compute_book_coverage()
     book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
     rep_deal_stats   = _rep_trailing_deal_stats()
@@ -1566,24 +1580,29 @@ def compute_scorecard(period: str = "this_month") -> dict:
             weighted = max(weighted, 27.0)   # floor at D+: closed something vs zero
         grade    = _letter_grade(weighted)
 
+        open_total      = owner_open_total.get(oid, 0)
+        open_with_steps = owner_open_with_steps.get(oid, 0)
+        next_steps_pct  = round(open_with_steps / open_total * 100) if open_total else None
+
         rows.append({
-            "ae":            owners[oid]["last_name"] or owners[oid]["name"],
-            "owner_id":      oid,
-            "grade":         grade,
-            "grade_sort":    GRADE_ORDER.index(grade),
-            "quota_amt":     quota,
-            "won_amt":       won,
-            "attain_pct":    attain_pct,
-            "deals_created": created,
-            "deals_target":  deals_target,
-            "s2_amt":        s2_amt,
-            "s2_target":     round(s2_target),
-            "rep_win_rate":  round(rep_win_s2 * 100, 1),
-            "rep_acv":       round(rep_acv),
-            "avg_dials":     avg_dials,
-            "connect_rate":  connect_rate,
-            "stale_count":   stale_count,
-            "ac_accounts":   ac_accounts,
+            "ae":              owners[oid]["last_name"] or owners[oid]["name"],
+            "owner_id":        oid,
+            "grade":           grade,
+            "grade_sort":      GRADE_ORDER.index(grade),
+            "quota_amt":       quota,
+            "won_amt":         won,
+            "attain_pct":      attain_pct,
+            "deals_created":   created,
+            "deals_target":    deals_target,
+            "s2_amt":          s2_amt,
+            "s2_target":       round(s2_target),
+            "rep_win_rate":    round(rep_win_s2 * 100, 1),
+            "rep_acv":         round(rep_acv),
+            "avg_dials":       avg_dials,
+            "connect_rate":    connect_rate,
+            "stale_count":     stale_count,
+            "ac_accounts":     ac_accounts,
+            "next_steps_pct":  next_steps_pct,
         })
 
     rows.sort(key=lambda r: r["grade_sort"])
