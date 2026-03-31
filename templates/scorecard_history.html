@@ -44,38 +44,28 @@
 {% endmacro %}
 
 {% block content %}
-<div class="mb-8 rounded-[28px] px-8 py-7 shadow-sm" style="background: linear-gradient(135deg, #172554 0%, #3730A3 55%, #6D28D9 100%);">
-  <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.22em]" style="color: rgba(255,255,255,0.72);">
-        {% if is_admin %}Reference View{% else %}My History{% endif %}
-      </p>
-      <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">Monthly Scorecard History</h1>
-      <p class="mt-2 text-sm" style="color: rgba(255,255,255,0.72);">Archive page for locked monthly scorecards. Current live work stays on Scorecard.</p>
-    </div>
-    <a href="{{ url_for('scorecard') }}" class="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white/90 backdrop-blur-sm hover:bg-white/15">
-      Back To Scorecard
-    </a>
-  </div>
-</div>
-
 <section>
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
     <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Archive</p>
-      <h2 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Locked Monthly History</h2>
+      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Scorecard</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900">Scorecard History</h1>
       <p class="mt-1 text-sm text-slate-500">Browse prior locked months without cluttering the working scorecard page.</p>
     </div>
-    {% if locked_months %}
-    <form method="get" class="flex items-center gap-3">
-      <label for="month" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Viewing Month</label>
-      <select id="month" name="month" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm" onchange="this.form.submit()">
-        {% for meta in locked_months %}
-        <option value="{{ meta.key }}" {% if meta.key == selected_locked_key %}selected{% endif %}>{{ meta.month_label }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    {% endif %}
+    <div class="flex items-center gap-3">
+      {% if locked_months %}
+      <form method="get" class="flex items-center gap-3">
+        <label for="month" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Viewing Month</label>
+        <select id="month" name="month" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm" onchange="this.form.submit()">
+          {% for meta in locked_months %}
+          <option value="{{ meta.key }}" {% if meta.key == selected_locked_key %}selected{% endif %}>{{ meta.month_label }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% endif %}
+      <a href="{{ url_for('scorecard') }}" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+        Back To Live Scorecard
+      </a>
+    </div>
   </div>
 
   {% if is_admin and selected_team_entry %}
