@@ -86,6 +86,7 @@
             <th class="px-5 py-3 text-right">$ Adv. to S2</th>
             <th class="px-5 py-3 text-right">Avg Dials / Day</th>
             <th class="px-5 py-3 text-right">Connect Rate</th>
+            <th class="px-5 py-3 text-right">Next Steps %</th>
             <th class="px-5 py-3 text-right">Stale Accounts</th>
           </tr>
         </thead>
@@ -100,6 +101,7 @@
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ fmt_money(row.s2_amt) }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.avg_dials }}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.connect_rate) }}%</td>
+            <td class="px-5 py-4 text-right tabular-nums {% if row.next_steps_pct is none %}text-slate-400{% elif row.next_steps_pct >= 80 %}text-green-600{% elif row.next_steps_pct >= 60 %}text-amber-600{% else %}text-red-500{% endif %}">{% if row.next_steps_pct is none %}—{% else %}{{ row.next_steps_pct }}%{% endif %}</td>
             <td class="px-5 py-4 text-right tabular-nums text-slate-700">{{ row.stale_count }}</td>
           </tr>
           {% endfor %}

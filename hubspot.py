@@ -579,6 +579,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
             "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
             "hs_date_entered_71300358",
             "hs_v2_date_entered_71300358",
+            "hs_next_step",
         ],
     }
     return _search_all("deals", payload)
