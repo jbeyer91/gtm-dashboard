@@ -207,6 +207,17 @@ def logout():
     return redirect(url_for("login"))
 
 
+def _current_user_is_admin() -> bool:
+    """Prefer the login-time admin flag; only recompute if the session lacks it."""
+    session_flag = session.get("is_admin")
+    if session_flag is not None:
+        return bool(session_flag)
+
+    owner_id = session.get("owner_id", "")
+    team_oids = get_team_owner_ids()
+    return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
+
+
 @app.route("/refresh-cache", methods=["POST"])
 @login_required
 def refresh_cache():
@@ -493,9 +504,7 @@ def scorecard():
     try:
         t     = data["team"]
         owner_id = session.get("owner_id", "")
-        team_oids = get_team_owner_ids()
-        is_admin = (owner_id in OWNER_EXCLUDE or
-                    bool(team_oids and owner_id not in team_oids))
+        is_admin = _current_user_is_admin()
         visible_rows = data["rows"]
         if not is_admin:
             visible_rows = [r for r in visible_rows if r.get("owner_id") == owner_id]
@@ -587,9 +596,7 @@ def scorecard_history():
         return render_template("loading.html", nav=NAV, active="scorecard_history"), 202
     try:
         owner_id = session.get("owner_id", "")
-        team_oids = get_team_owner_ids()
-        is_admin = (owner_id in OWNER_EXCLUDE or
-                    bool(team_oids and owner_id not in team_oids))
+        is_admin = _current_user_is_admin()
         visible_rows = data["rows"]
         if not is_admin:
             visible_rows = [r for r in visible_rows if r.get("owner_id") == owner_id]
