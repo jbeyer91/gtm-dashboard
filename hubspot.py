@@ -165,6 +165,21 @@ def get_scoped_team_owner_ids(as_of=None) -> frozenset:
     return frozenset(allowed)
 
 
+def apply_manual_owner_overrides(owners: dict) -> dict:
+    """Ensure manual owner overrides are present even if cached owner data is stale."""
+    merged = dict(owners or {})
+    for owner_id, info in MANUAL_OWNER_SCOPE_OVERRIDES.items():
+        merged.setdefault(owner_id, {
+            "id": owner_id,
+            "name": f"{info.get('first_name', '')} {info.get('last_name', '')}".strip() or owner_id,
+            "last_name": info.get("last_name", ""),
+            "first_name": info.get("first_name", ""),
+            "email": info.get("email", ""),
+            "user_id": str(info.get("user_id", "")),
+        })
+    return merged
+
+
 def _month_keys_between(start: datetime, end: datetime) -> list[str]:
     """Return inclusive YYYY-MM keys intersecting the supplied date window."""
     keys = []

@@ -24,7 +24,12 @@ from datetime import datetime, timedelta
 
 import analytics
 import monthly_store as store
-from hubspot import get_date_range, get_owners, get_scoped_team_owner_ids
+from hubspot import (
+    apply_manual_owner_overrides,
+    get_date_range,
+    get_owners,
+    get_scoped_team_owner_ids,
+)
 
 # ── Thresholds (match template colour breakpoints where they exist) ────────────
 _WIN_RATE_WARN      = 20.0   # pct — below this flags a close-quality issue
@@ -1296,7 +1301,7 @@ def generate_all_for_month(year, month):
 
     Returns {"team": bool, "reps": {owner_id: bool}}.
     """
-    owners  = get_owners()
+    owners  = apply_manual_owner_overrides(get_owners())
     allowed = get_scoped_team_owner_ids(_month_scope_end(year, month))
     # Grace reps (departed but still in analytics through month-end) must be
     # included even though they are no longer in the HubSpot team filter.
@@ -1346,7 +1351,7 @@ def get_or_generate_rep_summary(owner_id):
             return rec
 
     # Slow path — generate once, then lock
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     info   = owners.get(owner_id, {})
     label  = info.get("last_name") or info.get("name") or owner_id
     try:
