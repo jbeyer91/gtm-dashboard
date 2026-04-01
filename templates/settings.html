@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %} — Settings{% endblock %}
+{% block content %}
+<section class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="rounded-3xl px-8 py-7 text-white" style="background: linear-gradient(135deg, #17366B 0%, #0F766E 100%);">
+    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Admin</p>
+    <h1 class="mt-2 text-3xl font-semibold tracking-tight">Settings</h1>
+    <p class="mt-2 max-w-2xl text-sm text-white/75">
+      Manage who counts as an admin inside the dashboard. Admins can view team-wide history and account coverage, and can update these settings.
+    </p>
+  </div>
+
+  {% if saved %}
+  <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+    Settings saved.
+  </div>
+  {% endif %}
+
+  <form method="post" class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-900">Editable Admin Emails</h2>
+      <p class="mt-1 text-sm text-slate-500">One email per line. These users get admin access after they sign out and sign back in.</p>
+      <textarea
+        name="admin_emails"
+        rows="12"
+        class="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+        placeholder="name@belfrysoftware.com"
+      >{{ admin_emails_text }}</textarea>
+    </div>
+
+    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-900">Editable Admin Owner IDs</h2>
+      <p class="mt-1 text-sm text-slate-500">Optional. Use this if you want to grant admin access by HubSpot owner ID instead of email.</p>
+      <textarea
+        name="admin_owner_ids"
+        rows="12"
+        class="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+        placeholder="12345678"
+      >{{ admin_owner_ids_text }}</textarea>
+    </div>
+
+    <div class="lg:col-span-2 flex items-center justify-between rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Save Changes</h2>
+        <p class="mt-1 text-sm text-slate-500">These settings are stored in the app’s persistent summary store.</p>
+      </div>
+      <button
+        type="submit"
+        class="inline-flex items-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+      >
+        Save Settings
+      </button>
+    </div>
+  </form>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+      <h2 class="text-lg font-semibold text-slate-900">Env Admin Emails</h2>
+      <p class="mt-1 text-sm text-slate-500">These come from the Render `ADMIN_EMAILS` env var and are read-only on this page.</p>
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        {% if env_admin_emails %}
+          {% for email in env_admin_emails %}
+          <div>{{ email }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="text-slate-400">None configured.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+      <h2 class="text-lg font-semibold text-slate-900">Env Admin Owner IDs</h2>
+      <p class="mt-1 text-sm text-slate-500">These come from the Render `ADMIN_OWNER_IDS` env var and are read-only on this page.</p>
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        {% if env_admin_owner_ids %}
+          {% for owner_id in env_admin_owner_ids %}
+          <div>{{ owner_id }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="text-slate-400">None configured.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
