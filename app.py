@@ -1000,20 +1000,31 @@ def settings():
     if not _current_user_is_admin():
         abort(403)
 
-    saved = False
+    saved_message = ""
     if request.method == "POST":
-        admin_emails = _parse_settings_list(request.form.get("admin_emails", ""), lowercase=True)
-        monthly_store.update_admin_settings(admin_emails)
-        saved = True
+        persisted = monthly_store.get_admin_settings()
+        admin_emails = list(persisted.get("admin_emails", []))
+        action = (request.form.get("action") or "").strip()
+
+        if action == "add":
+            new_email = (request.form.get("admin_email") or "").strip().lower()
+            if new_email:
+                admin_emails.append(new_email)
+                monthly_store.update_admin_settings(admin_emails)
+                saved_message = f"Added {new_email}."
+        elif action == "remove":
+            remove_email = (request.form.get("remove_email") or "").strip().lower()
+            admin_emails = [email for email in admin_emails if email != remove_email]
+            monthly_store.update_admin_settings(admin_emails)
+            saved_message = f"Removed {remove_email}."
 
     persisted = monthly_store.get_admin_settings()
     return render_template(
         "settings.html",
         nav=NAV,
         active="settings",
-        saved=saved,
-        admin_emails_text="\n".join(persisted.get("admin_emails", [])),
-        env_admin_emails=sorted(ADMIN_EMAIL_ALLOWLIST),
+        saved_message=saved_message,
+        admin_emails=sorted(persisted.get("admin_emails", [])),
     )
 
 
