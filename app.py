@@ -21,6 +21,16 @@ from cache_utils import clear_cache, get_cached, last_refreshed_str, last_refres
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
+ADMIN_EMAIL_ALLOWLIST = frozenset(
+    email.strip().lower()
+    for email in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if email.strip()
+)
+ADMIN_OWNER_ALLOWLIST = frozenset(
+    owner_id.strip()
+    for owner_id in os.environ.get("ADMIN_OWNER_IDS", "").split(",")
+    if owner_id.strip()
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -166,6 +176,15 @@ def login_required(f):
     return decorated
 
 
+def _is_admin_user(owner_id: str, email: str = "") -> bool:
+    if email and email.lower() in ADMIN_EMAIL_ALLOWLIST:
+        return True
+    if owner_id and owner_id in ADMIN_OWNER_ALLOWLIST:
+        return True
+    team_oids = get_team_owner_ids()
+    return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
+
+
 @app.route("/login")
 def login():
     redirect_uri = url_for("auth_callback", _external=True)
@@ -193,9 +212,7 @@ def auth_callback():
     session["authenticated"] = True
     session["email"] = email
     session["owner_id"] = owner["id"]
-    # Admin = either explicitly excluded non-AE, or not on any sales team
-    team_oids = get_team_owner_ids()
-    session["is_admin"] = owner["id"] in OWNER_EXCLUDE or bool(team_oids and owner["id"] not in team_oids)
+    session["is_admin"] = _is_admin_user(owner["id"], email)
 
     next_url = request.args.get("next") or url_for("home")
     return redirect(next_url)
@@ -214,8 +231,8 @@ def _current_user_is_admin() -> bool:
         return bool(session_flag)
 
     owner_id = session.get("owner_id", "")
-    team_oids = get_team_owner_ids()
-    return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
+    email = (session.get("email") or "").lower()
+    return _is_admin_user(owner_id, email)
 
 
 @app.route("/refresh-cache", methods=["POST"])
