@@ -686,15 +686,17 @@ def scorecard_history():
         active_oids = {row["owner_id"] for row in data["rows"]}
 
         # Include departed reps who have locked history records but are no
-        # longer on the active team — their records stay permanently visible.
-        all_history_reps = monthly_store.get_all_rep_ids_with_history()
-        departed_oids = {oid for oid in all_history_reps if oid not in active_oids}
-        for oid in departed_oids:
-            data["rows"].append({
-                "owner_id": oid,
-                "ae": all_history_reps[oid],
-                "_departed": True,
-            })
+        # longer on the active team — but only for admins. Reps should never
+        # see other people's historical rows.
+        if is_admin:
+            all_history_reps = monthly_store.get_all_rep_ids_with_history()
+            departed_oids = {oid for oid in all_history_reps if oid not in active_oids}
+            for oid in departed_oids:
+                data["rows"].append({
+                    "owner_id": oid,
+                    "ae": all_history_reps[oid],
+                    "_departed": True,
+                })
 
         for row in data["rows"]:
             oid = row["owner_id"]
