@@ -1699,7 +1699,11 @@ def monthly_summary_backfill():
     if month < 1 or month > 12:
         return jsonify({"error": "month must be between 1 and 12"}), 400
 
-    result = summary_engine.generate_all_for_month(year, month)
+    try:
+        result = summary_engine.generate_all_for_month(year, month)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
     n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
     return jsonify({"year": year, "month": month, "records_saved": n_saved})
 
