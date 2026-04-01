@@ -613,7 +613,7 @@ def scorecard_history():
             ]
 
         rep_data = {}
-        rep_locked_months = []
+        rep_locked_months_by_key = {}
         active_oids = {row["owner_id"] for row in data["rows"]}
 
         # Include departed reps who have locked history records but are no
@@ -637,14 +637,19 @@ def scorecard_history():
                 {"record": hist, "meta": _summary_meta(hist)}
                 for hist in history
             ]
-            if history_entries and not rep_locked_months:
-                rep_locked_months = [entry["meta"] for entry in history_entries]
+            for entry in history_entries:
+                rep_locked_months_by_key.setdefault(entry["meta"]["key"], entry["meta"])
             rep_data[oid] = {
                 "summary": history[0] if history else None,
                 "meta": _summary_meta(history[0]) if history else {},
                 "history_entries": history_entries,
             }
 
+        rep_locked_months = sorted(
+            rep_locked_months_by_key.values(),
+            key=lambda meta: meta["key"],
+            reverse=True,
+        )
         locked_months = [entry["meta"] for entry in team_history_entries] if is_admin else rep_locked_months
         if not locked_months:
             selected_locked_key = ""
