@@ -403,6 +403,31 @@ def _filter_by_team(data: dict, team: str) -> dict:
         return {**data, "rows": rows, "totals": totals, "groups": filtered_groups}
 
     return {**data, "rows": rows, "totals": totals}
+
+
+def _filter_by_owner(data: dict, owner_id: str) -> dict:
+    """Filter rows to a single owner and recompute totals from the filtered set."""
+    rows = [r for r in data.get("rows", []) if r.get("owner_id") == owner_id]
+    orig = data.get("totals", {})
+
+    if not rows:
+        totals = {k: (0 if isinstance(v, (int, float)) else v) for k, v in orig.items()}
+        return {**data, "rows": rows, "totals": totals}
+
+    totals = dict(orig)
+    for k, v in orig.items():
+        if isinstance(v, (int, float)):
+            totals[k] = sum(r.get(k, 0) for r in rows)
+
+    def _pct(a, b): return round(a / b * 100, 1) if b else 0.0
+    if "active_30" in totals and "ac_accounts" in totals:
+        totals["pct_active_30"] = _pct(totals["active_30"], totals["ac_accounts"])
+        totals["pct_called_120"] = _pct(totals.get("called_120", 0), totals["ac_accounts"])
+        totals["pct_in_sequence"] = _pct(totals.get("in_sequence", 0), totals["ac_accounts"])
+
+    return {**data, "rows": rows, "totals": totals}
+
+
 @app.route("/")
 @login_required
 def home():
@@ -922,14 +947,16 @@ def abm():
 @app.route("/book-coverage")
 @login_required
 def book_coverage():
-    team = request.args.get("team", "all")
+    owner_id = session.get("owner_id", "")
+    is_admin = _current_user_is_admin()
+    team = request.args.get("team", "all") if is_admin else "all"
     try:
         data = analytics.compute_book_coverage()
-        data = _filter_by_team(data, team)
+        data = _filter_by_team(data, team) if is_admin else _filter_by_owner(data, owner_id)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="book_coverage")
     return render_template("book_coverage.html", data=data, team=team, teams=TEAMS,
-                           nav=NAV, active="book_coverage")
+                           is_admin=is_admin, nav=NAV, active="book_coverage")
 
 
 @app.route("/api/cache/clear", methods=["POST"])
@@ -1463,7 +1490,11 @@ def forecast_csv():
 @app.route("/book-coverage/export.csv")
 @login_required
 def book_coverage_csv():
+    owner_id = session.get("owner_id", "")
+    is_admin = _current_user_is_admin()
+    team = request.args.get("team", "all") if is_admin else "all"
     data = analytics.compute_book_coverage()
+    data = _filter_by_team(data, team) if is_admin else _filter_by_owner(data, owner_id)
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Active (30d)", "Called (120d)",
