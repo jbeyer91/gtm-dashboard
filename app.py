@@ -611,6 +611,10 @@ def scorecard_history():
                 {"record": record, "meta": _summary_meta(record)}
                 for record in team_history
             ]
+        team_locked_months_by_key = {
+            entry["meta"]["key"]: entry["meta"]
+            for entry in team_history_entries
+        }
 
         rep_data = {}
         rep_locked_months_by_key = {}
@@ -650,7 +654,14 @@ def scorecard_history():
             key=lambda meta: meta["key"],
             reverse=True,
         )
-        locked_months = [entry["meta"] for entry in team_history_entries] if is_admin else rep_locked_months
+        if is_admin:
+            locked_months = sorted(
+                {**rep_locked_months_by_key, **team_locked_months_by_key}.values(),
+                key=lambda meta: meta["key"],
+                reverse=True,
+            )
+        else:
+            locked_months = rep_locked_months
         if not locked_months:
             selected_locked_key = ""
         else:
