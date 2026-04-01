@@ -7,7 +7,9 @@
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Named Account Coverage · Current State</p>
 </div>
 
+{% if is_admin %}
 {{ team_filter(team, teams) }}
+{% endif %}
 {{ csv_link(url_for('book_coverage_csv') ~ '?team=' ~ team) }}
 
 {% set t = data.totals %}
