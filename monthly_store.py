@@ -236,20 +236,18 @@ def get_admin_settings() -> dict:
     settings = data.get("settings", {})
     return {
         "admin_emails": list(settings.get("admin_emails", [])),
-        "admin_owner_ids": list(settings.get("admin_owner_ids", [])),
     }
 
 
-def update_admin_settings(admin_emails: list[str], admin_owner_ids: list[str]) -> dict:
-    """Persist admin allowlists and return the normalized values."""
+def update_admin_settings(admin_emails: list[str]) -> dict:
+    """Persist admin email allowlists and return the normalized values."""
     normalized = {
         "admin_emails": sorted({(email or "").strip().lower() for email in admin_emails if (email or "").strip()}),
-        "admin_owner_ids": sorted({(owner_id or "").strip() for owner_id in admin_owner_ids if (owner_id or "").strip()}),
     }
     with _lock:
         data = _load()
         data.setdefault("settings", {})
         data["settings"]["admin_emails"] = normalized["admin_emails"]
-        data["settings"]["admin_owner_ids"] = normalized["admin_owner_ids"]
+        data["settings"].pop("admin_owner_ids", None)
         _persist(data)
     return normalized

@@ -139,7 +139,6 @@ NAV = [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
     ]},
-    {"type": "link",  "endpoint": "settings",          "label": "Settings"},
 ]
 
 
@@ -182,14 +181,11 @@ def login_required(f):
 def _is_admin_user(owner_id: str, email: str = "") -> bool:
     persisted = monthly_store.get_admin_settings()
     persisted_emails = frozenset(persisted.get("admin_emails", []))
-    persisted_owner_ids = frozenset(persisted.get("admin_owner_ids", []))
     if email and email.lower() in ADMIN_EMAIL_ALLOWLIST:
         return True
     if email and email.lower() in persisted_emails:
         return True
     if owner_id and owner_id in ADMIN_OWNER_ALLOWLIST:
-        return True
-    if owner_id and owner_id in persisted_owner_ids:
         return True
     team_oids = get_team_owner_ids()
     return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
@@ -1005,8 +1001,7 @@ def settings():
     saved = False
     if request.method == "POST":
         admin_emails = _parse_settings_list(request.form.get("admin_emails", ""), lowercase=True)
-        admin_owner_ids = _parse_settings_list(request.form.get("admin_owner_ids", ""))
-        monthly_store.update_admin_settings(admin_emails, admin_owner_ids)
+        monthly_store.update_admin_settings(admin_emails)
         saved = True
 
     persisted = monthly_store.get_admin_settings()
@@ -1016,9 +1011,7 @@ def settings():
         active="settings",
         saved=saved,
         admin_emails_text="\n".join(persisted.get("admin_emails", [])),
-        admin_owner_ids_text="\n".join(persisted.get("admin_owner_ids", [])),
         env_admin_emails=sorted(ADMIN_EMAIL_ALLOWLIST),
-        env_admin_owner_ids=sorted(ADMIN_OWNER_ALLOWLIST),
     )
 
 
