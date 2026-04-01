@@ -278,19 +278,32 @@ def _sync_body():
     _maybe_generate_summaries()
 
 
-# Historical months that must always be present in the monthly store.
-# Extend this list when a new month is finalized (add the month after it closes).
-_REQUIRED_HISTORY_MONTHS = [
-    (2026, 1),
-    (2026, 2),
-]
+# First month that should ever appear in the scorecard history.
+# All months from this point through last_completed_month() are required.
+_HISTORY_START = (2026, 1)
+
+
+def _required_history_months():
+    """Return every (year, month) from _HISTORY_START through last_completed_month()."""
+    import monthly_store
+    end_year, end_month = monthly_store.last_completed_month()
+    months = []
+    y, m = _HISTORY_START
+    while (y, m) <= (end_year, end_month):
+        months.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return months
 
 
 def _maybe_generate_summaries():
     """Generate locked monthly summaries after each cache sync if not yet present.
 
-    Checks _REQUIRED_HISTORY_MONTHS (historical backfill) and last_completed_month
-    (current month).  Any missing months are generated in chronological order.
+    Checks every month from _HISTORY_START through last_completed_month() and
+    backfills any that are missing. New months are picked up automatically —
+    no code change needed when a new month closes.
 
     Under normal operation with a persistent store this is a no-op after the
     first successful sync — the team-record existence check is a single dict
@@ -308,12 +321,7 @@ def _maybe_generate_summaries():
         done_months  = {(r["year"], r["month"]) for r in team_history}
 
         cur_year, cur_month = monthly_store.last_completed_month()
-        # Build ordered list: historical months first, then current month.
-        all_required = list(_REQUIRED_HISTORY_MONTHS)
-        if (cur_year, cur_month) not in all_required:
-            all_required.append((cur_year, cur_month))
-
-        missing = [(y, m) for y, m in all_required if (y, m) not in done_months]
+        missing = [(y, m) for y, m in _required_history_months() if (y, m) not in done_months]
         if not missing:
             return
 
