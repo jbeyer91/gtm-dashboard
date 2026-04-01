@@ -61,9 +61,10 @@ def _load() -> dict:
         with open(_STORE_PATH, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         data.setdefault("records", {})
+        data.setdefault("settings", {})
         return data
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"records": {}}
+        return {"records": {}, "settings": {}}
 
 
 def _persist(data: dict) -> None:
@@ -226,3 +227,29 @@ def get_all_rep_ids_with_history() -> dict:
         if v["entity_type"] == "rep":
             result[v["entity_id"]] = v["entity_label"]
     return result
+
+
+def get_admin_settings() -> dict:
+    """Return persisted admin allowlists."""
+    with _lock:
+        data = _load()
+    settings = data.get("settings", {})
+    return {
+        "admin_emails": list(settings.get("admin_emails", [])),
+        "admin_owner_ids": list(settings.get("admin_owner_ids", [])),
+    }
+
+
+def update_admin_settings(admin_emails: list[str], admin_owner_ids: list[str]) -> dict:
+    """Persist admin allowlists and return the normalized values."""
+    normalized = {
+        "admin_emails": sorted({(email or "").strip().lower() for email in admin_emails if (email or "").strip()}),
+        "admin_owner_ids": sorted({(owner_id or "").strip() for owner_id in admin_owner_ids if (owner_id or "").strip()}),
+    }
+    with _lock:
+        data = _load()
+        data.setdefault("settings", {})
+        data["settings"]["admin_emails"] = normalized["admin_emails"]
+        data["settings"]["admin_owner_ids"] = normalized["admin_owner_ids"]
+        _persist(data)
+    return normalized

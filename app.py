@@ -17,10 +17,21 @@ from authlib.integrations.flask_client import OAuth
 import csv, io
 import analytics
 import calls_drilldown as calls_drilldown_bp
+import monthly_store
 from cache_utils import clear_cache, get_cached, last_refreshed_str, last_refreshed_ts, is_cached
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
+ADMIN_EMAIL_ALLOWLIST = frozenset(
+    email.strip().lower()
+    for email in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if email.strip()
+)
+ADMIN_OWNER_ALLOWLIST = frozenset(
+    owner_id.strip()
+    for owner_id in os.environ.get("ADMIN_OWNER_IDS", "").split(",")
+    if owner_id.strip()
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -128,6 +139,7 @@ NAV = [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
     ]},
+    {"type": "link",  "endpoint": "settings",          "label": "Settings"},
 ]
 
 
@@ -141,6 +153,7 @@ def inject_cache_info():
         "last_refreshed": last_refreshed_str(),
         "cache_stale": stale,
         "cache_syncing": cache_scheduler.is_syncing(),
+        "can_manage_settings": bool(session.get("authenticated")) and _current_user_is_admin(),
     }
 
 
@@ -164,6 +177,22 @@ def login_required(f):
             return redirect(url_for("login", next=request.url))
         return f(*args, **kwargs)
     return decorated
+
+
+def _is_admin_user(owner_id: str, email: str = "") -> bool:
+    persisted = monthly_store.get_admin_settings()
+    persisted_emails = frozenset(persisted.get("admin_emails", []))
+    persisted_owner_ids = frozenset(persisted.get("admin_owner_ids", []))
+    if email and email.lower() in ADMIN_EMAIL_ALLOWLIST:
+        return True
+    if email and email.lower() in persisted_emails:
+        return True
+    if owner_id and owner_id in ADMIN_OWNER_ALLOWLIST:
+        return True
+    if owner_id and owner_id in persisted_owner_ids:
+        return True
+    team_oids = get_team_owner_ids()
+    return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
 
 
 @app.route("/login")
@@ -193,9 +222,7 @@ def auth_callback():
     session["authenticated"] = True
     session["email"] = email
     session["owner_id"] = owner["id"]
-    # Admin = either explicitly excluded non-AE, or not on any sales team
-    team_oids = get_team_owner_ids()
-    session["is_admin"] = owner["id"] in OWNER_EXCLUDE or bool(team_oids and owner["id"] not in team_oids)
+    session["is_admin"] = _is_admin_user(owner["id"], email)
 
     next_url = request.args.get("next") or url_for("home")
     return redirect(next_url)
@@ -214,8 +241,18 @@ def _current_user_is_admin() -> bool:
         return bool(session_flag)
 
     owner_id = session.get("owner_id", "")
-    team_oids = get_team_owner_ids()
-    return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
+    email = (session.get("email") or "").lower()
+    return _is_admin_user(owner_id, email)
+
+
+def _parse_settings_list(raw: str, lowercase: bool = False) -> list[str]:
+    values = []
+    for chunk in (raw or "").replace(",", "\n").splitlines():
+        value = chunk.strip()
+        if not value:
+            continue
+        values.append(value.lower() if lowercase else value)
+    return values
 
 
 @app.route("/refresh-cache", methods=["POST"])
@@ -957,6 +994,32 @@ def book_coverage():
         return render_template("error.html", message=str(e), nav=NAV, active="book_coverage")
     return render_template("book_coverage.html", data=data, team=team, teams=TEAMS,
                            is_admin=is_admin, nav=NAV, active="book_coverage")
+
+
+@app.route("/settings", methods=["GET", "POST"])
+@login_required
+def settings():
+    if not _current_user_is_admin():
+        abort(403)
+
+    saved = False
+    if request.method == "POST":
+        admin_emails = _parse_settings_list(request.form.get("admin_emails", ""), lowercase=True)
+        admin_owner_ids = _parse_settings_list(request.form.get("admin_owner_ids", ""))
+        monthly_store.update_admin_settings(admin_emails, admin_owner_ids)
+        saved = True
+
+    persisted = monthly_store.get_admin_settings()
+    return render_template(
+        "settings.html",
+        nav=NAV,
+        active="settings",
+        saved=saved,
+        admin_emails_text="\n".join(persisted.get("admin_emails", [])),
+        admin_owner_ids_text="\n".join(persisted.get("admin_owner_ids", [])),
+        env_admin_emails=sorted(ADMIN_EMAIL_ALLOWLIST),
+        env_admin_owner_ids=sorted(ADMIN_OWNER_ALLOWLIST),
+    )
 
 
 @app.route("/api/cache/clear", methods=["POST"])
