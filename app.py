@@ -1621,14 +1621,9 @@ def monthly_summary_regenerate():
     """
     import summary_engine
     import monthly_store
-    import cache_scheduler
 
     year, month = monthly_store.last_completed_month()
     n_deleted = monthly_store.delete_month(year, month)
-
-    cache_scheduler._refresh_base_data()
-    cache_scheduler._refresh_period_data("last_month")
-    cache_scheduler._refresh_period_data("this_month")
 
     result  = summary_engine.generate_all_for_month(year, month)
     n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
