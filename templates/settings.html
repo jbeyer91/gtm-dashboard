@@ -2,10 +2,10 @@
 {% block title %} — Settings{% endblock %}
 {% block content %}
 <section class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <div class="rounded-3xl px-8 py-7 text-white shadow-sm" style="background: linear-gradient(135deg, #17366B 0%, #0F766E 100%);">
-    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Admin</p>
-    <h1 class="mt-2 text-3xl font-semibold tracking-tight">Settings</h1>
-    <p class="mt-2 max-w-2xl text-sm text-white/75">
+  <div class="rounded-2xl border border-slate-200 bg-white px-8 py-6 shadow-sm">
+    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Admin</p>
+    <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900">Settings</h1>
+    <p class="mt-2 max-w-2xl text-sm text-slate-500">
       Manage dashboard admins. Admins can see team-wide history, account coverage, and this settings page.
     </p>
   </div>
@@ -17,14 +17,14 @@
   {% endif %}
 
   <div class="mt-6 grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
-    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Current Admins</p>
           <h2 class="mt-2 text-xl font-semibold text-slate-900">Who has admin access</h2>
           <p class="mt-1 text-sm text-slate-500">Remove access one person at a time.</p>
         </div>
-        <div class="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+        <div class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
           {{ admin_emails|length }} total
         </div>
       </div>
@@ -32,7 +32,7 @@
       <div class="mt-5 space-y-3">
         {% if admin_emails %}
           {% for email in admin_emails %}
-          <div class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div class="min-w-0">
               <div class="font-medium text-slate-900">{{ email }}</div>
               <div class="text-xs text-slate-500">Dashboard admin</div>
@@ -42,7 +42,7 @@
               <input type="hidden" name="remove_email" value="{{ email }}">
               <button
                 type="submit"
-                class="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50"
+                class="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
                 Remove
               </button>
@@ -50,14 +50,14 @@
           </div>
           {% endfor %}
         {% else %}
-          <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             No dashboard admins saved yet.
           </div>
         {% endif %}
       </div>
     </div>
 
-    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Add Admin</p>
       <h2 class="mt-2 text-xl font-semibold text-slate-900">Grant access</h2>
       <p class="mt-1 text-sm text-slate-500">Add one Belfry email at a time. They will need to sign out and sign back in.</p>
@@ -71,19 +71,19 @@
             name="admin_email"
             type="email"
             placeholder="name@belfrysoftware.com"
-            class="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+            class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
           >
         </div>
         <button
           type="submit"
-          class="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          class="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
         >
           Add Admin
         </button>
       </form>
 
-      <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-        Admin access controls:
+      <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+        <p class="font-semibold text-slate-700">Admin access includes</p>
         <div class="mt-2 text-slate-500">Full Scorecard History</div>
         <div class="text-slate-500">Full Account Coverage</div>
         <div class="text-slate-500">Settings management</div>
