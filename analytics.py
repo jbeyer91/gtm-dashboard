@@ -671,6 +671,19 @@ def _coverage_end(period: str, start: datetime, end: datetime) -> datetime:
     return end  # historical / next_month periods already have the correct boundary
 
 
+def _quota_window(period: str, start: datetime, end: datetime) -> tuple[datetime, datetime]:
+    """Return the correct quota target window for a selected period.
+
+    Current-period views should compare performance against the full target
+    period, not just the elapsed slice through "now". Example: on April 1,
+    "This Month" should still use the full April quota, not one day's prorated
+    fraction of it.
+    """
+    if period in ("this_month", "this_quarter", "ytd"):
+        return start, _coverage_end(period, start, end)
+    return start, end
+
+
 @ttl_cache
 def compute_pipeline_coverage(period: str = None) -> dict:
     owners = get_owners()
@@ -834,9 +847,10 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
 @ttl_cache
 def compute_deals_won(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start, end)
     owners = get_owners()
     scope_end = end
-    quotas = get_quotas(start, end)  # {owner_id: quota_amount} — {} if scope missing
+    quotas = get_quotas(quota_start, quota_end)  # full target window for current-period views
 
     won_deals = get_deals(start, end, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
@@ -956,8 +970,9 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 @ttl_cache
 def compute_forecast(period: str) -> dict:
     start, end = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start, end)
     owners = get_owners()
-    quotas = get_quotas(start, end)
+    quotas = get_quotas(quota_start, quota_end)
 
     won_deals = get_deals(start, end, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
@@ -1470,6 +1485,7 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
 def compute_scorecard(period: str = "this_month") -> dict:
     """Scorecard: per-rep weighted grade across 8 KPIs for the given period."""
     start, end = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start, end)
     scope_end = end
     period_bdays = max(
         sum(1 for i in range((end - start).days + 1)
@@ -1478,7 +1494,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
     )
 
     owners = get_owners()
-    quotas = get_quotas(start, end)
+    quotas = get_quotas(quota_start, quota_end)
 
     won_deals     = [d for d in get_deals(start, end, "closedate")
                      if d["properties"].get("hs_is_closed_won") == "true"]

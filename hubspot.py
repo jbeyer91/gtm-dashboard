@@ -122,6 +122,14 @@ MANUAL_OWNER_SCOPE_OVERRIDES = {
     },
 }
 
+MANUAL_MONTHLY_QUOTA_OVERRIDES = {
+    "81784061": {
+        "2026-01": 33338.0,
+        "2026-02": 33338.0,
+        "2026-03": 33338.0,
+    },
+}
+
 
 def _coerce_scope_date(as_of=None):
     """Normalize a datetime/date/ISO-string into a UTC calendar date."""
@@ -155,6 +163,21 @@ def get_scoped_team_owner_ids(as_of=None) -> frozenset:
         if _manual_owner_in_scope(owner_id, as_of):
             allowed.add(owner_id)
     return frozenset(allowed)
+
+
+def _month_keys_between(start: datetime, end: datetime) -> list[str]:
+    """Return inclusive YYYY-MM keys intersecting the supplied date window."""
+    keys = []
+    year = start.year
+    month = start.month
+    while (year, month) <= (end.year, end.month):
+        keys.append(f"{year:04d}-{month:02d}")
+        if month == 12:
+            year += 1
+            month = 1
+        else:
+            month += 1
+    return keys
 
 
 @lru_cache(maxsize=1)
@@ -596,6 +619,17 @@ def get_quotas(start: datetime, end: datetime) -> dict:
             prorated = amount   # fallback: use full amount if dates can't be parsed
 
         quotas[owner_id] = quotas.get(owner_id, 0.0) + prorated
+
+    for owner_id, monthly_overrides in MANUAL_MONTHLY_QUOTA_OVERRIDES.items():
+        # Only fill gaps when HubSpot has no usable quota for this owner/window.
+        if quotas.get(owner_id, 0.0) > 0:
+            continue
+        manual_total = sum(
+            float(monthly_overrides.get(month_key, 0.0) or 0.0)
+            for month_key in _month_keys_between(start, end)
+        )
+        if manual_total > 0:
+            quotas[owner_id] = manual_total
 
     return quotas
 
