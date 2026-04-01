@@ -7,6 +7,7 @@ from hubspot import (
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
     get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
     get_scoped_team_owner_ids,
+    apply_manual_owner_overrides,
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
@@ -243,7 +244,7 @@ def compute_call_stats(period: str) -> dict:
         if (start + timedelta(days=i)).weekday() < 5
     )
     period_bdays = max(period_bdays, 1)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     scope_end = end
     calls = get_calls(start, end)
     log.info("compute_call_stats(%s): range %s → %s, raw calls=%d",
@@ -424,7 +425,7 @@ def compute_connect_diagnostics(period: str) -> dict:
     ), 1)
     target_dials = period_bdays * DIALS_PER_DAY_GOAL
 
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     calls  = get_calls_enriched(start, end)
 
     # Same exclusion logic as compute_call_stats:
@@ -557,7 +558,7 @@ def compute_connect_diagnostics(period: str) -> dict:
 @ttl_cache
 def compute_pipeline_generated(period: str) -> dict:
     start, end = get_date_range(period)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     scope_end = end
     deals = get_deals(start, end, "createdate")
 
@@ -686,7 +687,7 @@ def _quota_window(period: str, start: datetime, end: datetime) -> tuple[datetime
 
 @ttl_cache
 def compute_pipeline_coverage(period: str = None) -> dict:
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     if period:
         start, end = get_date_range(period)
         scope_end = _coverage_end(period, start, end)
@@ -765,7 +766,7 @@ def compute_pipeline_coverage(period: str = None) -> dict:
 @ttl_cache
 def compute_deal_advancement(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     scope_end = end
 
     # Cohort view: all deals created in the period, showing their CURRENT stage.
@@ -848,7 +849,7 @@ def compute_deal_advancement(period: str, source: str = "All") -> dict:
 def compute_deals_won(period: str, source: str = "All") -> dict:
     start, end = get_date_range(period)
     quota_start, quota_end = _quota_window(period, start, end)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     scope_end = end
     quotas = get_quotas(quota_start, quota_end)  # full target window for current-period views
 
@@ -971,7 +972,7 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 def compute_forecast(period: str) -> dict:
     start, end = get_date_range(period)
     quota_start, quota_end = _quota_window(period, start, end)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     quotas = get_quotas(quota_start, quota_end)
 
     won_deals = get_deals(start, end, "closedate")
@@ -1139,7 +1140,7 @@ def compute_forecast(period: str) -> dict:
 @ttl_cache
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     scope_end = end
 
     lost_deals = get_deals(start, end, "hs_v2_date_entered_71300363")
@@ -1311,7 +1312,7 @@ def compute_book_coverage() -> dict:
     thirty_days_ago = now - timedelta(days=30)
     onetwenty_days_ago = now - timedelta(days=120)
 
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     companies = get_companies_for_coverage()
     seq_company_ids = get_sequence_enrolled_company_ids()
     tasks = get_overdue_sequence_tasks()
@@ -1493,7 +1494,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
         1,
     )
 
-    owners = get_owners()
+    owners = apply_manual_owner_overrides(get_owners())
     quotas = get_quotas(quota_start, quota_end)
 
     won_deals     = [d for d in get_deals(start, end, "closedate")
@@ -1723,7 +1724,7 @@ def compute_abm_coverage() -> dict:
     quarter_start = datetime(now.year, qm, 1, tzinfo=timezone.utc)
     month_start   = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
-    owners    = get_owners()
+    owners    = apply_manual_owner_overrides(get_owners())
     companies = get_target_account_companies()
 
     quarter_start_ts = int(quarter_start.timestamp() * 1000)
