@@ -639,7 +639,7 @@ def compute_pipeline_generated(period: str) -> dict:
         "total_acv": _sum("total_amt") / tot_n if tot_n else 0,
         "total_amt": _sum("total_amt"),
         "total_n": tot_n,
-        "pg_goal": sum(get_quotas(start, end).values()) * 5,
+        "pg_goal": sum(get_quotas(*_quota_window(period, start, end)).values()) * 5,
     }
 
     return {"rows": rows, "totals": totals, "period": period}
