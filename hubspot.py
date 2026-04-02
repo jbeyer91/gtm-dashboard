@@ -650,6 +650,81 @@ def get_quotas(start: datetime, end: datetime) -> dict:
 
 
 @ttl_cache
+def get_pipeline_goal(start: datetime, end: datetime) -> float:
+    """Return the total team pipeline-generated goal for the given window.
+
+    Fetches HubSpot goals whose names contain "pipeline" (case-insensitive),
+    sums across all owners, and pro-rates the same way get_quotas() does when
+    a goal period is materially longer than the requested window.
+
+    Returns 0.0 if no pipeline goals are found or the scope is not enabled.
+    """
+    owners = get_owners()
+    user_id_to_owner_id = {
+        v["user_id"]: v["id"] for v in owners.values() if v.get("user_id")
+    }
+
+    start_ts = str(int(start.timestamp() * 1000))
+    end_ts   = str(int(end.timestamp() * 1000))
+
+    payload = {
+        "filterGroups": [{"filters": [
+            {"propertyName": "hs_end_datetime",   "operator": "GTE", "value": start_ts},
+            {"propertyName": "hs_start_datetime", "operator": "LTE", "value": end_ts},
+        ]}],
+        "properties": [
+            "hs_goal_name", "hs_target_amount",
+            "hs_start_datetime", "hs_end_datetime", "hs_assignee_user_id",
+        ],
+        "limit": 200,
+    }
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/crm/v3/objects/goal_targets/search",
+            headers=HEADERS,
+            json=payload,
+            timeout=_TIMEOUT,
+        )
+        if resp.status_code == 403:
+            return 0.0
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError:
+        return 0.0
+
+    window_secs = max((end - start).total_seconds(), 1)
+    total = 0.0
+    for goal in resp.json().get("results", []):
+        props = goal.get("properties", {})
+        goal_name = (props.get("hs_goal_name") or "").lower()
+        if "pipeline" not in goal_name:
+            continue
+        user_id  = str(props.get("hs_assignee_user_id") or "")
+        if user_id not in user_id_to_owner_id:
+            continue
+        try:
+            amount = float(props.get("hs_target_amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        if amount == 0:
+            continue
+        try:
+            goal_start = _parse_hs_datetime(props.get("hs_start_datetime"))
+            goal_end   = _parse_hs_datetime(props.get("hs_end_datetime"))
+            goal_secs  = max((goal_end - goal_start).total_seconds(), 1)
+            if goal_secs > window_secs * 2:
+                overlap_secs = max(
+                    (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
+                )
+                total += amount * (overlap_secs / goal_secs)
+            else:
+                total += amount
+        except Exception:
+            total += amount
+
+    return total
+
+
+@ttl_cache
 def get_deals(start: datetime, end: datetime, date_field: str = "createdate") -> list:
     start_ts = int(start.timestamp() * 1000)
     end_ts = int(end.timestamp() * 1000)
