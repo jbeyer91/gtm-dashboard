@@ -801,9 +801,12 @@ def pipeline_generated():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_generated")
+    pg_goal = data["totals"].get("pg_goal", 0) or 0
+    pg_goal_label = f"Goal: ${pg_goal:,.0f}" if pg_goal else ""
     return render_template("pipeline_generated.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            deltas=deltas, prior_label=prior_label,
+                           pg_goal_label=pg_goal_label,
                            nav=NAV, active="pipeline_generated")
 
 

@@ -14,7 +14,7 @@
 {% set t = data.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-  {{ stat_card("Total Pipeline $", fmt_money(t.total_amt), delta=deltas.total_amt, delta_fmt='money') }}
+  {{ stat_card("Total Pipeline $", fmt_money(t.total_amt), sub=pg_goal_label, delta=deltas.total_amt, delta_fmt='money') }}
   {{ stat_card("Total Deals #", t.total_n, delta=deltas.total_n) }}
   {{ stat_card("Avg ACV", fmt_money(t.total_acv), delta=deltas.total_acv, delta_fmt='money') }}
   {{ stat_card("Cold Outreach $", fmt_money(t.cold_outreach_amt), delta=deltas.cold_outreach_amt, delta_fmt='money') }}
