@@ -901,10 +901,13 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
+    quota = data["totals"].get("quota_amt") or 0
+    quota_label = f"Goal: ${quota:,.0f}" if quota else ""
     return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
+                           quota_label=quota_label,
                            nav=NAV, active="deals_won")
 
 
