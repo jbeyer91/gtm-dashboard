@@ -667,15 +667,14 @@ def scorecard_history():
         import summary_engine
 
         team_history_entries = []
-        if is_admin:
-            team_history = monthly_store.get_team_history()
-            if not team_history:
-                generated = summary_engine.get_or_generate_team_summary()
-                team_history = [generated] if generated else []
-            team_history_entries = [
-                {"record": record, "meta": _summary_meta(record)}
-                for record in team_history
-            ]
+        team_history = monthly_store.get_team_history()
+        if not team_history:
+            generated = summary_engine.get_or_generate_team_summary()
+            team_history = [generated] if generated else []
+        team_history_entries = [
+            {"record": record, "meta": _summary_meta(record)}
+            for record in team_history
+        ]
         team_locked_months_by_key = {
             entry["meta"]["key"]: entry["meta"]
             for entry in team_history_entries
@@ -721,14 +720,11 @@ def scorecard_history():
             key=lambda meta: meta["key"],
             reverse=True,
         )
-        if is_admin:
-            locked_months = sorted(
-                {**rep_locked_months_by_key, **team_locked_months_by_key}.values(),
-                key=lambda meta: meta["key"],
-                reverse=True,
-            )
-        else:
-            locked_months = rep_locked_months
+        locked_months = sorted(
+            {**rep_locked_months_by_key, **team_locked_months_by_key}.values(),
+            key=lambda meta: meta["key"],
+            reverse=True,
+        )
         if not locked_months:
             selected_locked_key = ""
         else:
