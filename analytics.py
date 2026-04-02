@@ -9,7 +9,7 @@ from hubspot import (
     get_scoped_team_owner_ids,
     apply_manual_owner_overrides,
     get_owner_team_map, TEAM_MANAGER,
-    get_quotas, get_pipeline_goal, get_companies_for_coverage, get_sequence_enrolled_company_ids,
+    get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
     get_target_account_companies, _search_all,
     get_calls_enriched,
@@ -639,7 +639,7 @@ def compute_pipeline_generated(period: str) -> dict:
         "total_acv": _sum("total_amt") / tot_n if tot_n else 0,
         "total_amt": _sum("total_amt"),
         "total_n": tot_n,
-        "pg_goal": get_pipeline_goal(start, end),
+        "pg_goal": sum(get_quotas(start, end).values()) * 5,
     }
 
     return {"rows": rows, "totals": totals, "period": period}
