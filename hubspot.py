@@ -592,40 +592,27 @@ def get_quotas(start: datetime, end: datetime) -> dict:
         if amount == 0:
             continue
 
-        # Pro-rate only when the goal period is materially longer than the
-        # requested window (e.g. an annual goal viewed in a single month).
-        # When the goal period is roughly the same length as — or shorter
-        # than — the window (e.g. a monthly goal viewed in "This Month"),
-        # use the full goal amount so that mid-month views aren't penalised.
-        #
-        # Threshold: pro-rate only if goal_duration > 2 × window_duration.
-        #   • Annual (~365 d) vs monthly window (~17–31 d) → pro-rate ✓
-        #   • Monthly (~30 d) vs "This Month" window (~17 d) → full amount ✓
-        #   • Quarterly (~90 d) vs monthly window → pro-rate (÷3) ✓
-        #   • Quarterly vs quarterly window → full amount ✓
-        window_secs = max((end - start).total_seconds(), 1)
+        # Always pro-rate by the fraction of the goal period that overlaps the
+        # requested window.  Callers that want a full-period quota (e.g. "This
+        # Month") pass the full period boundaries via _quota_window(), so the
+        # overlap fraction becomes 100% and the full amount is returned.
+        # Rolling windows (last_30, last_90, etc.) that straddle two calendar
+        # months previously double-counted both monthly quotas; always pro-rating
+        # correctly allocates only the overlapping days from each goal.
         start_raw = props.get("hs_start_datetime")
         end_raw   = props.get("hs_end_datetime")
         try:
             goal_start = _parse_hs_datetime(start_raw)
             goal_end   = _parse_hs_datetime(end_raw)
             goal_secs  = max((goal_end - goal_start).total_seconds(), 1)
-            logger.info(
-                "quota goal owner=%s amount=%.0f start_raw=%r end_raw=%r "
-                "goal_days=%.1f window_days=%.1f",
-                owner_id, amount, start_raw, end_raw,
-                goal_secs / 86400, window_secs / 86400,
+            overlap_secs = max(
+                (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
             )
-            if goal_secs > window_secs * 2:
-                # Goal spans much more than the window → allocate the overlap fraction
-                overlap_secs = max(
-                    (min(end, goal_end) - max(start, goal_start)).total_seconds(), 0
-                )
-                prorated = amount * (overlap_secs / goal_secs)
-                logger.info("  → pro-rated to %.2f (overlap %.1f d)", prorated, overlap_secs / 86400)
-            else:
-                prorated = amount   # goal fits within (or matches) the window
-                logger.info("  → full amount %.2f (goal ≤ 2× window)", prorated)
+            prorated = amount * (overlap_secs / goal_secs)
+            logger.info(
+                "quota goal owner=%s amount=%.0f overlap %.1f/%.1f d → %.2f",
+                owner_id, amount, overlap_secs / 86400, goal_secs / 86400, prorated,
+            )
         except Exception as exc:
             logger.warning(
                 "quota parse error owner=%s start_raw=%r end_raw=%r: %s — using full amount",
