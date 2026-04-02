@@ -203,7 +203,12 @@ def auth_callback():
     user_info = token.get("userinfo") or oauth.google.userinfo()
     email = (user_info.get("email") or "").lower()
 
-    if not email.endswith(f"@{ALLOWED_DOMAIN}"):
+    # Emails explicitly added as admins (env var or via admin UI) bypass the
+    # domain restriction so non-belfry users can be granted admin access.
+    persisted_admin_emails = frozenset(monthly_store.get_admin_settings().get("admin_emails", []))
+    explicitly_allowed = ADMIN_EMAIL_ALLOWLIST | persisted_admin_emails
+
+    if not email.endswith(f"@{ALLOWED_DOMAIN}") and email not in explicitly_allowed:
         return render_template("login_error.html",
                                message="Sign-in requires a @belfrysoftware.com account.")
 
@@ -212,8 +217,15 @@ def auth_callback():
     owner = next((o for o in owners.values() if (o.get("email") or "").lower() == email), None)
 
     if owner is None:
-        return render_template("login_error.html",
-                               message="Your account isn't linked to a HubSpot owner. Contact your admin.")
+        if email not in explicitly_allowed:
+            return render_template("login_error.html",
+                                   message="Your account isn't linked to a HubSpot owner. Contact your admin.")
+        # Explicitly allowed non-HubSpot user — grant admin-only session.
+        session["authenticated"] = True
+        session["email"] = email
+        session["owner_id"] = ""
+        session["is_admin"] = True
+        return redirect(request.args.get("next") or url_for("home"))
 
     session["authenticated"] = True
     session["email"] = email
@@ -889,10 +901,13 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
+    quota = data["totals"].get("quota_amt") or 0
+    quota_label = f"Goal: ${quota:,.0f}" if quota else ""
     return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
+                           quota_label=quota_label,
                            nav=NAV, active="deals_won")
 
 
