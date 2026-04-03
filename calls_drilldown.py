@@ -24,6 +24,11 @@ CALL_STATS_PERIODS = [
     ("ytd",          "Year to Date"),
 ]
 
+DIAL_PIPELINE_PERIODS = [
+    ("this_month", "This Month"),
+    ("last_month", "Last Month"),
+]
+
 
 def _login_required(f):
     @wraps(f)
@@ -72,7 +77,7 @@ def calls_drilldown():
 @_login_required
 def dial_pipeline():
     period = request.args.get("period", "last_month")
-    if period not in {p for p, _ in CALL_STATS_PERIODS}:
+    if period not in {p for p, _ in DIAL_PIPELINE_PERIODS}:
         period = "last_month"
 
     if not is_cached(analytics.compute_dial_pipeline, period):
@@ -81,7 +86,7 @@ def dial_pipeline():
             "dial_pipeline.html",
             loading=True,
             period=period,
-            periods=CALL_STATS_PERIODS,
+            periods=DIAL_PIPELINE_PERIODS,
             nav=NAV,
             active="calls_drilldown.dial_pipeline",
         ), 202
@@ -98,7 +103,7 @@ def dial_pipeline():
         "dial_pipeline.html",
         data=data,
         period=period,
-        periods=CALL_STATS_PERIODS,
+        periods=DIAL_PIPELINE_PERIODS,
         nav=NAV,
         active="calls_drilldown.dial_pipeline",
     )
