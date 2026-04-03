@@ -567,6 +567,28 @@ def compute_dial_pipeline(period: str) -> dict:
     target_avg_dials_per_day = 40
     target_dials_per_rep = business_days * target_avg_dials_per_day
 
+    def _next_month_start(d):
+        return (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    def _business_days_in_range(range_start, range_end):
+        return max(sum(
+            1 for i in range((range_end - range_start).days + 1)
+            if (range_start + timedelta(days=i)).weekday() < 5
+        ), 0)
+
+    def _period_cold_outreach_goal_per_rep():
+        cursor = start.replace(day=1)
+        goal = 0.0
+        while cursor <= end:
+            month_end = _next_month_start(cursor) - timedelta(days=1)
+            overlap_start = max(start, cursor)
+            overlap_end = min(end, month_end)
+            overlap_bdays = _business_days_in_range(overlap_start, overlap_end)
+            month_bdays = max(_business_days_in_range(cursor, month_end), 1)
+            goal += DEALS_CREATED_TARGET_PER_REP * (overlap_bdays / month_bdays)
+            cursor = _next_month_start(cursor)
+        return round(goal, 1)
+
     rows = []
     for row in data["rows"]:
         actual_deals = row["outbound_deals_created"]
@@ -614,8 +636,133 @@ def compute_dial_pipeline(period: str) -> dict:
     team_target_dials_per_day = target_avg_dials_per_day * active_rep_count
     team_target_dials_for_period = target_dials_per_rep * active_rep_count
     team_actual_dials_per_day_total = round((totals["dials"] / business_days), 1) if rows else 0.0
-    total_projected_deals = round(sum(row["projected_deals_at_goal"] or 0 for row in rows), 1)
-    total_additional_deals = round(sum(row["additional_deals_at_goal"] or 0 for row in rows), 1)
+    period_cold_outreach_goal_per_rep = _period_cold_outreach_goal_per_rep()
+    team_cold_outreach_goal_for_period = round(period_cold_outreach_goal_per_rep * active_rep_count, 1)
+
+    team_dial_to_conversation_rate = (totals["conversations"] / totals["dials"]) if totals["dials"] else 0.0
+    conversation_to_cold_outreach_rate = (
+        totals["outbound_deals_created"] / totals["conversations"]
+        if totals["conversations"] else 0.0
+    )
+    estimated_conversations_at_target = round(team_target_dials_for_period * team_dial_to_conversation_rate, 1)
+    estimated_cold_outreach_at_target = round(
+        estimated_conversations_at_target * conversation_to_cold_outreach_rate, 1
+    )
+    total_projected_deals = estimated_cold_outreach_at_target
+    total_additional_deals = round(
+        max(estimated_cold_outreach_at_target - totals["outbound_deals_created"], 0),
+        1,
+    )
+    team_dials_gap = max(team_target_dials_for_period - totals["dials"], 0)
+    team_dials_attainment_pct = round((totals["dials"] / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
+    team_cold_outreach_attainment_pct = round(
+        (totals["outbound_deals_created"] / team_cold_outreach_goal_for_period) * 100, 1
+    ) if team_cold_outreach_goal_for_period else 0.0
+
+    owners = apply_manual_owner_overrides(get_owners())
+    scope_end = end
+    calls = get_calls(start, end)
+    deals_created = get_deals(start, end, "createdate")
+    contact_windows = get_deal_contact_windows()
+    call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
+    daily_dials = defaultdict(int)
+    daily_conversations = defaultdict(int)
+    daily_cold_outreach = defaultdict(int)
+
+    for call in calls:
+        oid = call["properties"].get("hubspot_owner_id", "")
+        if not oid or not owners.get(oid):
+            continue
+        if not _owner_allowed(oid, scope_end):
+            continue
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
+            continue
+        contact_id = call_to_contact.get(call["id"])
+        if contact_id and contact_id in contact_windows:
+            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+            if ts_raw:
+                try:
+                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+                    skip = False
+                    for (open_start, open_end) in contact_windows[contact_id]:
+                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                except Exception:
+                    pass
+        ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+        if not ts_raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        day_key = dt.date().isoformat()
+        daily_dials[day_key] += 1
+        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
+        duration_ms = int(call["properties"].get("hs_call_duration") or 0)
+        if disposition in CALL_CONNECTED_GUIDS and duration_ms >= 60000:
+            daily_conversations[day_key] += 1
+
+    for deal in deals_created:
+        oid = deal["properties"].get("hubspot_owner_id", "")
+        if not oid or not owners.get(oid):
+            continue
+        if not _owner_allowed(oid, scope_end):
+            continue
+        if _deal_source(deal) != "Cold outreach":
+            continue
+        ts_raw = deal["properties"].get("createdate")
+        if not ts_raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        daily_cold_outreach[dt.date().isoformat()] += 1
+
+    trend_points = []
+    cumulative_dials = 0
+    cumulative_target_dials = 0
+    cumulative_conversations = 0
+    cumulative_cold_outreach = 0
+    cumulative_goal_cold_outreach = 0.0
+    cold_outreach_goal_per_business_day = (
+        team_cold_outreach_goal_for_period / business_days if business_days else 0.0
+    )
+    current_day = start
+    while current_day <= end:
+        day_key = current_day.isoformat()
+        label = f"{current_day.month}/{current_day.day}"
+        is_business_day = current_day.weekday() < 5
+        cumulative_dials += daily_dials.get(day_key, 0)
+        cumulative_conversations += daily_conversations.get(day_key, 0)
+        cumulative_cold_outreach += daily_cold_outreach.get(day_key, 0)
+        if is_business_day:
+            cumulative_target_dials += team_target_dials_per_day
+            cumulative_goal_cold_outreach += cold_outreach_goal_per_business_day
+        trend_points.append({
+            "label": label,
+            "actual_dials": cumulative_dials,
+            "target_dials": cumulative_target_dials,
+            "actual_conversations": cumulative_conversations,
+            "actual_cold_outreach": cumulative_cold_outreach,
+            "goal_cold_outreach": round(cumulative_goal_cold_outreach, 1),
+        })
+        current_day += timedelta(days=1)
+
+    trend_dials_max = max(
+        [point["actual_dials"] for point in trend_points] +
+        [point["target_dials"] for point in trend_points] +
+        [team_target_dials_for_period, totals["dials"], 1]
+    )
+    trend_cold_outreach_max = max(
+        [point["actual_cold_outreach"] for point in trend_points] +
+        [point["goal_cold_outreach"] for point in trend_points] +
+        [team_cold_outreach_goal_for_period, totals["outbound_deals_created"], estimated_cold_outreach_at_target, 1]
+    )
 
     return {
         "rows": rows,
@@ -627,6 +774,9 @@ def compute_dial_pipeline(period: str) -> dict:
         "target_dials_per_rep": target_dials_per_rep,
         "activity_chart_max": activity_chart_max,
         "projection_chart_max": max(int(projected_max) + 1, 2),
+        "trend_points": trend_points,
+        "trend_dials_max": max(int(trend_dials_max) + 5, 5),
+        "trend_cold_outreach_max": max(int(trend_cold_outreach_max) + 1, 2),
         "totals": {
             **totals,
             "team_avg_dials_per_day": team_avg_dials_per_day,
@@ -635,6 +785,15 @@ def compute_dial_pipeline(period: str) -> dict:
             "team_target_dials_per_day": team_target_dials_per_day,
             "team_target_dials_for_period": team_target_dials_for_period,
             "team_actual_dials_per_day_total": team_actual_dials_per_day_total,
+            "team_dials_gap": team_dials_gap,
+            "team_dials_attainment_pct": team_dials_attainment_pct,
+            "period_cold_outreach_goal_per_rep": period_cold_outreach_goal_per_rep,
+            "team_cold_outreach_goal_for_period": team_cold_outreach_goal_for_period,
+            "team_cold_outreach_attainment_pct": team_cold_outreach_attainment_pct,
+            "team_dial_to_conversation_rate": round(team_dial_to_conversation_rate * 100, 1),
+            "conversation_to_cold_outreach_rate": round(conversation_to_cold_outreach_rate * 100, 1),
+            "estimated_conversations_at_target": estimated_conversations_at_target,
+            "estimated_cold_outreach_at_target": estimated_cold_outreach_at_target,
             "total_projected_deals": total_projected_deals,
             "total_additional_deals": total_additional_deals,
         },
