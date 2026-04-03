@@ -78,6 +78,24 @@
     <p class="text-xs text-gray-400 mt-0.5">Shows cumulative month-to-date progress toward dialing and outbound deal goals over time.</p>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-3 mb-4 text-xs text-gray-500">
+      <div class="inline-flex items-center gap-2">
+        <span class="w-6 border-t-2 border-dashed border-slate-700"></span>
+        <span>Dial Goal Pace</span>
+      </div>
+      <div class="inline-flex items-center gap-2">
+        <span class="w-6 border-t-[2.5px] border-sky-500"></span>
+        <span>Dial Actual MTD</span>
+      </div>
+      <div class="inline-flex items-center gap-2">
+        <span class="inline-block h-3 w-3 rounded-full border-2 border-emerald-500 bg-white"></span>
+        <span>Outbound Deals Goal Pace</span>
+      </div>
+      <div class="inline-flex items-center gap-2">
+        <span class="inline-block h-3 w-3 rounded-full bg-violet-500"></span>
+        <span>Outbound Deals Actual MTD</span>
+      </div>
+    </div>
     <div class="mt-1" style="position:relative;height:320px;">
       <canvas id="progressChart"></canvas>
     </div>
@@ -104,8 +122,10 @@
           borderColor: 'rgba(15, 23, 42, 0.7)',
           borderDash: [6, 6],
           borderWidth: 2,
+          fill: false,
           pointRadius: 0,
           pointHoverRadius: 0,
+          pointHitRadius: 8,
           tension: 0
         },
         {
@@ -114,35 +134,39 @@
           borderColor: 'rgba(14, 165, 233, 1)',
           backgroundColor: 'rgba(14, 165, 233, 0.08)',
           borderWidth: 2.5,
+          fill: false,
           pointRadius: 0,
-          pointHoverRadius: 4,
+          pointHoverRadius: 0,
+          pointHitRadius: 8,
           tension: 0.25
         },
         {
           label: 'Outbound Deals Goal Pace',
           data: coldGoalPct,
-          borderColor: 'rgba(16, 185, 129, 0.9)',
+          borderColor: 'rgba(16, 185, 129, 0.35)',
           backgroundColor: 'rgba(255,255,255,1)',
-          borderWidth: 1.5,
-          pointRadius: 4,
-          pointHoverRadius: 5,
+          borderWidth: 1,
+          pointRadius: 5,
+          pointHoverRadius: 6,
+          pointHitRadius: 10,
           pointBorderWidth: 2,
           pointBorderColor: 'rgba(16, 185, 129, 0.9)',
           pointBackgroundColor: 'rgba(255,255,255,1)',
           showLine: true,
-          tension: 0.15
+          tension: 0.1
         },
         {
           label: 'Outbound Deals Actual MTD',
           data: coldActualPct,
-          borderColor: 'rgba(139, 92, 246, 1)',
+          borderColor: 'rgba(139, 92, 246, 0.35)',
           backgroundColor: 'rgba(139, 92, 246, 1)',
-          borderWidth: 1.5,
-          pointRadius: 4,
-          pointHoverRadius: 5,
+          borderWidth: 1,
+          pointRadius: 5,
+          pointHoverRadius: 6,
+          pointHitRadius: 10,
           pointBorderWidth: 0,
           showLine: true,
-          tension: 0.15
+          tension: 0.1
         }
       ]
     },
@@ -152,8 +176,7 @@
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
-          position: 'bottom',
-          labels: { boxWidth: 12, padding: 16, font: { size: 11 } }
+          display: false
         },
         tooltip: {
           callbacks: {
@@ -166,9 +189,9 @@
                 return ' Dial Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_actual_raw.toLocaleString();
               }
               if (ctx.dataset.label === 'Outbound Deals Goal Pace') {
-                return ' Deals Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_goal_raw;
+                return ' Outbound Deals Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_goal_raw;
               }
-              return ' Deals Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_actual_raw.toLocaleString();
+              return ' Outbound Deals Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_actual_raw.toLocaleString();
             }
           }
         }
