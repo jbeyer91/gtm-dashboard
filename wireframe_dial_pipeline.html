@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe — Dial → Pipeline</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .loader-spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="p-6 max-w-5xl mx-auto">
+
+  <!-- Sidebar mock -->
+  <p class="text-xs text-gray-400 uppercase tracking-widest mb-4 font-semibold">
+    📐 Wireframe — mock data, real layout
+  </p>
+
+  <!-- Header -->
+  <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #0e7490 100%);">
+    <h1 class="text-2xl font-bold text-white tracking-tight">Dial → Pipeline</h1>
+    <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">How dial activity drives outbound pipeline · This Month</p>
+  </div>
+
+  <!-- Period filter -->
+  <div class="flex items-center gap-2 mb-6">
+    <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Period</label>
+    <select class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700">
+      <option selected>This Month</option>
+      <option>Last Month</option>
+    </select>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Team Dial Attainment</p>
+      <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">61.4%</p>
+      <p class="text-xs text-gray-400 mt-2 font-medium">vs. 40/day goal · 22 business days</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Team Avg Dials / Day</p>
+      <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">24.6</p>
+      <p class="text-xs text-gray-400 mt-2 font-medium">Goal: 40</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Pipeline Opportunity</p>
+      <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">$156,000</p>
+      <p class="text-xs text-gray-400 mt-2 font-medium">additional pipeline at 40/day pace</p>
+    </div>
+
+  </div>
+
+  <!-- Chart 1: Correlation — dials (bars) + deals (line) -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+    <div class="flex items-start justify-between mb-1">
+      <div>
+        <h2 class="text-base font-semibold text-gray-800">Dials &amp; Deals by Rep</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Sorted by dial volume · reps who dial more create more outbound pipeline</p>
+      </div>
+    </div>
+    <div class="mt-4" style="position:relative;height:260px;">
+      <canvas id="corrChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 2: Opportunity — actual vs projected deals -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+    <div>
+      <h2 class="text-base font-semibold text-gray-800">Deals Created vs. Projected at 40 Dials/Day</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Projected uses each rep's own dial-to-deal conversion rate · same rep order as above</p>
+    </div>
+    <div class="mt-4" style="position:relative;height:240px;">
+      <canvas id="oppChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+        <tr>
+          <th class="px-4 py-3 text-left font-semibold">Rep</th>
+          <th class="px-4 py-3 text-right font-semibold">Dials</th>
+          <th class="px-4 py-3 text-right font-semibold">Avg / Day</th>
+          <th class="px-4 py-3 text-right font-semibold">Dial → Deal %</th>
+          <th class="px-4 py-3 text-right font-semibold">Deals (Actual)</th>
+          <th class="px-4 py-3 text-right font-semibold">Projected @ 40/Day</th>
+          <th class="px-4 py-3 text-right font-semibold">Pipeline Opportunity</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <!-- Row 1: highest dialer, on pace -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Martinez</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            924 <span class="text-xs ml-1 text-green-600">(105%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-green-600">42.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">1.3%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">12</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">11.4</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-green-600">On pace</td>
+        </tr>
+        <!-- Row 2 -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Chen</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            748 <span class="text-xs ml-1 text-yellow-600">(85%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-yellow-600">34.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">1.1%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">8</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">9.7</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-violet-600">+$20,400</td>
+        </tr>
+        <!-- Row 3 -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Williams</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            616 <span class="text-xs ml-1 text-yellow-600">(70%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-yellow-600">28.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">0.8%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">5</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">7.0</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-violet-600">+$24,000</td>
+        </tr>
+        <!-- Row 4 -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Thompson</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            484 <span class="text-xs ml-1 text-red-400">(55%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">22.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">0.6%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">3</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">5.3</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-violet-600">+$27,600</td>
+        </tr>
+        <!-- Row 5 -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Davis</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            352 <span class="text-xs ml-1 text-red-400">(40%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">16.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">0.6%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">2</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">5.3</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-violet-600">+$39,600</td>
+        </tr>
+        <!-- Row 6 -->
+        <tr class="hover:bg-blue-50/60">
+          <td class="px-4 py-3 font-medium text-gray-800">Kim</td>
+          <td class="px-4 py-3 text-right tabular-nums">
+            220 <span class="text-xs ml-1 text-red-400">(25%)</span>
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">10.0 <span class="text-gray-400 text-xs font-normal">/ 40</span></td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-600">0.5%</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">1</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">4.4</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold text-violet-600">+$44,400</td>
+        </tr>
+      </tbody>
+      <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+        <tr>
+          <td class="px-4 py-3 text-xs uppercase tracking-wider text-gray-500">Team</td>
+          <td class="px-4 py-3 text-right tabular-nums">3,344 <span class="text-gray-400 font-normal text-xs ml-1">(64%)</span></td>
+          <td class="px-4 py-3 text-right tabular-nums">25.3</td>
+          <td class="px-4 py-3 text-right tabular-nums">0.9%</td>
+          <td class="px-4 py-3 text-right tabular-nums">31</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">—</td>
+          <td class="px-4 py-3 text-right tabular-nums text-violet-600">+$156,000</td>
+        </tr>
+      </tfoot>
+    </table>
+    <p class="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">
+      Pipeline Opportunity = additional deals at 40/day × $12,000 ACV ·
+      Projection uses each rep's own dial-to-deal conversion rate this period.
+    </p>
+  </div>
+
+<script>
+// ── Chart 1: Correlation (dual-axis bar + line) ───────────────────────────
+(function () {
+  var labels = ['Martinez', 'Chen', 'Williams', 'Thompson', 'Davis', 'Kim'];
+  var dials  = [924, 748, 616, 484, 352, 220];
+  var deals  = [12, 8, 5, 3, 2, 1];
+  new Chart(document.getElementById('corrChart'), {
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Dials',
+          data: dials,
+          yAxisID: 'y',
+          backgroundColor: 'rgba(139, 92, 246, 0.55)',
+          borderColor:     'rgba(139, 92, 246, 0.85)',
+          borderWidth: 1,
+          order: 1,
+        },
+        {
+          type: 'line',
+          label: 'Outbound Deals Created',
+          data: deals,
+          yAxisID: 'y1',
+          borderColor:          'rgba(245, 158, 11, 1)',
+          backgroundColor:      'transparent',
+          pointBackgroundColor: 'rgba(245, 158, 11, 1)',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2,
+          tension: 0.3,
+          order: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.dataset.label === 'Dials')
+                return ' Dials: ' + ctx.parsed.y.toLocaleString();
+              return ' Deals Created: ' + ctx.parsed.y;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          ticks: { font: { size: 12 }, color: '#374151' },
+        },
+        y: {
+          position: 'left',
+          beginAtZero: true,
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { font: { size: 11 }, color: '#9ca3af', precision: 0 },
+          title: { display: true, text: 'Dials', font: { size: 10 }, color: '#d1d5db' },
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: { font: { size: 11 }, color: '#9ca3af', precision: 0 },
+          title: { display: true, text: 'Deals Created', font: { size: 10 }, color: '#d1d5db' },
+        },
+      },
+    },
+  });
+}());
+
+// ── Chart 2: Opportunity (grouped bars) ──────────────────────────────────
+(function () {
+  var labels    = ['Martinez', 'Chen', 'Williams', 'Thompson', 'Davis', 'Kim'];
+  var actual    = [12, 8, 5, 3, 2, 1];
+  var projected = [11.4, 9.7, 7.0, 5.3, 5.3, 4.4];
+  new Chart(document.getElementById('oppChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Actual Deals',
+          data: actual,
+          backgroundColor: 'rgba(139, 92, 246, 0.7)',
+          borderRadius: 3,
+        },
+        {
+          label: 'Projected @ 40/day',
+          data: projected,
+          backgroundColor: 'rgba(139, 92, 246, 0.18)',
+          borderColor:     'rgba(139, 92, 246, 0.5)',
+          borderWidth: 1.5,
+          borderRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var suffix = ctx.datasetIndex === 1 ? ' (at 40 dials/day)' : '';
+              return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' deals' + suffix;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { font: { size: 12 }, color: '#374151' } },
+        y: {
+          beginAtZero: true,
+          ticks: { font: { size: 11 }, color: '#9ca3af', precision: 0 },
+          title: { display: true, text: 'Deals Created', font: { size: 10 }, color: '#d1d5db' },
+        },
+      },
+    },
+  });
+}());
+</script>
+</body>
+</html>

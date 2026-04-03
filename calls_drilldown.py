@@ -58,3 +58,38 @@ def calls_drilldown():
         nav=NAV,
         active="calls_drilldown.calls_drilldown",
     )
+
+
+@bp.route("/calls/dial-pipeline")
+@_login_required
+def dial_pipeline():
+    period = request.args.get("period", "this_month")
+    if period not in {p for p, _ in CALL_STATS_PERIODS}:
+        period = "this_month"
+
+    if not is_cached(analytics.compute_dial_pipeline, period):
+        from app import NAV
+        return render_template(
+            "dial_pipeline.html",
+            loading=True, period=period,
+            periods=CALL_STATS_PERIODS,
+            nav=NAV, active="calls_drilldown.dial_pipeline",
+        ), 202
+
+    try:
+        data = analytics.compute_dial_pipeline(period)
+    except Exception as e:
+        log.exception("dial_pipeline error")
+        from app import NAV
+        return render_template(
+            "error.html", message=str(e),
+            nav=NAV, active="calls_drilldown.dial_pipeline",
+        )
+
+    from app import NAV
+    return render_template(
+        "dial_pipeline.html",
+        data=data, period=period,
+        periods=CALL_STATS_PERIODS,
+        nav=NAV, active="calls_drilldown.dial_pipeline",
+    )

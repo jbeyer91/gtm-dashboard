@@ -554,6 +554,101 @@ def compute_connect_diagnostics(period: str) -> dict:
     }
 
 
+@ttl_cache
+def compute_dial_pipeline(period: str) -> dict:
+    """Dial-to-pipeline correlation and opportunity analysis.
+
+    Enriches compute_call_stats rows with:
+      - attainment_pct     — actual dials / (40 × bdays) × 100
+      - projected_deals    — deals expected at 40/day using rep's own conversion rate
+      - deal_opportunity   — projected_deals − actual_deals (upside)
+      - pipeline_opportunity — max(deal_opportunity, 0) × ACV
+
+    Returns chart-ready data for two Chart.js charts:
+      corr_*  — dual-axis bar+line correlation chart (dials bars, deals line)
+      opp_*   — grouped bar opportunity chart (actual vs projected deals)
+    """
+    DIALS_PER_DAY_GOAL = 40
+
+    start, end = get_date_range(period)
+    period_bdays = max(sum(
+        1 for i in range((end - start).days + 1)
+        if (start + timedelta(days=i)).weekday() < 5
+    ), 1)
+    goal_dials = period_bdays * DIALS_PER_DAY_GOAL
+
+    base = compute_call_stats(period)
+
+    rows = []
+    for r in base["rows"]:
+        dials        = r["dials"]
+        pct_deals    = r["pct_deals"]   # float like 0.7 = 0.7%; divide by 100 to get rate
+        actual_deals = r["outbound_deals_created"]
+
+        attainment = round(dials / goal_dials * 100, 1) if goal_dials else 0.0
+
+        if dials > 0 and pct_deals > 0:
+            projected_deals      = round(goal_dials * (pct_deals / 100), 1)
+            deal_opportunity     = round(projected_deals - actual_deals, 1)
+            pipeline_opportunity = round(max(deal_opportunity, 0) * ACV)
+        else:
+            projected_deals      = None
+            deal_opportunity     = None
+            pipeline_opportunity = None
+
+        rows.append({
+            **r,
+            "goal_dials":            goal_dials,
+            "attainment_pct":        attainment,
+            "projected_deals":       projected_deals,
+            "deal_opportunity":      deal_opportunity,
+            "pipeline_opportunity":  pipeline_opportunity,
+        })
+
+    # Sort by dials descending — correlation chart reads best high→low
+    rows.sort(key=lambda r: r["dials"], reverse=True)
+
+    # Team summary
+    n           = len(rows)
+    total_dials = sum(r["dials"] for r in rows)
+    total_goal  = goal_dials * n
+    team_attainment = round(total_dials / total_goal * 100, 1) if total_goal else 0.0
+    total_opportunity_usd = sum(
+        r["pipeline_opportunity"] for r in rows
+        if r["pipeline_opportunity"] is not None and r["pipeline_opportunity"] > 0
+    )
+
+    # Chart 1 — correlation: bars = dials, line = deals (dual-axis, same pattern as hourly chart)
+    corr_labels = [r["ae"] for r in rows]
+    corr_dials  = [r["dials"] for r in rows]
+    corr_deals  = [r["outbound_deals_created"] for r in rows]
+
+    # Chart 2 — opportunity: grouped bars, actual vs projected deals
+    opp_actual    = [r["outbound_deals_created"] for r in rows]
+    opp_projected = [
+        r["projected_deals"] if r["projected_deals"] is not None else 0
+        for r in rows
+    ]
+
+    return {
+        "rows":                  rows,
+        "totals":                base["totals"],
+        "team_attainment":       team_attainment,
+        "total_opportunity_usd": total_opportunity_usd,
+        "goal_dials":            goal_dials,
+        "period_bdays":          period_bdays,
+        "corr_labels":           corr_labels,
+        "corr_dials":            corr_dials,
+        "corr_deals":            corr_deals,
+        "opp_labels":            corr_labels,
+        "opp_actual":            opp_actual,
+        "opp_projected":         opp_projected,
+        "period":                period,
+        "start":                 base["start"],
+        "end":                   base["end"],
+    }
+
+
 
 @ttl_cache
 def compute_pipeline_generated(period: str) -> dict:
