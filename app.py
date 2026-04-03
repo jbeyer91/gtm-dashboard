@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, abort, Response, g
+    session, jsonify, abort, Response, g, send_file
 )
 from authlib.integrations.flask_client import OAuth
 import csv, io
@@ -190,6 +190,11 @@ def _is_admin_user(owner_id: str, email: str = "") -> bool:
         return True
     team_oids = get_team_owner_ids()
     return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
+
+
+@app.route("/wireframe")
+def wireframe():
+    return send_file("wireframe_dial_pipeline.html")
 
 
 @app.route("/login")
