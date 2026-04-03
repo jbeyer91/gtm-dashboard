@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, abort, Response, g, send_file
+    session, jsonify, abort, Response, g
 )
 from authlib.integrations.flask_client import OAuth
 import csv, io
@@ -132,9 +132,9 @@ NAV = [
     ]},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
     {"type": "group", "label": "Calls", "children": [
-        {"endpoint": "call_stats",                      "label": "Summary"},
+        {"endpoint": "call_stats",                    "label": "Summary"},
         {"endpoint": "calls_drilldown.calls_drilldown", "label": "Connect Analysis"},
-        {"endpoint": "calls_drilldown.dial_pipeline",   "label": "Dial → Pipeline"},
+        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dial Pipeline"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
@@ -192,11 +192,6 @@ def _is_admin_user(owner_id: str, email: str = "") -> bool:
     return owner_id in OWNER_EXCLUDE or bool(team_oids and owner_id not in team_oids)
 
 
-@app.route("/wireframe")
-def wireframe():
-    return send_file("wireframe_dial_pipeline.html")
-
-
 @app.route("/login")
 def login():
     redirect_uri = url_for("auth_callback", _external=True)
@@ -209,12 +204,7 @@ def auth_callback():
     user_info = token.get("userinfo") or oauth.google.userinfo()
     email = (user_info.get("email") or "").lower()
 
-    # Emails explicitly added as admins (env var or via admin UI) bypass the
-    # domain restriction so non-belfry users can be granted admin access.
-    persisted_admin_emails = frozenset(monthly_store.get_admin_settings().get("admin_emails", []))
-    explicitly_allowed = ADMIN_EMAIL_ALLOWLIST | persisted_admin_emails
-
-    if not email.endswith(f"@{ALLOWED_DOMAIN}") and email not in explicitly_allowed:
+    if not email.endswith(f"@{ALLOWED_DOMAIN}"):
         return render_template("login_error.html",
                                message="Sign-in requires a @belfrysoftware.com account.")
 
@@ -223,15 +213,8 @@ def auth_callback():
     owner = next((o for o in owners.values() if (o.get("email") or "").lower() == email), None)
 
     if owner is None:
-        if email not in explicitly_allowed:
-            return render_template("login_error.html",
-                                   message="Your account isn't linked to a HubSpot owner. Contact your admin.")
-        # Explicitly allowed non-HubSpot user — grant admin-only session.
-        session["authenticated"] = True
-        session["email"] = email
-        session["owner_id"] = ""
-        session["is_admin"] = True
-        return redirect(request.args.get("next") or url_for("home"))
+        return render_template("login_error.html",
+                               message="Your account isn't linked to a HubSpot owner. Contact your admin.")
 
     session["authenticated"] = True
     session["email"] = email
@@ -685,14 +668,15 @@ def scorecard_history():
         import summary_engine
 
         team_history_entries = []
-        team_history = monthly_store.get_team_history()
-        if not team_history:
-            generated = summary_engine.get_or_generate_team_summary()
-            team_history = [generated] if generated else []
-        team_history_entries = [
-            {"record": record, "meta": _summary_meta(record)}
-            for record in team_history
-        ]
+        if is_admin:
+            team_history = monthly_store.get_team_history()
+            if not team_history:
+                generated = summary_engine.get_or_generate_team_summary()
+                team_history = [generated] if generated else []
+            team_history_entries = [
+                {"record": record, "meta": _summary_meta(record)}
+                for record in team_history
+            ]
         team_locked_months_by_key = {
             entry["meta"]["key"]: entry["meta"]
             for entry in team_history_entries
@@ -738,11 +722,14 @@ def scorecard_history():
             key=lambda meta: meta["key"],
             reverse=True,
         )
-        locked_months = sorted(
-            {**rep_locked_months_by_key, **team_locked_months_by_key}.values(),
-            key=lambda meta: meta["key"],
-            reverse=True,
-        )
+        if is_admin:
+            locked_months = sorted(
+                {**rep_locked_months_by_key, **team_locked_months_by_key}.values(),
+                key=lambda meta: meta["key"],
+                reverse=True,
+            )
+        else:
+            locked_months = rep_locked_months
         if not locked_months:
             selected_locked_key = ""
         else:
@@ -819,12 +806,9 @@ def pipeline_generated():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="pipeline_generated")
-    pg_goal = data["totals"].get("pg_goal", 0) or 0
-    pg_goal_label = f"Goal: ${pg_goal:,.0f}" if pg_goal else ""
     return render_template("pipeline_generated.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            deltas=deltas, prior_label=prior_label,
-                           pg_goal_label=pg_goal_label,
                            nav=NAV, active="pipeline_generated")
 
 
@@ -907,13 +891,10 @@ def deals_won():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="deals_won")
-    quota = data["totals"].get("quota_amt") or 0
-    quota_label = f"Goal: ${quota:,.0f}" if quota else ""
     return render_template("deals_won.html", data=data, periods=DEAL_PERIODS,
                            period=period, team=team, teams=TEAMS,
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
-                           quota_label=quota_label,
                            nav=NAV, active="deals_won")
 
 
@@ -1719,11 +1700,7 @@ def monthly_summary_backfill():
     if month < 1 or month > 12:
         return jsonify({"error": "month must be between 1 and 12"}), 400
 
-    try:
-        result = summary_engine.generate_all_for_month(year, month)
-    except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+    result = summary_engine.generate_all_for_month(year, month)
     n_saved = sum(1 for v in result["reps"].values() if v) + (1 if result["team"] else 0)
     return jsonify({"year": year, "month": month, "records_saved": n_saved})
 
