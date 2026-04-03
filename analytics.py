@@ -558,8 +558,10 @@ def compute_connect_diagnostics(period: str) -> dict:
 def compute_dial_pipeline(period: str) -> dict:
     """Show how dialing volume relates to outbound deals created."""
     data = compute_call_stats(period)
-    start = datetime.fromisoformat(data["start"]).date()
-    end = datetime.fromisoformat(data["end"]).date()
+    start_dt = datetime.fromisoformat(data["start"])
+    end_dt = datetime.fromisoformat(data["end"])
+    start = start_dt.date()
+    end = end_dt.date()
     business_days = max(sum(
         1 for i in range((end - start).days + 1)
         if (start + timedelta(days=i)).weekday() < 5
@@ -660,9 +662,9 @@ def compute_dial_pipeline(period: str) -> dict:
     ) if team_cold_outreach_goal_for_period else 0.0
 
     owners = apply_manual_owner_overrides(get_owners())
-    scope_end = end
-    calls = get_calls(start, end)
-    deals_created = get_deals(start, end, "createdate")
+    scope_end = end_dt
+    calls = get_calls(start_dt, end_dt)
+    deals_created = get_deals(start_dt, end_dt, "createdate")
     contact_windows = get_deal_contact_windows()
     call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
     daily_dials = defaultdict(int)
