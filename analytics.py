@@ -571,41 +571,49 @@ def compute_dial_pipeline(period: str) -> dict:
     for row in data["rows"]:
         actual_deals = row["outbound_deals_created"]
         dial_to_deal_rate = (row["pct_deals"] or 0) / 100.0
-        projected_deals = round(target_dials_per_rep * dial_to_deal_rate, 1) if dial_to_deal_rate > 0 else None
-        additional_deals = round(max((projected_deals or 0) - actual_deals, 0), 1) if projected_deals is not None else None
         attainment_pct = round((row["avg_dials_per_day"] / target_avg_dials_per_day) * 100, 1)
+        dial_gap_to_target = round(target_avg_dials_per_day - row["avg_dials_per_day"], 1)
+        meets_projection_threshold = row["dials"] >= 300 and actual_deals >= 2
+        projected_deals = (
+            round(target_dials_per_rep * dial_to_deal_rate, 1)
+            if meets_projection_threshold and dial_to_deal_rate > 0
+            else None
+        )
+        additional_deals = round(max((projected_deals or 0) - actual_deals, 0), 1) if projected_deals is not None else None
+        if row["dials"] >= 600 and actual_deals >= 4:
+            projection_confidence = "High confidence"
+        elif meets_projection_threshold:
+            projection_confidence = "Medium confidence"
+        else:
+            projection_confidence = "Insufficient sample"
         rows.append({
             **row,
             "attainment_pct": attainment_pct,
+            "dial_gap_to_target": dial_gap_to_target,
+            "meets_projection_threshold": meets_projection_threshold,
+            "projection_confidence": projection_confidence,
             "projected_deals_at_goal": projected_deals,
             "additional_deals_at_goal": additional_deals,
         })
 
-    scatter_points = [
-        {
-            "x": row["avg_dials_per_day"],
-            "y": row["outbound_deals_created"],
-            "rep": row["ae"],
-            "dials": row["dials"],
-            "dial_to_deal_pct": row["pct_deals"],
-            "projected_deals_at_goal": row["projected_deals_at_goal"],
-        }
-        for row in rows
-    ]
+    rows.sort(key=lambda row: (-row["dial_gap_to_target"], row["ae"]))
 
     projected_max = max(
         [row["projected_deals_at_goal"] or 0 for row in rows] +
         [row["outbound_deals_created"] for row in rows] +
         [1]
     )
-    scatter_y_max = max(int(projected_max) + 1, 2)
-    scatter_x_max = max(
+    activity_chart_max = max(
         [target_avg_dials_per_day] + [int(row["avg_dials_per_day"]) + 5 for row in rows]
     )
 
     totals = data["totals"]
     team_avg_dials_per_day = totals["avg_dials_per_day"]
     team_attainment_pct = round((team_avg_dials_per_day / target_avg_dials_per_day) * 100, 1) if rows else 0.0
+    active_rep_count = len(rows)
+    team_target_dials_per_day = target_avg_dials_per_day * active_rep_count
+    team_target_dials_for_period = target_dials_per_rep * active_rep_count
+    team_actual_dials_per_day_total = round((totals["dials"] / business_days), 1) if rows else 0.0
     total_projected_deals = round(sum(row["projected_deals_at_goal"] or 0 for row in rows), 1)
     total_additional_deals = round(sum(row["additional_deals_at_goal"] or 0 for row in rows), 1)
 
@@ -617,13 +625,16 @@ def compute_dial_pipeline(period: str) -> dict:
         "business_days": business_days,
         "target_avg_dials_per_day": target_avg_dials_per_day,
         "target_dials_per_rep": target_dials_per_rep,
-        "scatter_points": scatter_points,
-        "scatter_x_max": scatter_x_max,
-        "scatter_y_max": scatter_y_max,
+        "activity_chart_max": activity_chart_max,
+        "projection_chart_max": max(int(projected_max) + 1, 2),
         "totals": {
             **totals,
             "team_avg_dials_per_day": team_avg_dials_per_day,
             "team_attainment_pct": team_attainment_pct,
+            "active_rep_count": active_rep_count,
+            "team_target_dials_per_day": team_target_dials_per_day,
+            "team_target_dials_for_period": team_target_dials_for_period,
+            "team_actual_dials_per_day_total": team_actual_dials_per_day_total,
             "total_projected_deals": total_projected_deals,
             "total_additional_deals": total_additional_deals,
         },
