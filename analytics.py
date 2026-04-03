@@ -622,15 +622,6 @@ def compute_dial_pipeline(period: str) -> dict:
 
     rows.sort(key=lambda row: (-row["dial_gap_to_target"], row["ae"]))
 
-    projected_max = max(
-        [row["projected_deals_at_goal"] or 0 for row in rows] +
-        [row["outbound_deals_created"] for row in rows] +
-        [1]
-    )
-    activity_chart_max = max(
-        [target_avg_dials_per_day] + [int(row["avg_dials_per_day"]) + 5 for row in rows]
-    )
-
     totals = data["totals"]
     team_avg_dials_per_day = totals["avg_dials_per_day"]
     team_attainment_pct = round((team_avg_dials_per_day / target_avg_dials_per_day) * 100, 1) if rows else 0.0
@@ -660,6 +651,17 @@ def compute_dial_pipeline(period: str) -> dict:
     team_cold_outreach_attainment_pct = round(
         (totals["outbound_deals_created"] / team_cold_outreach_goal_for_period) * 100, 1
     ) if team_cold_outreach_goal_for_period else 0.0
+    today = datetime.now(timezone.utc).date()
+    pace_end = min(end, today)
+    elapsed_business_days = _business_days_in_range(start, pace_end) if pace_end >= start else 0
+    expected_dials_to_date = team_target_dials_per_day * elapsed_business_days
+    expected_conversations_to_date = round(expected_dials_to_date * team_dial_to_conversation_rate)
+    expected_cold_outreach_to_date = round(
+        expected_conversations_to_date * conversation_to_cold_outreach_rate
+    )
+    dials_gap_to_expected = totals["dials"] - expected_dials_to_date
+    conversations_gap_to_expected = totals["conversations"] - expected_conversations_to_date
+    cold_outreach_gap_to_expected = totals["outbound_deals_created"] - expected_cold_outreach_to_date
 
     owners = apply_manual_owner_overrides(get_owners())
     scope_end = end_dt
@@ -728,7 +730,6 @@ def compute_dial_pipeline(period: str) -> dict:
     trend_points = []
     cumulative_dials = 0
     cumulative_target_dials = 0
-    cumulative_conversations = 0
     cumulative_cold_outreach = 0
     cumulative_goal_cold_outreach = 0.0
     cold_outreach_goal_per_business_day = (
@@ -740,31 +741,26 @@ def compute_dial_pipeline(period: str) -> dict:
         label = f"{current_day.month}/{current_day.day}"
         is_business_day = current_day.weekday() < 5
         cumulative_dials += daily_dials.get(day_key, 0)
-        cumulative_conversations += daily_conversations.get(day_key, 0)
         cumulative_cold_outreach += daily_cold_outreach.get(day_key, 0)
         if is_business_day:
             cumulative_target_dials += team_target_dials_per_day
             cumulative_goal_cold_outreach += cold_outreach_goal_per_business_day
+        dial_goal_pct = round((cumulative_target_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
+        dial_actual_pct = round((cumulative_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
+        cold_outreach_goal_pct = round((cumulative_goal_cold_outreach / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else 0.0
+        cold_outreach_actual_pct = round((cumulative_cold_outreach / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else 0.0
         trend_points.append({
             "label": label,
-            "actual_dials": cumulative_dials,
-            "target_dials": cumulative_target_dials,
-            "actual_conversations": cumulative_conversations,
-            "actual_cold_outreach": cumulative_cold_outreach,
-            "goal_cold_outreach": round(cumulative_goal_cold_outreach, 1),
+            "dial_goal_raw": cumulative_target_dials,
+            "dial_actual_raw": cumulative_dials,
+            "cold_outreach_goal_raw": round(cumulative_goal_cold_outreach, 1),
+            "cold_outreach_actual_raw": cumulative_cold_outreach,
+            "dial_goal_pct": dial_goal_pct,
+            "dial_actual_pct": dial_actual_pct,
+            "cold_outreach_goal_pct": cold_outreach_goal_pct,
+            "cold_outreach_actual_pct": cold_outreach_actual_pct,
         })
         current_day += timedelta(days=1)
-
-    trend_dials_max = max(
-        [point["actual_dials"] for point in trend_points] +
-        [point["target_dials"] for point in trend_points] +
-        [team_target_dials_for_period, totals["dials"], 1]
-    )
-    trend_cold_outreach_max = max(
-        [point["actual_cold_outreach"] for point in trend_points] +
-        [point["goal_cold_outreach"] for point in trend_points] +
-        [team_cold_outreach_goal_for_period, totals["outbound_deals_created"], estimated_cold_outreach_at_target, 1]
-    )
 
     return {
         "rows": rows,
@@ -774,11 +770,7 @@ def compute_dial_pipeline(period: str) -> dict:
         "business_days": business_days,
         "target_avg_dials_per_day": target_avg_dials_per_day,
         "target_dials_per_rep": target_dials_per_rep,
-        "activity_chart_max": activity_chart_max,
-        "projection_chart_max": max(int(projected_max) + 1, 2),
         "trend_points": trend_points,
-        "trend_dials_max": max(int(trend_dials_max) + 5, 5),
-        "trend_cold_outreach_max": max(int(trend_cold_outreach_max) + 1, 2),
         "totals": {
             **totals,
             "team_avg_dials_per_day": team_avg_dials_per_day,
@@ -794,6 +786,13 @@ def compute_dial_pipeline(period: str) -> dict:
             "team_cold_outreach_attainment_pct": team_cold_outreach_attainment_pct,
             "team_dial_to_conversation_rate": round(team_dial_to_conversation_rate * 100, 1),
             "conversation_to_cold_outreach_rate": round(conversation_to_cold_outreach_rate * 100, 1),
+            "elapsed_business_days": elapsed_business_days,
+            "expected_dials_to_date": expected_dials_to_date,
+            "expected_conversations_to_date": expected_conversations_to_date,
+            "expected_cold_outreach_to_date": expected_cold_outreach_to_date,
+            "dials_gap_to_expected": dials_gap_to_expected,
+            "conversations_gap_to_expected": conversations_gap_to_expected,
+            "cold_outreach_gap_to_expected": cold_outreach_gap_to_expected,
             "estimated_conversations_at_target": estimated_conversations_at_target,
             "estimated_cold_outreach_at_target": estimated_cold_outreach_at_target,
             "total_projected_deals": total_projected_deals,

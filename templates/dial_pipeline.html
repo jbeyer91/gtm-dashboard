@@ -6,6 +6,27 @@
 {% set ns_pl = namespace(label=period) %}
 {% for val, lbl in periods %}{% if val == period %}{% set ns_pl.label = lbl %}{% endif %}{% endfor %}
 
+{% macro gap_text(value, suffix='') -%}
+  {%- if value > 0 -%}+{{ "{:,}".format(value|int) }}{{ suffix }}
+  {%- elif value < 0 -%}{{ "{:,}".format(value|int) }}{{ suffix }}
+  {%- else -%}On pace
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro flow_card(label, actual, expected, gap, actual_note='') -%}
+<div class="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+  <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ label }}</p>
+  <p class="mt-3 text-3xl font-bold tracking-tight text-slate-900 tabular-nums">{{ "{:,}".format(actual|int) }}</p>
+  <p class="mt-1 text-sm text-slate-500">Expected by now: {{ "{:,}".format(expected|int) }}</p>
+  <p class="mt-2 text-sm font-semibold {% if gap < 0 %}text-red-500{% elif gap > 0 %}text-emerald-600{% else %}text-slate-500{% endif %}">
+    Gap: {{ gap_text(gap) }}
+  </p>
+  {% if actual_note %}
+  <p class="mt-1 text-xs text-slate-400">{{ actual_note }}</p>
+  {% endif %}
+</div>
+{%- endmacro %}
+
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #2F7C9D 100%);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Dial Pipeline</h1>
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.7);">Team dialing pace, conversations, and Cold Outreach Deals Created · {{ ns_pl.label }}</p>
@@ -28,63 +49,10 @@
 
 <div class="mb-8">
   <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Scorecard</p>
-  <div class="grid grid-cols-2 xl:grid-cols-6 gap-4 mb-5">
-    {{ stat_card("Team Avg Dials / Day per Rep", t.team_avg_dials_per_day, sub=t.team_actual_dials_per_day_total ~ " team dials/day across " ~ t.active_rep_count ~ " reps") }}
-    {{ stat_card("Rep Dial Target / Day", data.target_avg_dials_per_day, sub=t.team_target_dials_per_day ~ " team target dials/day") }}
-    {{ stat_card("Team Conversations", "{:,}".format(t.conversations), sub=fmt_pct(t.team_dial_to_conversation_rate) ~ " dial-to-conversation rate") }}
-    {{ stat_card("Team Cold Outreach Deals Created", t.outbound_deals_created, sub=fmt_pct(t.team_cold_outreach_attainment_pct) ~ " of period goal") }}
-    {{ stat_card("Estimated Incremental Cold Outreach Deals", t.total_additional_deals, sub="Directional estimate at target pace") }}
-    {{ stat_card("Dial-to-Conversation Rate", fmt_pct(t.team_dial_to_conversation_rate), sub=fmt_pct(t.conversation_to_cold_outreach_rate) ~ " conversation-to-Cold Outreach rate") }}
-  </div>
-  <div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-    <p class="text-sm text-slate-600">
-      This view shows how team dialing pace compares to target, how that affects conversations, and the likely impact on Cold Outreach Deals Created if the team reaches target dialing pace while maintaining observed conversion patterns.
-    </p>
-    <p class="text-xs text-slate-500 mt-2">
-      Targets are based on {{ data.target_avg_dials_per_day }} dials per day per rep and 13 Cold Outreach Deals Created per month per rep.
-    </p>
-  </div>
-</div>
-
-<div class="mb-8">
-  <div class="mb-3">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Team Dialing Pace vs Target</p>
-    <h2 class="text-base font-semibold text-gray-800 mt-1">Team Dialing Pace vs Target</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Shows whether the team is generating enough dialing volume to support conversation volume and Cold Outreach creation goals.</p>
-  </div>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5">
-      <div class="flex items-end justify-between gap-4 mb-3">
-        <div>
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Selected Period Dials</p>
-          <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">{{ "{:,}".format(t.dials) }}</p>
-        </div>
-        <div class="text-right">
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Target</p>
-          <p class="text-lg font-semibold text-gray-700 tabular-nums">{{ "{:,}".format(t.team_target_dials_for_period) }}</p>
-        </div>
-      </div>
-      <div class="h-3 rounded-full bg-slate-100 overflow-hidden">
-        <div class="h-full rounded-full {% if t.team_dials_attainment_pct >= 100 %}bg-emerald-500{% elif t.team_dials_attainment_pct >= 75 %}bg-amber-400{% else %}bg-sky-500{% endif %}" style="width: {{ [t.team_dials_attainment_pct, 100]|min }}%;"></div>
-      </div>
-      <p class="text-xs text-gray-500 mt-2">{{ fmt_pct(t.team_dials_attainment_pct) }} of target dials completed{% if t.team_dials_gap > 0 %} · {{ "{:,}".format(t.team_dials_gap) }} dials behind target{% endif %}</p>
-    </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5">
-      <div class="flex items-end justify-between gap-4 mb-3">
-        <div>
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Avg Dials / Day per Rep</p>
-          <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">{{ t.team_avg_dials_per_day }}</p>
-        </div>
-        <div class="text-right">
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Per-Rep Target</p>
-          <p class="text-lg font-semibold text-gray-700 tabular-nums">{{ data.target_avg_dials_per_day }}</p>
-        </div>
-      </div>
-      <div class="h-3 rounded-full bg-slate-100 overflow-hidden">
-        <div class="h-full rounded-full {% if t.team_attainment_pct >= 100 %}bg-emerald-500{% elif t.team_attainment_pct >= 75 %}bg-amber-400{% else %}bg-sky-500{% endif %}" style="width: {{ [t.team_attainment_pct, 100]|min }}%;"></div>
-      </div>
-      <p class="text-xs text-gray-500 mt-2">{{ fmt_pct(t.team_attainment_pct) }} of the per-rep dialing target pace</p>
-    </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    {{ stat_card("Team Avg Dials / Day per Rep", t.team_avg_dials_per_day, sub="Target: " ~ data.target_avg_dials_per_day ~ "/day") }}
+    {{ stat_card("Team Conversations", "{:,}".format(t.conversations), sub="Dial-to-conversation rate: " ~ fmt_pct(t.team_dial_to_conversation_rate)) }}
+    {{ stat_card("Team Cold Outreach Deals Created", t.outbound_deals_created, sub="Goal: " ~ "{:,.0f}".format(t.team_cold_outreach_goal_for_period) ~ " this period") }}
   </div>
 </div>
 
@@ -92,177 +60,89 @@
   <div class="mb-3">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Dials → Conversations → Cold Outreach Deals Created</p>
     <h2 class="text-base font-semibold text-gray-800 mt-1">How Dialing Pace Affects Cold Outreach Deals Created</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Uses Conversations as the operational bridge between team dialing activity and Cold Outreach Deals Created.</p>
+    <p class="text-xs text-gray-400 mt-0.5">Shows how current dialing pace is likely affecting conversations and downstream Cold Outreach Deals Created.</p>
   </div>
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Actual Observed Chain</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
-        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Dials</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ "{:,}".format(t.dials) }}</p>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Conversations</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ "{:,}".format(t.conversations) }}</p>
-          <p class="text-xs text-slate-500 mt-1">{{ fmt_pct(t.team_dial_to_conversation_rate) }} from dials</p>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Cold Outreach Deals Created</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ t.outbound_deals_created }}</p>
-          <p class="text-xs text-slate-500 mt-1">{{ fmt_pct(t.conversation_to_cold_outreach_rate) }} from conversations</p>
-        </div>
-      </div>
-    </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">At Target Pace / Estimated Chain</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
-        <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
-          <p class="text-xs font-semibold text-sky-600 uppercase tracking-widest">Target Team Dials</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ "{:,}".format(t.team_target_dials_for_period) }}</p>
-        </div>
-        <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
-          <p class="text-xs font-semibold text-sky-600 uppercase tracking-widest">Estimated Conversations</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ t.estimated_conversations_at_target }}</p>
-          <p class="text-xs text-slate-500 mt-1">Using observed dial-to-conversation rate</p>
-        </div>
-        <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
-          <p class="text-xs font-semibold text-sky-600 uppercase tracking-widest">Estimated Cold Outreach Deals Created</p>
-          <p class="text-2xl font-bold text-slate-900 mt-2 tabular-nums">{{ t.estimated_cold_outreach_at_target }}</p>
-          <p class="text-xs text-slate-500 mt-1">Additional upside: {{ t.total_additional_deals }}</p>
-        </div>
-      </div>
-    </div>
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-center">
+    {{ flow_card("Dials", t.dials, t.expected_dials_to_date, t.dials_gap_to_expected, "Target pace: " ~ "{:,}".format(t.team_target_dials_per_day) ~ " per business day") }}
+    <div class="hidden lg:flex items-center justify-center text-slate-300 text-3xl font-light">→</div>
+    {{ flow_card("Conversations", t.conversations, t.expected_conversations_to_date, t.conversations_gap_to_expected, fmt_pct(t.team_dial_to_conversation_rate) ~ " from current dials") }}
+    <div class="hidden lg:flex items-center justify-center text-slate-300 text-3xl font-light">→</div>
+    {{ flow_card("Cold Outreach Deals Created", t.outbound_deals_created, t.expected_cold_outreach_to_date, t.cold_outreach_gap_to_expected, fmt_pct(t.conversation_to_cold_outreach_rate) ~ " from conversations") }}
   </div>
 </div>
 
 <div class="mb-8">
   <div class="mb-3">
-    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Trend / Pacing Over Time</p>
-    <h2 class="text-base font-semibold text-gray-800 mt-1">Pacing Over Time</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Shows whether the team is falling behind, catching up, or staying on pace through the period.</p>
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Progress Toward Monthly Dial and Outbound Goals</p>
+    <h2 class="text-base font-semibold text-gray-800 mt-1">Progress Toward Monthly Dial and Outbound Goals</h2>
+    <p class="text-xs text-gray-400 mt-0.5">Shows cumulative month-to-date progress toward dialing and outbound deal goals over time.</p>
   </div>
-  <div class="grid grid-cols-1 gap-4">
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <div class="flex items-start justify-between mb-1">
-        <div>
-          <h3 class="text-base font-semibold text-gray-800">Cumulative Team Dials vs Target</h3>
-          <p class="text-xs text-gray-400 mt-0.5">Actual cumulative team dials against cumulative target dials for the selected period.</p>
-        </div>
-      </div>
-      <div class="mt-4" style="position:relative;height:260px;">
-        <canvas id="dialsTrendChart"></canvas>
-      </div>
-    </div>
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <div class="flex items-start justify-between mb-1">
-        <div>
-          <h3 class="text-base font-semibold text-gray-800">Cumulative Cold Outreach Deals Created vs Goal</h3>
-          <p class="text-xs text-gray-400 mt-0.5">Tracks team output against the period-adjusted Cold Outreach goal.</p>
-        </div>
-      </div>
-      <div class="mt-4" style="position:relative;height:260px;">
-        <canvas id="coldOutreachTrendChart"></canvas>
-      </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div class="mt-1" style="position:relative;height:320px;">
+      <canvas id="progressChart"></canvas>
     </div>
   </div>
-</div>
-
-<div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-  <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Methodology / Assumptions</p>
-  <p class="text-sm text-slate-600">
-    Estimates assume observed dial-to-conversation and conversation-to-Cold Outreach conversion patterns remain stable at higher dialing volume. Modeled output is directional, not a forecast. Team targets are based on {{ data.target_avg_dials_per_day }} dials per day per rep and 13 Cold Outreach Deals Created per month per rep, prorated to the selected period.
-  </p>
 </div>
 
 <script>
 (function () {
   var trendPoints = {{ data.trend_points | tojson }};
   var labels = trendPoints.map(function (point) { return point.label; });
-  var actualDials = trendPoints.map(function (point) { return point.actual_dials; });
-  var targetDials = trendPoints.map(function (point) { return point.target_dials; });
-  var actualColdOutreach = trendPoints.map(function (point) { return point.actual_cold_outreach; });
-  var goalColdOutreach = trendPoints.map(function (point) { return point.goal_cold_outreach; });
+  var dialGoalPct = trendPoints.map(function (point) { return point.dial_goal_pct; });
+  var dialActualPct = trendPoints.map(function (point) { return point.dial_actual_pct; });
+  var coldGoalPct = trendPoints.map(function (point) { return point.cold_outreach_goal_pct; });
+  var coldActualPct = trendPoints.map(function (point) { return point.cold_outreach_actual_pct; });
 
-  new Chart(document.getElementById('dialsTrendChart'), {
+  new Chart(document.getElementById('progressChart'), {
     type: 'line',
     data: {
       labels: labels,
       datasets: [
         {
-          label: 'Actual team dials',
-          data: actualDials,
-          borderColor: 'rgba(14, 165, 233, 1)',
-          backgroundColor: 'rgba(14, 165, 233, 0.12)',
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          borderWidth: 2.5,
-          tension: 0.25,
-          fill: true
-        },
-        {
-          label: 'Target team dials',
-          data: targetDials,
+          label: 'Dial Goal Pace',
+          data: dialGoalPct,
           borderColor: 'rgba(15, 23, 42, 0.7)',
           borderDash: [6, 6],
+          borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 0,
-          borderWidth: 2,
           tension: 0
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: { boxWidth: 12, padding: 16, font: { size: 11 } }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(0,0,0,0.04)' },
-          ticks: { color: '#9ca3af', font: { size: 11 }, maxTicksLimit: 10 }
         },
-        y: {
-          beginAtZero: true,
-          max: {{ data.trend_dials_max | tojson }},
-          grid: { color: 'rgba(0,0,0,0.06)' },
-          ticks: { color: '#9ca3af', precision: 0 },
-          title: { display: true, text: 'Cumulative Dials', color: '#9ca3af', font: { size: 11 } }
-        }
-      }
-    }
-  });
-
-  new Chart(document.getElementById('coldOutreachTrendChart'), {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
         {
-          label: 'Actual Cold Outreach Deals Created',
-          data: actualColdOutreach,
-          borderColor: 'rgba(139, 92, 246, 1)',
-          backgroundColor: 'rgba(139, 92, 246, 0.1)',
+          label: 'Dial Actual MTD',
+          data: dialActualPct,
+          borderColor: 'rgba(14, 165, 233, 1)',
+          backgroundColor: 'rgba(14, 165, 233, 0.08)',
+          borderWidth: 2.5,
           pointRadius: 0,
           pointHoverRadius: 4,
-          borderWidth: 2.5,
-          tension: 0.25,
-          fill: true
+          tension: 0.25
         },
         {
-          label: 'Goal',
-          data: goalColdOutreach,
+          label: 'Outbound Deals Goal Pace',
+          data: coldGoalPct,
           borderColor: 'rgba(16, 185, 129, 0.9)',
-          borderDash: [6, 6],
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          borderWidth: 2,
-          tension: 0
+          backgroundColor: 'rgba(255,255,255,1)',
+          borderWidth: 1.5,
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          pointBorderWidth: 2,
+          pointBorderColor: 'rgba(16, 185, 129, 0.9)',
+          pointBackgroundColor: 'rgba(255,255,255,1)',
+          showLine: true,
+          tension: 0.15
+        },
+        {
+          label: 'Outbound Deals Actual MTD',
+          data: coldActualPct,
+          borderColor: 'rgba(139, 92, 246, 1)',
+          backgroundColor: 'rgba(139, 92, 246, 1)',
+          borderWidth: 1.5,
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          pointBorderWidth: 0,
+          showLine: true,
+          tension: 0.15
         }
       ]
     },
@@ -274,6 +154,23 @@
         legend: {
           position: 'bottom',
           labels: { boxWidth: 12, padding: 16, font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var point = trendPoints[ctx.dataIndex];
+              if (ctx.dataset.label === 'Dial Goal Pace') {
+                return ' Dial Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_goal_raw.toLocaleString();
+              }
+              if (ctx.dataset.label === 'Dial Actual MTD') {
+                return ' Dial Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_actual_raw.toLocaleString();
+              }
+              if (ctx.dataset.label === 'Outbound Deals Goal Pace') {
+                return ' Deals Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_goal_raw;
+              }
+              return ' Deals Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_actual_raw.toLocaleString();
+            }
+          }
         }
       },
       scales: {
@@ -283,10 +180,13 @@
         },
         y: {
           beginAtZero: true,
-          max: {{ data.trend_cold_outreach_max | tojson }},
+          suggestedMax: 100,
           grid: { color: 'rgba(0,0,0,0.06)' },
-          ticks: { color: '#9ca3af' },
-          title: { display: true, text: 'Cold Outreach Deals Created', color: '#9ca3af', font: { size: 11 } }
+          ticks: {
+            color: '#9ca3af',
+            callback: function(value) { return value + '%'; }
+          },
+          title: { display: true, text: 'Percent of Goal Reached', color: '#9ca3af', font: { size: 11 } }
         }
       }
     }
