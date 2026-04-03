@@ -68,6 +68,7 @@ DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 _VIEWS = [
     analytics.compute_call_stats,
     analytics.compute_connect_diagnostics,
+    analytics.compute_dial_pipeline,
     analytics.compute_scorecard,
     analytics.compute_pipeline_coverage,
     analytics.compute_pipeline_generated,
