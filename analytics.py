@@ -828,8 +828,10 @@ def compute_dial_pipeline(period: str) -> dict:
 
     historical_month_start = _shift_month(_month_start(start), -6)
     historical_month_end = _month_end(_shift_month(_month_start(start), -1))
-    historical_dial_benchmark_by_index = {}
-    historical_cold_benchmark_by_index = {}
+    historical_dial_share_by_index = {}
+    historical_cold_share_by_index = {}
+    historical_dial_share_by_pattern = {}
+    historical_cold_share_by_pattern = {}
     if historical_month_end >= historical_month_start:
         historical_start_dt = datetime.combine(historical_month_start, datetime.min.time(), tzinfo=timezone.utc)
         historical_end_dt = datetime.combine(historical_month_end, datetime.max.time(), tzinfo=timezone.utc)
@@ -841,10 +843,10 @@ def compute_dial_pipeline(period: str) -> dict:
         )
         hist_cold = _deal_daily_series(historical_deals, owners, historical_end_dt)
 
-        dial_samples_by_index = defaultdict(list)
-        cold_samples_by_index = defaultdict(list)
-        dial_samples_by_pattern = defaultdict(list)
-        cold_samples_by_pattern = defaultdict(list)
+        dial_share_samples_by_index = defaultdict(list)
+        cold_share_samples_by_index = defaultdict(list)
+        dial_share_samples_by_pattern = defaultdict(list)
+        cold_share_samples_by_pattern = defaultdict(list)
         cursor = historical_month_start
         while cursor <= historical_month_end:
             month_start = _month_start(cursor)
@@ -857,38 +859,63 @@ def compute_dial_pipeline(period: str) -> dict:
             ]
             month_dial_total = sum(hist_dials.get(day.isoformat(), 0) for day in month_workdays)
             month_cold_total = sum(hist_cold.get(day.isoformat(), 0) for day in month_workdays)
-            cumulative_dials_hist = 0
-            cumulative_cold_hist = 0
             for workday_index, current_workday in enumerate(month_workdays, start=1):
                 day_key = current_workday.isoformat()
-                cumulative_dials_hist += hist_dials.get(day_key, 0)
-                cumulative_cold_hist += hist_cold.get(day_key, 0)
                 pattern_key = (((current_workday.day - 1) // 7) + 1, current_workday.weekday())
                 if month_dial_total:
-                    dial_ratio = cumulative_dials_hist / month_dial_total
-                    dial_samples_by_index[workday_index].append(dial_ratio)
-                    dial_samples_by_pattern[pattern_key].append(dial_ratio)
+                    dial_share = hist_dials.get(day_key, 0) / month_dial_total
+                    dial_share_samples_by_index[workday_index].append(dial_share)
+                    dial_share_samples_by_pattern[pattern_key].append(dial_share)
                 if month_cold_total:
-                    cold_ratio = cumulative_cold_hist / month_cold_total
-                    cold_samples_by_index[workday_index].append(cold_ratio)
-                    cold_samples_by_pattern[pattern_key].append(cold_ratio)
+                    cold_share = hist_cold.get(day_key, 0) / month_cold_total
+                    cold_share_samples_by_index[workday_index].append(cold_share)
+                    cold_share_samples_by_pattern[pattern_key].append(cold_share)
             cursor = _shift_month(cursor, 1)
 
-        historical_dial_benchmark_by_index = {
-            index: median(values) for index, values in dial_samples_by_index.items() if values
+        historical_dial_share_by_index = {
+            index: median(values) for index, values in dial_share_samples_by_index.items() if values
         }
-        historical_cold_benchmark_by_index = {
-            index: median(values) for index, values in cold_samples_by_index.items() if values
+        historical_cold_share_by_index = {
+            index: median(values) for index, values in cold_share_samples_by_index.items() if values
         }
-        historical_dial_benchmark_by_pattern = {
-            key: median(values) for key, values in dial_samples_by_pattern.items() if values
+        historical_dial_share_by_pattern = {
+            key: median(values) for key, values in dial_share_samples_by_pattern.items() if values
         }
-        historical_cold_benchmark_by_pattern = {
-            key: median(values) for key, values in cold_samples_by_pattern.items() if values
+        historical_cold_share_by_pattern = {
+            key: median(values) for key, values in cold_share_samples_by_pattern.items() if values
         }
-    else:
-        historical_dial_benchmark_by_pattern = {}
-        historical_cold_benchmark_by_pattern = {}
+
+    current_period_workdays = []
+    cursor_day = start
+    trend_end = end if period != "this_month" else min(end, datetime.now(timezone.utc).date())
+    while cursor_day <= trend_end:
+        if _is_working_day(cursor_day, holiday_map):
+            current_period_workdays.append(cursor_day)
+        cursor_day += timedelta(days=1)
+
+    dial_typical_daily_shares = []
+    cold_typical_daily_shares = []
+    for workday_index, current_workday in enumerate(current_period_workdays, start=1):
+        pattern_key = (((current_workday.day - 1) // 7) + 1, current_workday.weekday())
+        dial_typical_daily_shares.append(
+            historical_dial_share_by_pattern.get(
+                pattern_key,
+                historical_dial_share_by_index.get(workday_index, 0.0),
+            )
+        )
+        cold_typical_daily_shares.append(
+            historical_cold_share_by_pattern.get(
+                pattern_key,
+                historical_cold_share_by_index.get(workday_index, 0.0),
+            )
+        )
+
+    dial_share_total = sum(dial_typical_daily_shares)
+    if dial_share_total > 0:
+        dial_typical_daily_shares = [share / dial_share_total for share in dial_typical_daily_shares]
+    cold_share_total = sum(cold_typical_daily_shares)
+    if cold_share_total > 0:
+        cold_typical_daily_shares = [share / cold_share_total for share in cold_typical_daily_shares]
 
     trend_points = []
     cumulative_dials = 0
@@ -914,19 +941,10 @@ def compute_dial_pipeline(period: str) -> dict:
             working_day_index += 1
             cumulative_target_dials += team_target_dials_per_day
             cumulative_goal_cold_outreach += cold_outreach_goal_per_business_day
-            pattern_key = (((current_day.day - 1) // 7) + 1, current_day.weekday())
-            dial_typical_ratio = historical_dial_benchmark_by_pattern.get(
-                pattern_key,
-                historical_dial_benchmark_by_index.get(working_day_index),
-            )
-            cold_typical_ratio = historical_cold_benchmark_by_pattern.get(
-                pattern_key,
-                historical_cold_benchmark_by_index.get(working_day_index),
-            )
-            if dial_typical_ratio is not None:
-                cumulative_typical_dials = dial_typical_ratio * team_target_dials_for_period
-            if cold_typical_ratio is not None:
-                cumulative_typical_cold = cold_typical_ratio * team_cold_outreach_goal_for_period
+            if working_day_index <= len(dial_typical_daily_shares):
+                cumulative_typical_dials += dial_typical_daily_shares[working_day_index - 1] * team_target_dials_for_period
+            if working_day_index <= len(cold_typical_daily_shares):
+                cumulative_typical_cold += cold_typical_daily_shares[working_day_index - 1] * team_cold_outreach_goal_for_period
         dial_goal_pct = round((cumulative_target_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
         dial_actual_pct = round((cumulative_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
         cold_outreach_goal_pct = round((cumulative_goal_cold_outreach / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else 0.0
