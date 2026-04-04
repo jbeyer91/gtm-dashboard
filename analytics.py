@@ -887,7 +887,7 @@ def compute_dial_pipeline(period: str) -> dict:
 
     current_period_workdays = []
     cursor_day = start
-    trend_end = end if period != "this_month" else min(end, datetime.now(timezone.utc).date())
+    trend_end = goal_end if period == "this_month" else end
     while cursor_day <= trend_end:
         if _is_working_day(cursor_day, holiday_map):
             current_period_workdays.append(cursor_day)
@@ -926,7 +926,7 @@ def compute_dial_pipeline(period: str) -> dict:
         team_cold_outreach_goal_for_period / goal_business_days if goal_business_days else 0.0
     )
     current_day = start
-    trend_end = end if period != "this_month" else min(end, datetime.now(timezone.utc).date())
+    trend_end = goal_end if period == "this_month" else end
     working_day_index = 0
     cumulative_typical_dials = 0.0
     cumulative_typical_cold = 0.0
@@ -935,6 +935,7 @@ def compute_dial_pipeline(period: str) -> dict:
         label = f"{current_day.month}/{current_day.day}"
         holiday_label = holiday_map.get(current_day)
         is_business_day = _is_working_day(current_day, holiday_map)
+        is_future = period == "this_month" and current_day > today
         cumulative_dials += daily_dials.get(day_key, 0)
         cumulative_cold_outreach += daily_cold_outreach.get(day_key, 0)
         if is_business_day:
@@ -956,6 +957,7 @@ def compute_dial_pipeline(period: str) -> dict:
             "date": day_key,
             "holiday_name": holiday_label,
             "is_holiday": bool(holiday_label),
+            "is_future": is_future,
             "dial_goal_raw": cumulative_target_dials,
             "dial_actual_raw": cumulative_dials,
             "dial_typical_raw": round(cumulative_typical_dials),

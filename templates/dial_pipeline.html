@@ -107,9 +107,9 @@
   var trendPoints = {{ data.trend_points | tojson }};
   var labels = trendPoints.map(function (point) { return point.label; });
   var dialTypicalPct = trendPoints.map(function (point) { return point.dial_typical_pct; });
-  var dialActualPct = trendPoints.map(function (point) { return point.dial_actual_pct; });
+  var dialActualPct = trendPoints.map(function (point) { return point.is_future ? null : point.dial_actual_pct; });
   var coldTypicalPct = trendPoints.map(function (point) { return point.cold_outreach_typical_pct; });
-  var coldActualPct = trendPoints.map(function (point) { return point.cold_outreach_actual_pct; });
+  var coldActualPct = trendPoints.map(function (point) { return point.is_future ? null : point.cold_outreach_actual_pct; });
   var offsetGoalMarkersPlugin = {
     id: 'offsetGoalMarkers',
     afterDatasetsDraw: function(chart) {
