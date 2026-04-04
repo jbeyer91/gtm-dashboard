@@ -627,9 +627,17 @@ def compute_dial_pipeline(period: str) -> dict:
     team_attainment_pct = round((team_avg_dials_per_day / target_avg_dials_per_day) * 100, 1) if rows else 0.0
     active_rep_count = len(rows)
     team_target_dials_per_day = target_avg_dials_per_day * active_rep_count
-    team_target_dials_for_period = target_dials_per_rep * active_rep_count
     team_actual_dials_per_day_total = round((totals["dials"] / business_days), 1) if rows else 0.0
-    period_cold_outreach_goal_per_rep = _period_cold_outreach_goal_per_rep()
+    goal_end = end
+    if period == "this_month":
+        goal_end = _next_month_start(start) - timedelta(days=1)
+    goal_business_days = max(_business_days_in_range(start, goal_end), 1)
+    team_target_dials_for_period = goal_business_days * target_avg_dials_per_day * active_rep_count
+    period_cold_outreach_goal_per_rep = (
+        round(DEALS_CREATED_TARGET_PER_REP, 1)
+        if period in {"this_month", "last_month"}
+        else _period_cold_outreach_goal_per_rep()
+    )
     team_cold_outreach_goal_for_period = round(period_cold_outreach_goal_per_rep * active_rep_count, 1)
 
     team_dial_to_conversation_rate = (totals["conversations"] / totals["dials"]) if totals["dials"] else 0.0
@@ -733,10 +741,11 @@ def compute_dial_pipeline(period: str) -> dict:
     cumulative_cold_outreach = 0
     cumulative_goal_cold_outreach = 0.0
     cold_outreach_goal_per_business_day = (
-        team_cold_outreach_goal_for_period / business_days if business_days else 0.0
+        team_cold_outreach_goal_for_period / goal_business_days if goal_business_days else 0.0
     )
     current_day = start
-    while current_day <= end:
+    trend_end = end if period != "this_month" else min(end, datetime.now(timezone.utc).date())
+    while current_day <= trend_end:
         day_key = current_day.isoformat()
         label = f"{current_day.month}/{current_day.day}"
         is_business_day = current_day.weekday() < 5
