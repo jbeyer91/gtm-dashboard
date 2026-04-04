@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from statistics import median
 from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
@@ -233,6 +234,154 @@ def _deal_source(deal: dict) -> str:
 
 
 log = logging.getLogger(__name__)
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int):
+    first = datetime(year, month, 1).date()
+    offset = (weekday - first.weekday()) % 7
+    return first + timedelta(days=offset + (n - 1) * 7)
+
+
+def _last_weekday_of_month(year: int, month: int, weekday: int):
+    if month == 12:
+        next_month = datetime(year + 1, 1, 1).date()
+    else:
+        next_month = datetime(year, month + 1, 1).date()
+    current = next_month - timedelta(days=1)
+    while current.weekday() != weekday:
+        current -= timedelta(days=1)
+    return current
+
+
+def _observed_fixed_holiday(year: int, month: int, day: int):
+    actual = datetime(year, month, day).date()
+    if actual.weekday() == 5:
+        return actual - timedelta(days=1)
+    if actual.weekday() == 6:
+        return actual + timedelta(days=1)
+    return actual
+
+
+def _company_holidays_for_year(year: int):
+    thanksgiving = _nth_weekday_of_month(year, 11, 3, 4)
+    return {
+        _observed_fixed_holiday(year, 1, 1): "New Year's Day",
+        _nth_weekday_of_month(year, 1, 0, 3): "Martin Luther King Jr. Day",
+        _nth_weekday_of_month(year, 2, 0, 3): "Presidents' Day",
+        _last_weekday_of_month(year, 5, 0): "Memorial Day",
+        _observed_fixed_holiday(year, 6, 19): "Juneteenth",
+        _observed_fixed_holiday(year, 7, 4): "Independence Day",
+        _nth_weekday_of_month(year, 9, 0, 1): "Labor Day",
+        _nth_weekday_of_month(year, 10, 0, 2): "Columbus Day",
+        _observed_fixed_holiday(year, 11, 11): "Veterans Day",
+        thanksgiving: "Thanksgiving Day",
+        thanksgiving + timedelta(days=1): "Day After Thanksgiving",
+        _observed_fixed_holiday(year, 12, 24): "Christmas Eve",
+        _observed_fixed_holiday(year, 12, 25): "Christmas Day",
+    }
+
+
+def _holiday_map_between(start_date, end_date):
+    holiday_map = {}
+    for year in range(start_date.year, end_date.year + 1):
+        for holiday_date, label in _company_holidays_for_year(year).items():
+            if start_date <= holiday_date <= end_date:
+                holiday_map[holiday_date] = label
+    return holiday_map
+
+
+def _month_start(date_value):
+    return date_value.replace(day=1)
+
+
+def _month_end(date_value):
+    if date_value.month == 12:
+        return date_value.replace(year=date_value.year + 1, month=1, day=1) - timedelta(days=1)
+    return date_value.replace(month=date_value.month + 1, day=1) - timedelta(days=1)
+
+
+def _shift_month(date_value, months: int):
+    total_month = (date_value.year * 12 + (date_value.month - 1)) + months
+    year = total_month // 12
+    month = total_month % 12 + 1
+    return datetime(year, month, 1).date()
+
+
+def _is_working_day(date_value, holiday_map):
+    return date_value.weekday() < 5 and date_value not in holiday_map
+
+
+def _working_days_between(start_date, end_date, holiday_map):
+    if end_date < start_date:
+        return 0
+    return sum(
+        1
+        for i in range((end_date - start_date).days + 1)
+        if _is_working_day(start_date + timedelta(days=i), holiday_map)
+    )
+
+
+def _call_daily_series(calls, owners, scope_end, contact_windows, call_to_contact):
+    daily_dials = defaultdict(int)
+    daily_conversations = defaultdict(int)
+    for call in calls:
+        oid = call["properties"].get("hubspot_owner_id", "")
+        if not oid or not owners.get(oid):
+            continue
+        if not _owner_allowed(oid, scope_end):
+            continue
+        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
+            continue
+        contact_id = call_to_contact.get(call["id"])
+        if contact_id and contact_id in contact_windows:
+            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+            if ts_raw:
+                try:
+                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+                    skip = False
+                    for (open_start, open_end) in contact_windows[contact_id]:
+                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                except Exception:
+                    pass
+        ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
+        if not ts_raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        day_key = dt.date().isoformat()
+        daily_dials[day_key] += 1
+        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
+        duration_ms = int(call["properties"].get("hs_call_duration") or 0)
+        if disposition in CALL_CONNECTED_GUIDS and duration_ms >= 60000:
+            daily_conversations[day_key] += 1
+    return daily_dials, daily_conversations
+
+
+def _deal_daily_series(deals, owners, scope_end):
+    daily_cold_outreach = defaultdict(int)
+    for deal in deals:
+        oid = deal["properties"].get("hubspot_owner_id", "")
+        if not oid or not owners.get(oid):
+            continue
+        if not _owner_allowed(oid, scope_end):
+            continue
+        if _deal_source(deal) != "Cold outreach":
+            continue
+        ts_raw = deal["properties"].get("createdate")
+        if not ts_raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        daily_cold_outreach[dt.date().isoformat()] += 1
+    return daily_cold_outreach
 
 
 @ttl_cache
@@ -562,10 +711,8 @@ def compute_dial_pipeline(period: str) -> dict:
     end_dt = datetime.fromisoformat(data["end"])
     start = start_dt.date()
     end = end_dt.date()
-    business_days = max(sum(
-        1 for i in range((end - start).days + 1)
-        if (start + timedelta(days=i)).weekday() < 5
-    ), 1)
+    holiday_map = _holiday_map_between(_shift_month(_month_start(start), -6), _month_end(end))
+    business_days = max(_working_days_between(start, end, holiday_map), 1)
     target_avg_dials_per_day = 40
     target_dials_per_rep = business_days * target_avg_dials_per_day
 
@@ -573,10 +720,7 @@ def compute_dial_pipeline(period: str) -> dict:
         return (d.replace(day=28) + timedelta(days=4)).replace(day=1)
 
     def _business_days_in_range(range_start, range_end):
-        return max(sum(
-            1 for i in range((range_end - range_start).days + 1)
-            if (range_start + timedelta(days=i)).weekday() < 5
-        ), 0)
+        return max(_working_days_between(range_start, range_end, holiday_map), 0)
 
     def _period_cold_outreach_goal_per_rep():
         cursor = start.replace(day=1)
@@ -677,63 +821,74 @@ def compute_dial_pipeline(period: str) -> dict:
     deals_created = get_deals(start_dt, end_dt, "createdate")
     contact_windows = get_deal_contact_windows()
     call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
-    daily_dials = defaultdict(int)
-    daily_conversations = defaultdict(int)
-    daily_cold_outreach = defaultdict(int)
+    daily_dials, daily_conversations = _call_daily_series(
+        calls, owners, scope_end, contact_windows, call_to_contact
+    )
+    daily_cold_outreach = _deal_daily_series(deals_created, owners, scope_end)
 
-    for call in calls:
-        oid = call["properties"].get("hubspot_owner_id", "")
-        if not oid or not owners.get(oid):
-            continue
-        if not _owner_allowed(oid, scope_end):
-            continue
-        if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
-            continue
-        contact_id = call_to_contact.get(call["id"])
-        if contact_id and contact_id in contact_windows:
-            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-            if ts_raw:
-                try:
-                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
-                    skip = False
-                    for (open_start, open_end) in contact_windows[contact_id]:
-                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
-                            skip = True
-                            break
-                    if skip:
-                        continue
-                except Exception:
-                    pass
-        ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-        if not ts_raw:
-            continue
-        try:
-            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
-        except Exception:
-            continue
-        day_key = dt.date().isoformat()
-        daily_dials[day_key] += 1
-        disposition = (call["properties"].get("hs_call_disposition") or "").strip()
-        duration_ms = int(call["properties"].get("hs_call_duration") or 0)
-        if disposition in CALL_CONNECTED_GUIDS and duration_ms >= 60000:
-            daily_conversations[day_key] += 1
+    historical_month_start = _shift_month(_month_start(start), -6)
+    historical_month_end = _month_end(_shift_month(_month_start(start), -1))
+    historical_dial_benchmark_by_index = {}
+    historical_cold_benchmark_by_index = {}
+    if historical_month_end >= historical_month_start:
+        historical_start_dt = datetime.combine(historical_month_start, datetime.min.time(), tzinfo=timezone.utc)
+        historical_end_dt = datetime.combine(historical_month_end, datetime.max.time(), tzinfo=timezone.utc)
+        historical_calls = get_calls(historical_start_dt, historical_end_dt)
+        historical_deals = get_deals(historical_start_dt, historical_end_dt, "createdate")
+        historical_call_to_contact = get_call_to_contact_map([c["id"] for c in historical_calls])
+        hist_dials, hist_conversations = _call_daily_series(
+            historical_calls, owners, historical_end_dt, contact_windows, historical_call_to_contact
+        )
+        hist_cold = _deal_daily_series(historical_deals, owners, historical_end_dt)
 
-    for deal in deals_created:
-        oid = deal["properties"].get("hubspot_owner_id", "")
-        if not oid or not owners.get(oid):
-            continue
-        if not _owner_allowed(oid, scope_end):
-            continue
-        if _deal_source(deal) != "Cold outreach":
-            continue
-        ts_raw = deal["properties"].get("createdate")
-        if not ts_raw:
-            continue
-        try:
-            dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
-        except Exception:
-            continue
-        daily_cold_outreach[dt.date().isoformat()] += 1
+        dial_samples_by_index = defaultdict(list)
+        cold_samples_by_index = defaultdict(list)
+        dial_samples_by_pattern = defaultdict(list)
+        cold_samples_by_pattern = defaultdict(list)
+        cursor = historical_month_start
+        while cursor <= historical_month_end:
+            month_start = _month_start(cursor)
+            month_end = _month_end(cursor)
+            month_holidays = _holiday_map_between(month_start, month_end)
+            month_workdays = [
+                month_start + timedelta(days=i)
+                for i in range((month_end - month_start).days + 1)
+                if _is_working_day(month_start + timedelta(days=i), month_holidays)
+            ]
+            month_dial_total = sum(hist_dials.get(day.isoformat(), 0) for day in month_workdays)
+            month_cold_total = sum(hist_cold.get(day.isoformat(), 0) for day in month_workdays)
+            cumulative_dials_hist = 0
+            cumulative_cold_hist = 0
+            for workday_index, current_workday in enumerate(month_workdays, start=1):
+                day_key = current_workday.isoformat()
+                cumulative_dials_hist += hist_dials.get(day_key, 0)
+                cumulative_cold_hist += hist_cold.get(day_key, 0)
+                pattern_key = (((current_workday.day - 1) // 7) + 1, current_workday.weekday())
+                if month_dial_total:
+                    dial_ratio = cumulative_dials_hist / month_dial_total
+                    dial_samples_by_index[workday_index].append(dial_ratio)
+                    dial_samples_by_pattern[pattern_key].append(dial_ratio)
+                if month_cold_total:
+                    cold_ratio = cumulative_cold_hist / month_cold_total
+                    cold_samples_by_index[workday_index].append(cold_ratio)
+                    cold_samples_by_pattern[pattern_key].append(cold_ratio)
+            cursor = _shift_month(cursor, 1)
+
+        historical_dial_benchmark_by_index = {
+            index: median(values) for index, values in dial_samples_by_index.items() if values
+        }
+        historical_cold_benchmark_by_index = {
+            index: median(values) for index, values in cold_samples_by_index.items() if values
+        }
+        historical_dial_benchmark_by_pattern = {
+            key: median(values) for key, values in dial_samples_by_pattern.items() if values
+        }
+        historical_cold_benchmark_by_pattern = {
+            key: median(values) for key, values in cold_samples_by_pattern.items() if values
+        }
+    else:
+        historical_dial_benchmark_by_pattern = {}
+        historical_cold_benchmark_by_pattern = {}
 
     trend_points = []
     cumulative_dials = 0
@@ -745,29 +900,56 @@ def compute_dial_pipeline(period: str) -> dict:
     )
     current_day = start
     trend_end = end if period != "this_month" else min(end, datetime.now(timezone.utc).date())
+    working_day_index = 0
+    cumulative_typical_dials = 0.0
+    cumulative_typical_cold = 0.0
     while current_day <= trend_end:
         day_key = current_day.isoformat()
         label = f"{current_day.month}/{current_day.day}"
-        is_business_day = current_day.weekday() < 5
+        holiday_label = holiday_map.get(current_day)
+        is_business_day = _is_working_day(current_day, holiday_map)
         cumulative_dials += daily_dials.get(day_key, 0)
         cumulative_cold_outreach += daily_cold_outreach.get(day_key, 0)
         if is_business_day:
+            working_day_index += 1
             cumulative_target_dials += team_target_dials_per_day
             cumulative_goal_cold_outreach += cold_outreach_goal_per_business_day
+            pattern_key = (((current_day.day - 1) // 7) + 1, current_day.weekday())
+            dial_typical_ratio = historical_dial_benchmark_by_pattern.get(
+                pattern_key,
+                historical_dial_benchmark_by_index.get(working_day_index),
+            )
+            cold_typical_ratio = historical_cold_benchmark_by_pattern.get(
+                pattern_key,
+                historical_cold_benchmark_by_index.get(working_day_index),
+            )
+            if dial_typical_ratio is not None:
+                cumulative_typical_dials = dial_typical_ratio * team_target_dials_for_period
+            if cold_typical_ratio is not None:
+                cumulative_typical_cold = cold_typical_ratio * team_cold_outreach_goal_for_period
         dial_goal_pct = round((cumulative_target_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
         dial_actual_pct = round((cumulative_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else 0.0
         cold_outreach_goal_pct = round((cumulative_goal_cold_outreach / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else 0.0
         cold_outreach_actual_pct = round((cumulative_cold_outreach / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else 0.0
+        dial_typical_pct = round((cumulative_typical_dials / team_target_dials_for_period) * 100, 1) if team_target_dials_for_period else None
+        cold_outreach_typical_pct = round((cumulative_typical_cold / team_cold_outreach_goal_for_period) * 100, 1) if team_cold_outreach_goal_for_period else None
         trend_points.append({
             "label": label,
+            "date": day_key,
+            "holiday_name": holiday_label,
+            "is_holiday": bool(holiday_label),
             "dial_goal_raw": cumulative_target_dials,
             "dial_actual_raw": cumulative_dials,
+            "dial_typical_raw": round(cumulative_typical_dials),
             "cold_outreach_goal_raw": round(cumulative_goal_cold_outreach, 1),
             "cold_outreach_actual_raw": cumulative_cold_outreach,
+            "cold_outreach_typical_raw": round(cumulative_typical_cold),
             "dial_goal_pct": dial_goal_pct,
             "dial_actual_pct": dial_actual_pct,
+            "dial_typical_pct": dial_typical_pct,
             "cold_outreach_goal_pct": cold_outreach_goal_pct,
             "cold_outreach_actual_pct": cold_outreach_actual_pct,
+            "cold_outreach_typical_pct": cold_outreach_typical_pct,
         })
         current_day += timedelta(days=1)
 

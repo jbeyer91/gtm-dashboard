@@ -84,12 +84,20 @@
         <span>Dial Goal Pace</span>
       </div>
       <div class="inline-flex items-center gap-2">
+        <span class="w-6 border-t-2 border-amber-500" style="border-top-style:dotted;"></span>
+        <span>Dial Typical Pace</span>
+      </div>
+      <div class="inline-flex items-center gap-2">
         <span class="w-6 border-t-[2.5px] border-sky-500"></span>
         <span>Dial Actual MTD</span>
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="inline-block h-3 w-3 rounded-full border-2 border-emerald-500 bg-white"></span>
         <span>Outbound Deals Goal Pace</span>
+      </div>
+      <div class="inline-flex items-center gap-2">
+        <span class="inline-block h-3 w-3 rounded-full border-2 border-amber-500 bg-white"></span>
+        <span>Outbound Deals Typical Pace</span>
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="inline-block h-3 w-3 rounded-full bg-violet-500"></span>
@@ -107,9 +115,50 @@
   var trendPoints = {{ data.trend_points | tojson }};
   var labels = trendPoints.map(function (point) { return point.label; });
   var dialGoalPct = trendPoints.map(function (point) { return point.dial_goal_pct; });
+  var dialTypicalPct = trendPoints.map(function (point) { return point.dial_typical_pct; });
   var dialActualPct = trendPoints.map(function (point) { return point.dial_actual_pct; });
   var coldGoalPct = trendPoints.map(function (point) { return point.cold_outreach_goal_pct; });
+  var coldTypicalPct = trendPoints.map(function (point) { return point.cold_outreach_typical_pct; });
   var coldActualPct = trendPoints.map(function (point) { return point.cold_outreach_actual_pct; });
+  var offsetGoalMarkersPlugin = {
+    id: 'offsetGoalMarkers',
+    afterDatasetsDraw: function(chart) {
+      var markerConfigs = [
+        {
+          label: 'Outbound Deals Goal Pace',
+          color: 'rgba(16, 185, 129, 0.9)',
+          offset: 7,
+          radius: 5
+        },
+        {
+          label: 'Outbound Deals Typical Pace',
+          color: 'rgba(245, 158, 11, 0.95)',
+          offset: -7,
+          radius: 4
+        }
+      ];
+      var ctx = chart.ctx;
+      ctx.save();
+      markerConfigs.forEach(function(config) {
+        var goalIndex = chart.data.datasets.findIndex(function(dataset) {
+          return dataset.label === config.label;
+        });
+        if (goalIndex === -1) return;
+        var meta = chart.getDatasetMeta(goalIndex);
+        meta.data.forEach(function(point) {
+          if (!point || point.skip) return;
+          ctx.beginPath();
+          ctx.arc(point.x + config.offset, point.y, config.radius, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = config.color;
+          ctx.stroke();
+        });
+      });
+      ctx.restore();
+    }
+  };
 
   new Chart(document.getElementById('progressChart'), {
     type: 'line',
@@ -141,16 +190,43 @@
           tension: 0.25
         },
         {
+          label: 'Dial Typical Pace',
+          data: dialTypicalPct,
+          borderColor: 'rgba(245, 158, 11, 0.9)',
+          borderDash: [2, 6],
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          pointHitRadius: 8,
+          tension: 0.2
+        },
+        {
           label: 'Outbound Deals Goal Pace',
           data: coldGoalPct,
           borderColor: 'rgba(16, 185, 129, 0.35)',
           backgroundColor: 'rgba(255,255,255,1)',
           borderWidth: 0,
-          pointRadius: 5,
-          pointHoverRadius: 6,
-          pointHitRadius: 10,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          pointHitRadius: 14,
           pointBorderWidth: 2,
           pointBorderColor: 'rgba(16, 185, 129, 0.9)',
+          pointBackgroundColor: 'rgba(255,255,255,1)',
+          showLine: false,
+          tension: 0.1
+        },
+        {
+          label: 'Outbound Deals Typical Pace',
+          data: coldTypicalPct,
+          borderColor: 'rgba(245, 158, 11, 0.22)',
+          backgroundColor: 'rgba(255,255,255,1)',
+          borderWidth: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          pointHitRadius: 12,
+          pointBorderWidth: 2,
+          pointBorderColor: 'rgba(245, 158, 11, 0.95)',
           pointBackgroundColor: 'rgba(255,255,255,1)',
           showLine: false,
           tension: 0.1
@@ -185,13 +261,27 @@
               if (ctx.dataset.label === 'Dial Goal Pace') {
                 return ' Dial Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_goal_raw.toLocaleString();
               }
+              if (ctx.dataset.label === 'Dial Typical Pace') {
+                return ' Dial Typical Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_typical_raw.toLocaleString();
+              }
               if (ctx.dataset.label === 'Dial Actual MTD') {
                 return ' Dial Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_actual_raw.toLocaleString();
               }
               if (ctx.dataset.label === 'Outbound Deals Goal Pace') {
                 return ' Outbound Deals Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_goal_raw;
               }
+              if (ctx.dataset.label === 'Outbound Deals Typical Pace') {
+                return ' Outbound Deals Typical Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_typical_raw.toLocaleString();
+              }
               return ' Outbound Deals Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_actual_raw.toLocaleString();
+            },
+            footer: function(items) {
+              if (!items.length) return '';
+              var point = trendPoints[items[0].dataIndex];
+              if (point.is_holiday && point.holiday_name) {
+                return point.holiday_name + ' · target pace does not advance';
+              }
+              return '';
             }
           }
         }
@@ -212,7 +302,8 @@
           title: { display: true, text: 'Percent of Goal Reached', color: '#9ca3af', font: { size: 11 } }
         }
       }
-    }
+    },
+    plugins: [offsetGoalMarkersPlugin]
   });
 }());
 </script>
