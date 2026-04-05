@@ -14,6 +14,24 @@
 
 {{ period_filter(period, periods) }}
 
+{# ── Rep filter ───────────────────────────────────────────────────────────── #}
+{% if not (loading is defined and loading) and data is defined and data.rows %}
+<div class="flex items-center gap-2 mb-3">
+  <label for="rep-select" class="text-xs font-semibold text-gray-400 uppercase tracking-widest shrink-0">Rep</label>
+  <select id="rep-select"
+          onchange="window.location.href=this.value"
+          class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer">
+    <option value="?period={{ period }}&rep=all" {% if not selected_row %}selected{% endif %}>All reps</option>
+    {% for row in data.rows %}
+    <option value="?period={{ period }}&rep={{ row.owner_id }}"
+            {% if selected_row and selected_row.owner_id == row.owner_id %}selected{% endif %}>
+      {{ row.ae }}
+    </option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
 {% if loading is defined and loading %}
 <meta http-equiv="refresh" content="12">
 <div class="flex flex-col items-center justify-center py-24 gap-5">
@@ -52,6 +70,88 @@
 </div>
 {% else %}
 
+{# ── Gap waterfall — only when a specific rep is selected ─────────────────── #}
+{% if waterfall %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <div class="flex items-start justify-between mb-1">
+    <div>
+      <h2 class="text-base font-semibold text-gray-800">What is driving the gap?</h2>
+      <p class="text-xs text-gray-400 mt-0.5">
+        Connect-rate contribution in percentage points · <strong class="text-gray-600">{{ selected_row.ae }}</strong>
+        vs team ({{ "%.1f"|format(t.connect_rate) }}% baseline)
+      </p>
+    </div>
+    <div class="text-right shrink-0 ml-4">
+      <p class="text-xs text-gray-400">Total gap</p>
+      <p class="text-lg font-bold tabular-nums
+        {% if waterfall.total_gap >= 0 %}text-green-600{% else %}text-red-500{% endif %}">
+        {% if waterfall.total_gap > 0 %}+{% endif %}{{ "%.1f"|format(waterfall.total_gap) }}pp
+      </p>
+    </div>
+  </div>
+  <div class="mt-4" style="position:relative;height:220px;">
+    <canvas id="waterfallChart"></canvas>
+  </div>
+</div>
+<script>
+(function () {
+  var dmi = {{ waterfall.dmi_contribution }};
+  var rei = {{ waterfall.rei_contribution }};
+  var tqi = {{ waterfall.tqi_contribution }};
+  var unx = {{ waterfall.unexplained }};
+
+  var barColors = [
+    dmi >= 0 ? 'rgba(109,40,217,0.80)' : 'rgba(109,40,217,0.40)',
+    rei >= 0 ? 'rgba(37,99,235,0.80)'  : 'rgba(37,99,235,0.40)',
+    tqi >= 0 ? 'rgba(217,119,6,0.80)'  : 'rgba(217,119,6,0.40)',
+    unx >= 0 ? 'rgba(107,114,128,0.55)': 'rgba(107,114,128,0.55)',
+  ];
+
+  new Chart(document.getElementById('waterfallChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Dial Mix (DMI)', 'Reach Efficiency (REI)', 'Timing (TQI)', 'Unexplained'],
+      datasets: [{
+        data: [dmi, rei, tqi, unx],
+        backgroundColor: barColors,
+        borderRadius: 6,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var v = ctx.parsed.y;
+              return ' ' + (v >= 0 ? '+' : '') + v.toFixed(2) + ' pp';
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.04)' },
+          ticks: { font: { size: 11 }, color: '#9ca3af' },
+        },
+        y: {
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: {
+            font: { size: 11 }, color: '#9ca3af',
+            callback: function(v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + 'pp'; },
+          },
+          title: { display: true, text: 'Connect rate pts', font: { size: 10 }, color: '#d1d5db' },
+        },
+      },
+    },
+  });
+}());
+</script>
+{% endif %}
+
 {# ── 2. Rep KPI table — all locked outcome + index KPIs side by side ──────── #}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
   <div class="px-6 py-4 border-b border-gray-100">
@@ -75,7 +175,7 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
-      <tr class="hover:bg-blue-50/60 transition-colors">
+      <tr class="hover:bg-blue-50/60 transition-colors{% if selected_row and selected_row.owner_id == row.owner_id %} bg-blue-50 ring-1 ring-inset ring-blue-200{% endif %}">
         <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
 
         {# KPI 1: Rep Connect % #}
@@ -206,7 +306,7 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
-      <tr class="hover:bg-blue-50/60 transition-colors">
+      <tr class="hover:bg-blue-50/60 transition-colors{% if selected_row and selected_row.owner_id == row.owner_id %} bg-blue-50 ring-1 ring-inset ring-blue-200{% endif %}">
         <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
         <td class="px-3 py-3 text-right tabular-nums font-semibold
           {% if row.dmi >= 110 %}text-green-600
@@ -268,7 +368,7 @@
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
       {% set dial_gap = row.avg_dials_per_day - 40 %}
-      <tr class="hover:bg-blue-50/60 transition-colors">
+      <tr class="hover:bg-blue-50/60 transition-colors{% if selected_row and selected_row.owner_id == row.owner_id %} bg-blue-50 ring-1 ring-inset ring-blue-200{% endif %}">
         <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
         <td class="px-3 py-3 text-right tabular-nums font-semibold
           {% if row.rei >= 110 %}text-green-600
@@ -367,7 +467,7 @@
       </thead>
       <tbody class="divide-y divide-gray-50">
         {% for row in rows %}
-        <tr class="hover:bg-gray-50/60 transition-colors">
+        <tr class="hover:bg-gray-50/60 transition-colors{% if selected_row and selected_row.owner_id == row.owner_id %} bg-blue-50 ring-1 ring-inset ring-blue-200{% endif %}">
           <td class="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{{ row.ae }}</td>
           <td class="px-2 py-2 text-center tabular-nums font-semibold
             {% if row.tqi >= 110 %}text-green-600

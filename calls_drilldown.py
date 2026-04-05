@@ -99,6 +99,22 @@ def connect_rate_drivers():
     # Resolve period label
     period_label = next((lbl for val, lbl in CALL_STATS_PERIODS if val == period), period)
 
+    # Rep filter — drill into a single rep vs team
+    rep_id = request.args.get("rep", "all")
+    selected_row = next((r for r in data["rows"] if r["owner_id"] == rep_id), None)
+
+    # Gap waterfall: attribute the explained gap to each driver bucket (in pp)
+    waterfall = None
+    if selected_row:
+        t_rate = data["team"]["connect_rate"]
+        waterfall = {
+            "dmi_contribution": round(t_rate * (selected_row["dmi"] - 100) / 100, 2),
+            "rei_contribution": round(t_rate * (selected_row["rei"] - 100) / 100, 2),
+            "tqi_contribution": round(t_rate * (selected_row["tqi"] - 100) / 100, 2),
+            "unexplained":      selected_row["actual_vs_expected"],
+            "total_gap":        selected_row["vs_team"],
+        }
+
     from app import NAV
     return render_template(
         "connect_rate_drivers.html",
@@ -106,6 +122,9 @@ def connect_rate_drivers():
         period=period,
         period_label=period_label,
         periods=CALL_STATS_PERIODS,
+        rep_id=rep_id,
+        selected_row=selected_row,
+        waterfall=waterfall,
         nav=NAV,
         active="calls_drilldown.connect_rate_drivers",
     )
