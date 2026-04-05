@@ -73,6 +73,44 @@ def calls_drilldown():
     )
 
 
+@bp.route("/calls/connect-rate-drivers")
+@_login_required
+def connect_rate_drivers():
+    period = request.args.get("period", "this_month")
+    if period not in {p for p, _ in CALL_STATS_PERIODS}:
+        period = "this_month"
+
+    if not is_cached(analytics.compute_connect_rate_drivers, period):
+        from app import NAV
+        return render_template(
+            "connect_rate_drivers.html",
+            loading=True, period=period,
+            periods=CALL_STATS_PERIODS,
+            nav=NAV, active="calls_drilldown.connect_rate_drivers",
+        ), 202
+
+    try:
+        data = analytics.compute_connect_rate_drivers(period)
+    except Exception as e:
+        log.exception("connect_rate_drivers error")
+        from app import NAV
+        return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
+
+    # Resolve period label
+    period_label = next((lbl for val, lbl in CALL_STATS_PERIODS if val == period), period)
+
+    from app import NAV
+    return render_template(
+        "connect_rate_drivers.html",
+        data=data,
+        period=period,
+        period_label=period_label,
+        periods=CALL_STATS_PERIODS,
+        nav=NAV,
+        active="calls_drilldown.connect_rate_drivers",
+    )
+
+
 @bp.route("/calls/dial-pipeline")
 @_login_required
 def dial_pipeline():
