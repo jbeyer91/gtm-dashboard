@@ -13,16 +13,27 @@
   {%- endif -%}
 {%- endmacro %}
 
-{% macro flow_card(label, actual, expected, gap, actual_note='') -%}
-<div class="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+{% macro impact_stage(label, expected, actual, gap, note='') -%}
+<div class="min-w-0">
   <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ label }}</p>
-  <p class="mt-3 text-3xl font-bold tracking-tight text-slate-900 tabular-nums">{{ "{:,}".format(actual|int) }}</p>
-  <p class="mt-1 text-sm text-slate-500">Expected by now: {{ "{:,}".format(expected|int) }}</p>
-  <p class="mt-2 text-sm font-semibold {% if gap < 0 %}text-red-500{% elif gap > 0 %}text-emerald-600{% else %}text-slate-500{% endif %}">
-    Gap: {{ gap_text(gap) }}
-  </p>
-  {% if actual_note %}
-  <p class="mt-1 text-xs text-slate-400">{{ actual_note }}</p>
+  <div class="mt-4 space-y-2">
+    <div class="flex items-baseline justify-between gap-4">
+      <span class="text-xs font-medium text-slate-500">Expected by now</span>
+      <span class="text-lg font-semibold text-slate-900 tabular-nums">{{ "{:,}".format(expected|int) }}</span>
+    </div>
+    <div class="flex items-baseline justify-between gap-4">
+      <span class="text-xs font-medium text-slate-500">Actual</span>
+      <span class="text-lg font-semibold text-slate-700 tabular-nums">{{ "{:,}".format(actual|int) }}</span>
+    </div>
+    <div class="flex items-baseline justify-between gap-4 pt-2 border-t border-slate-100">
+      <span class="text-xs font-medium text-slate-500">Gap</span>
+      <span class="text-sm font-semibold tabular-nums {% if gap < 0 %}text-red-500{% elif gap > 0 %}text-emerald-600{% else %}text-slate-500{% endif %}">
+        {{ gap_text(gap) }}
+      </span>
+    </div>
+  </div>
+  {% if note %}
+  <p class="mt-3 text-xs text-slate-400">{{ note }}</p>
   {% endif %}
 </div>
 {%- endmacro %}
@@ -47,7 +58,7 @@
 
 {% set t = data.totals %}
 
-<div class="mb-8">
+<div class="mb-6">
   <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Team Scorecard</p>
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     {{ stat_card("Team Avg Dials / Day per Rep", t.team_avg_dials_per_day, sub="Target: " ~ data.target_avg_dials_per_day ~ "/day") }}
@@ -56,26 +67,28 @@
   </div>
 </div>
 
-<div class="mb-8">
-  <div class="mb-3">
+<div class="mb-6">
+  <div class="mb-2">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Dials → Conversations → Cold Outreach Deals Created</p>
     <h2 class="text-base font-semibold text-gray-800 mt-1">How Dialing Pace Affects Cold Outreach Deals Created</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Shows how current dialing pace is likely affecting conversations and downstream Cold Outreach Deals Created.</p>
+    <p class="text-xs text-gray-400 mt-0.5">Compares expected pace-to-date versus actual performance across the team’s input, bridge, and output metrics.</p>
   </div>
-  <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-center">
-    {{ flow_card("Dials", t.dials, t.expected_dials_to_date, t.dials_gap_to_expected, "Target pace: " ~ "{:,}".format(t.team_target_dials_per_day) ~ " per business day") }}
-    <div class="hidden lg:flex items-center justify-center text-slate-300 text-3xl font-light">→</div>
-    {{ flow_card("Conversations", t.conversations, t.expected_conversations_to_date, t.conversations_gap_to_expected, fmt_pct(t.team_dial_to_conversation_rate) ~ " from current dials") }}
-    <div class="hidden lg:flex items-center justify-center text-slate-300 text-3xl font-light">→</div>
-    {{ flow_card("Cold Outreach Deals Created", t.outbound_deals_created, t.expected_cold_outreach_to_date, t.cold_outreach_gap_to_expected, fmt_pct(t.conversation_to_cold_outreach_rate) ~ " from conversations") }}
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-6">
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr] gap-4 lg:gap-5 items-start">
+      {{ impact_stage("Dials", t.expected_dials_to_date, t.dials, t.dials_gap_to_expected, "Target pace: " ~ "{:,}".format(t.team_target_dials_per_day) ~ " per working day") }}
+      <div class="hidden lg:flex items-center justify-center pt-9 text-slate-300 text-2xl font-light">→</div>
+      {{ impact_stage("Conversations", t.expected_conversations_to_date, t.conversations, t.conversations_gap_to_expected, fmt_pct(t.team_dial_to_conversation_rate) ~ " dial-to-conversation rate") }}
+      <div class="hidden lg:flex items-center justify-center pt-9 text-slate-300 text-2xl font-light">→</div>
+      {{ impact_stage("Cold Outreach Deals Created", t.expected_cold_outreach_to_date, t.outbound_deals_created, t.cold_outreach_gap_to_expected, fmt_pct(t.conversation_to_cold_outreach_rate) ~ " conversation-to-Cold Outreach rate") }}
+    </div>
   </div>
 </div>
 
 <div class="mb-8">
-  <div class="mb-3">
+  <div class="mb-2">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Progress Toward Monthly Dial and Outbound Goals</p>
     <h2 class="text-base font-semibold text-gray-800 mt-1">Progress Toward Monthly Dial and Outbound Goals</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Shows cumulative month-to-date progress toward dialing and outbound deal goals over time.</p>
+    <p class="text-xs text-gray-400 mt-0.5">Shows cumulative progress toward current goals using a 6-month historical typical pace curve.</p>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
     <div class="flex flex-wrap items-center gap-x-5 gap-y-3 mb-4 text-xs text-gray-500">
@@ -150,18 +163,6 @@
       labels: labels,
       datasets: [
         {
-          label: 'Dial Actual MTD',
-          data: dialActualPct,
-          borderColor: 'rgba(14, 165, 233, 1)',
-          backgroundColor: 'rgba(14, 165, 233, 0.08)',
-          borderWidth: 2.5,
-          fill: false,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          pointHitRadius: 8,
-          tension: 0.25
-        },
-        {
           label: 'Dial Typical Pace',
           data: dialTypicalPct,
           borderColor: 'rgba(245, 158, 11, 0.9)',
@@ -172,6 +173,18 @@
           pointHoverRadius: 0,
           pointHitRadius: 8,
           tension: 0.2
+        },
+        {
+          label: 'Dial Actual MTD',
+          data: dialActualPct,
+          borderColor: 'rgba(14, 165, 233, 1)',
+          backgroundColor: 'rgba(14, 165, 233, 0.08)',
+          borderWidth: 2.5,
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          pointHitRadius: 8,
+          tension: 0.25
         },
         {
           label: 'Outbound Deals Typical Pace',
@@ -193,7 +206,7 @@
           data: coldActualPct,
           borderColor: 'rgba(139, 92, 246, 0.35)',
           backgroundColor: 'rgba(139, 92, 246, 1)',
-          borderWidth: 1,
+          borderWidth: 0.8,
           pointRadius: 5,
           pointHoverRadius: 6,
           pointHitRadius: 10,
@@ -230,9 +243,9 @@
               if (!items.length) return '';
               var point = trendPoints[items[0].dataIndex];
               if (point.is_holiday && point.holiday_name) {
-                return point.holiday_name + ' · target pace does not advance';
+                return point.holiday_name + ' · typical pace does not advance';
               }
-              return '';
+              return 'Typical pace is based on the last 6 completed calendar months.';
             }
           }
         }
