@@ -76,9 +76,9 @@
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-6">
     <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr] gap-4 lg:gap-4 items-start">
       {{ impact_stage("Dials", t.expected_dials_to_date, t.dials, t.dials_gap_to_expected, "Target pace: " ~ "{:,}".format(t.team_target_dials_per_day) ~ " per working day") }}
-      <div class="hidden lg:flex items-center justify-center h-full pt-8 text-slate-300 text-[28px] font-light">→</div>
+      <div class="hidden lg:flex items-center justify-center h-full pt-8 text-slate-400 text-[30px] font-normal">→</div>
       {{ impact_stage("Conversations", t.expected_conversations_to_date, t.conversations, t.conversations_gap_to_expected, fmt_pct(t.team_dial_to_conversation_rate) ~ " dial-to-conversation rate") }}
-      <div class="hidden lg:flex items-center justify-center h-full pt-8 text-slate-300 text-[28px] font-light">→</div>
+      <div class="hidden lg:flex items-center justify-center h-full pt-8 text-slate-400 text-[30px] font-normal">→</div>
       {{ impact_stage("Cold Outreach Deals Created", t.expected_cold_outreach_to_date, t.outbound_deals_created, t.cold_outreach_gap_to_expected, fmt_pct(t.conversation_to_cold_outreach_rate) ~ " conversation-to-Cold Outreach rate") }}
     </div>
   </div>
@@ -94,7 +94,7 @@
     <div class="flex flex-wrap items-center gap-x-5 gap-y-3 mb-4 text-xs text-gray-500">
       <div class="inline-flex items-center gap-2">
         <span class="w-6 border-t-2 border-amber-500" style="border-top-style:dotted;"></span>
-        <span>Dial Typical Pace</span>
+        <span>Dial Goal Pace</span>
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="w-6 border-t-[2.5px] border-sky-500"></span>
@@ -102,7 +102,7 @@
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="inline-block h-3 w-3 rounded-full border-2 border-amber-500 bg-white"></span>
-        <span>Outbound Deals Typical Pace</span>
+        <span>Outbound Deals Goal Pace</span>
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="inline-block h-3 w-3 rounded-full bg-violet-500"></span>
@@ -128,7 +128,7 @@
     afterDatasetsDraw: function(chart) {
       var markerConfigs = [
         {
-          label: 'Outbound Deals Typical Pace',
+          label: 'Outbound Deals Goal Pace',
           color: 'rgba(245, 158, 11, 0.95)',
           offset: 0,
           radius: 5
@@ -163,7 +163,7 @@
       labels: labels,
       datasets: [
         {
-          label: 'Dial Typical Pace',
+          label: 'Dial Goal Pace',
           data: dialTypicalPct,
           borderColor: 'rgba(245, 158, 11, 0.9)',
           borderDash: [2, 6],
@@ -187,7 +187,7 @@
           tension: 0.25
         },
         {
-          label: 'Outbound Deals Typical Pace',
+          label: 'Outbound Deals Goal Pace',
           data: coldTypicalPct,
           borderColor: 'rgba(245, 158, 11, 0.22)',
           backgroundColor: 'rgba(255,255,255,1)',
@@ -228,14 +228,14 @@
           callbacks: {
             label: function(ctx) {
               var point = trendPoints[ctx.dataIndex];
-              if (ctx.dataset.label === 'Dial Typical Pace') {
-                return ' Dial Typical Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_typical_raw.toLocaleString();
+              if (ctx.dataset.label === 'Dial Goal Pace') {
+                return ' Dial Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_typical_raw.toLocaleString();
               }
               if (ctx.dataset.label === 'Dial Actual MTD') {
                 return ' Dial Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.dial_actual_raw.toLocaleString();
               }
-              if (ctx.dataset.label === 'Outbound Deals Typical Pace') {
-                return ' Outbound Deals Typical Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_typical_raw.toLocaleString();
+              if (ctx.dataset.label === 'Outbound Deals Goal Pace') {
+                return ' Outbound Deals Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_typical_raw.toLocaleString();
               }
               return ' Outbound Deals Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% of goal · ' + point.cold_outreach_actual_raw.toLocaleString();
             },
