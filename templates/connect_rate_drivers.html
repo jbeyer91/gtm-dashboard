@@ -110,7 +110,7 @@
   new Chart(document.getElementById('waterfallChart'), {
     type: 'bar',
     data: {
-      labels: ['Dial Mix (DMI)', 'Reach Efficiency (REI)', 'Timing (TQI)', 'Unexplained'],
+      labels: ['Dial Mix', 'Reach Efficiency', 'Timing', 'Unexplained'],
       datasets: [{
         data: [dmi, rei, tqi, unx],
         backgroundColor: barColors,
@@ -153,10 +153,20 @@
 {% endif %}
 
 {# ── 2. Rep KPI table — all locked outcome + index KPIs side by side ──────── #}
+
+{# Index legend callout #}
+<div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 py-2.5 mb-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-500">
+  <span class="font-semibold text-gray-600 whitespace-nowrap">How to read the index scores:</span>
+  <span class="whitespace-nowrap">Team average = <span class="font-semibold text-gray-700">100</span></span>
+  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-green-400 inline-block"></span><span class="font-semibold text-green-700">≥ 110</span> above team average</span>
+  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-gray-300 inline-block"></span><span class="font-semibold text-gray-600">90–109</span> near team average</span>
+  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-red-400 inline-block"></span><span class="font-semibold text-red-600">&lt; 90</span> below team average</span>
+</div>
+
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
   <div class="px-6 py-4 border-b border-gray-100">
     <h2 class="text-base font-semibold text-gray-800">Rep KPI Overview</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Sorted by connect rate · indexes: team = 100</p>
+    <p class="text-xs text-gray-400 mt-0.5">Sorted by connect rate · index scores are relative to team average (100)</p>
   </div>
   <table class="w-full text-sm">
     <thead>
@@ -167,9 +177,18 @@
         <th class="px-3 py-3 text-right font-semibold" title="KPI 4: Expected Connect %">Expected %</th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 5: Actual vs Expected">vs Expected</th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 6: Gap Explained % — how much of the delta vs team is explained by the tracked drivers">Gap Expl'd %</th>
-        <th class="px-3 py-3 text-right font-semibold" title="KPI 8: Dial Mix Index — ICP rank quality + line type quality; team = 100">DMI</th>
-        <th class="px-3 py-3 text-right font-semibold" title="KPI 9: Reach Efficiency Index — dial volume + voicemail rate + conversation rate; team = 100">REI</th>
-        <th class="px-3 py-3 text-right font-semibold" title="KPI 10: Timing Quality Index — peak-hour dial concentration; team = 100">TQI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="Dial Mix score — who you call (ICP rank) + what number you reach them at (line type). Above 100 = better dial mix than team average.">
+          <span class="block">Dial Mix</span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        </th>
+        <th class="px-3 py-3 text-right font-semibold" title="Reach Efficiency score — how much you dial (volume) + how effectively you reach people (voicemail rate + conversation rate). Above 100 = more efficient than team average.">
+          <span class="block">Reach Eff.</span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        </th>
+        <th class="px-3 py-3 text-right font-semibold" title="Timing score — how much of your dialing lands in the team's peak connect-rate hours. Above 100 = better timing than team average.">
+          <span class="block">Timing</span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        </th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 7: Field Coverage % — dials with all 3 required fields populated">Coverage %</th>
       </tr>
     </thead>
@@ -276,8 +295,8 @@
     </tbody>
   </table>
   <div class="px-6 pb-3 pt-1 flex flex-wrap gap-x-6 gap-y-1 text-[10px] text-gray-400">
-    <span><span class="font-semibold text-gray-500">DMI</span> = Dial Mix Index &nbsp;·&nbsp; <span class="font-semibold text-gray-500">REI</span> = Reach Efficiency Index &nbsp;·&nbsp; <span class="font-semibold text-gray-500">TQI</span> = Timing Quality Index &nbsp;·&nbsp; team baseline = 100 for all indexes</span>
-    <span><span class="font-semibold text-gray-500">Gap Expl'd %</span> = how much of this rep's Delta vs Team is explained by the three driver indexes · shown only when |delta| ≥ 0.5pp</span>
+    <span><span class="font-semibold text-gray-500">Gap Expl'd %</span> = how much of this rep's connect-rate gap vs team is explained by the three driver scores · shown only when |gap| ≥ 0.5pp</span>
+    <span><span class="font-semibold text-gray-500">Expected %</span> = predicted connect rate based on this rep's dial mix, reach efficiency, and timing scores vs team</span>
   </div>
 </div>
 
@@ -287,16 +306,16 @@
     <div>
       <div class="flex items-center gap-2">
         <h2 class="text-base font-semibold text-gray-800">Dial Mix</h2>
-        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">KPI 8 — DMI</span>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">driver score</span>
       </div>
-      <p class="text-xs text-gray-400 mt-0.5">ICP rank quality + line type quality of dialed contacts · ICP high % and direct line % color-coded vs team (±5pp)</p>
+      <p class="text-xs text-gray-400 mt-0.5">Who you call (ICP rank) + what number you reach them at (line type) · high-priority accounts and direct lines connect more often · green/red = ±5pp vs team</p>
     </div>
   </div>
   <table class="w-full text-sm">
     <thead>
       <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
         <th class="px-5 py-3 text-left font-semibold">Rep</th>
-        <th class="px-3 py-3 text-right font-semibold" title="KPI 8: Dial Mix Index (team = 100)">DMI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="Dial Mix score — above 100 means better dial mix than the team average; below 100 means worse">Mix Score</th>
         <th class="px-3 py-3 text-right font-semibold" title="% of dials to A+ or A ICP-ranked accounts">High ICP (A+/A) %</th>
         <th class="px-3 py-3 text-right font-semibold" title="% of dials to D or Suppress ICP-ranked accounts">Low ICP (D/Supr) %</th>
         <th class="px-3 py-3 text-right font-semibold" title="% of dials to contacts with no ICP rank set">No ICP Data %</th>
@@ -349,15 +368,15 @@
   <div class="px-6 py-4 border-b border-gray-100">
     <div class="flex items-center gap-2">
       <h2 class="text-base font-semibold text-gray-800">Reach Efficiency</h2>
-      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">KPI 9 — REI</span>
+      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">driver score</span>
     </div>
-    <p class="text-xs text-gray-400 mt-0.5">Dial volume + voicemail rate (inverted) + conversation rate · all three color-coded vs team average</p>
+    <p class="text-xs text-gray-400 mt-0.5">How much you dial (volume) + how often you reach people (lower voicemail + higher conversation rate) · green/red = vs team average</p>
   </div>
   <table class="w-full text-sm">
     <thead>
       <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
         <th class="px-5 py-3 text-left font-semibold">Rep</th>
-        <th class="px-3 py-3 text-right font-semibold" title="KPI 9: Reach Efficiency Index (team = 100)">REI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="Reach Efficiency score — above 100 means dialing more effectively than team average (higher volume, lower voicemail, more conversations); below 100 means less effective">Eff. Score</th>
         <th class="px-3 py-3 text-right font-semibold" title="Average dials per business day this period">Dials / Day</th>
         <th class="px-3 py-3 text-right font-semibold" title="Dials per day vs the 40/day target">vs 40 Target</th>
         <th class="px-3 py-3 text-right font-semibold" title="% of dials that resulted in a voicemail. Lower is better (inverted in REI).">Voicemail %</th>
@@ -430,9 +449,9 @@
   <div class="px-6 py-4 border-b border-gray-100">
     <div class="flex items-center gap-2">
       <h2 class="text-base font-semibold text-gray-800">Timing</h2>
-      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">KPI 10 — TQI</span>
+      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">driver score</span>
     </div>
-    <p class="text-xs text-gray-400 mt-0.5">Peak-hour dial concentration · peak hours computed from this period's team connect rate (min. 25 dials/hour) · amber = peak hours</p>
+    <p class="text-xs text-gray-400 mt-0.5">How much of your dialing lands in the team's peak connect-rate hours · amber columns = peak hours · above 100 means better timing than team average</p>
   </div>
 
   {# Peak hours banner #}
@@ -453,7 +472,7 @@
         <tr>
           <th class="px-3 py-1.5 text-left text-gray-400 font-semibold min-w-[90px]">Rep</th>
           <th class="px-2 py-1.5 text-center text-gray-400 font-semibold min-w-[50px]"
-              title="KPI 10: Timing Quality Index (team = 100)">TQI</th>
+              title="Timing score — above 100 means more dials in peak hours than team average; below 100 means less">Timing Score</th>
           <th class="px-2 py-1.5 text-center text-gray-400 font-semibold min-w-[60px]"
               title="% of this rep's dials that fell in the team's peak connect-rate hours">Peak %</th>
           {% for h in hours %}
