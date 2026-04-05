@@ -9,7 +9,7 @@
 {# ── Hero header ─────────────────────────────────────────────────────────── #}
 <div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps are above or below team-average connect rate · {{ ns_pl.label }}</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Dial Mix · Reach Efficiency · Timing · {{ ns_pl.label }}</p>
 </div>
 
 {{ period_filter(period, periods) }}
@@ -34,16 +34,16 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Team Connect Rate", "%.1f"|format(t.connect_rate) ~ "%",
                sub="target: 10%",
-               tip="% of outbound dials that reached a live person.") }}
-  {{ stat_card("Avg Dials / Day", "%.1f"|format(t.avg_dials_per_day),
+               tip="KPI 2: Team Avg Connect % — total connects / total outbound dials across all included reps.") }}
+  {{ stat_card("Field Coverage",    "%.0f"|format(t.field_coverage_pct) ~ "%",
+               sub="ICP + line type + timestamp",
+               tip="KPI 7: Field Coverage % — % of dials where all three required driver fields (ICP rank, line type, call timestamp) are populated. Low coverage reduces driver analysis reliability.") }}
+  {{ stat_card("Avg Dials / Day",   "%.1f"|format(t.avg_dials_per_day),
                sub="target: 40",
-               tip="Team-wide average dials per business day across this period.") }}
-  {{ stat_card("High-ICP Dial %", "%.1f"|format(t.icp_high_pct) ~ "%",
-               sub="A+ / A accounts",
-               tip="% of dials placed to the team's highest-priority ICP accounts (A+ or A rank). Higher concentrations tend to yield better connect rates.") }}
-  {{ stat_card("Peak-Hour Dial %", "%.1f"|format(t.peak_hour_pct) ~ "%",
+               tip="Team-wide average outbound dials per business day. Drives the volume component of Reach Efficiency Index.") }}
+  {{ stat_card("Peak-Hour Dial %",  "%.0f"|format(t.peak_hour_pct) ~ "%",
                sub=peak_labels|join(", ") if peak_labels else "—",
-               tip="% of dials made during the team's top 3 connect-rate hours (min. 25 dials). Computed dynamically from this period's data.") }}
+               tip="Team % of dials placed during the top 3 connect-rate hours (min. 25 dials each). Drives Timing Quality Index. Hours computed dynamically from this period's data.") }}
 </div>
 
 {% if not rows %}
@@ -52,203 +52,271 @@
 </div>
 {% else %}
 
-{# ── 2. Rep overview table ────────────────────────────────────────────────── #}
+{# ── 2. Rep KPI table — all locked outcome + index KPIs side by side ──────── #}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
   <div class="px-6 py-4 border-b border-gray-100">
-    <h2 class="text-base font-semibold text-gray-800">Rep Overview</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Sorted by connect rate · dots show driver signal vs team average</p>
+    <h2 class="text-base font-semibold text-gray-800">Rep KPI Overview</h2>
+    <p class="text-xs text-gray-400 mt-0.5">Sorted by connect rate · indexes: team = 100</p>
   </div>
   <table class="w-full text-sm">
     <thead>
       <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-        <th class="px-6 py-3 text-left font-semibold">Rep</th>
-        <th class="px-4 py-3 text-right font-semibold">Connect Rate</th>
-        <th class="px-4 py-3 text-right font-semibold">vs Team</th>
-        <th class="px-4 py-3 text-right font-semibold">Dials</th>
-        <th class="px-4 py-3 text-center font-semibold">
-          <span class="block">Dial Mix</span>
-        </th>
-        <th class="px-4 py-3 text-center font-semibold">
-          <span class="block">Behavior</span>
-        </th>
-        <th class="px-4 py-3 text-center font-semibold">
-          <span class="block">Timing</span>
-        </th>
+        <th class="px-5 py-3 text-left font-semibold">Rep</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 1: Rep Connect %">Connect %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 3: Delta vs Team Avg">vs Team</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 4: Expected Connect %">Expected %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 5: Actual vs Expected">vs Expected</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 6: Gap Explained % — how much of the delta vs team is explained by the tracked drivers">Gap Expl'd %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 8: Dial Mix Index — ICP rank quality + line type quality; team = 100">DMI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 9: Reach Efficiency Index — dial volume + voicemail rate + conversation rate; team = 100">REI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 10: Timing Quality Index — peak-hour dial concentration; team = 100">TQI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 7: Field Coverage % — dials with all 3 required fields populated">Coverage %</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
       <tr class="hover:bg-blue-50/60 transition-colors">
-        <td class="px-6 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-semibold
+        <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
+
+        {# KPI 1: Rep Connect % #}
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
           {% if row.connect_rate >= 10 %}text-green-600
           {% elif row.connect_rate >= 7 %}text-yellow-600
           {% else %}text-red-500{% endif %}">
           {{ "%.1f"|format(row.connect_rate) }}%
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-xs font-medium
+
+        {# KPI 3: Delta vs Team Avg #}
+        <td class="px-3 py-3 text-right tabular-nums text-xs font-medium
           {% if row.vs_team >= 2 %}text-green-600
           {% elif row.vs_team <= -2 %}text-red-500
           {% else %}text-gray-400{% endif %}">
-          {% if row.vs_team > 0 %}↑{% elif row.vs_team < 0 %}↓{% else %}—{% endif %}
-          {% if row.vs_team != 0 %}{{ "%.1f"|format(row.vs_team|abs) }}pp{% endif %}
+          {% if row.vs_team > 0 %}+{% endif %}{{ "%.1f"|format(row.vs_team) }}pp
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ "{:,}".format(row.dials) }}</td>
-        {# Signal dots — each macro: +1=green, 0=gray, -1=red #}
-        {% for sig in [row.signal_dial_mix, row.signal_behavior, row.signal_timing] %}
-        <td class="px-4 py-3 text-center">
-          <span class="inline-block w-3 h-3 rounded-full
-            {% if sig == 1 %}bg-green-400
-            {% elif sig == -1 %}bg-red-400
-            {% else %}bg-gray-300{% endif %}">
-          </span>
+
+        {# KPI 4: Expected Connect % #}
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">
+          {{ "%.1f"|format(row.expected_connect_rate) }}%
         </td>
-        {% endfor %}
+
+        {# KPI 5: Actual vs Expected #}
+        <td class="px-3 py-3 text-right tabular-nums text-xs font-medium
+          {% if row.actual_vs_expected >= 1 %}text-green-600
+          {% elif row.actual_vs_expected <= -1 %}text-red-500
+          {% else %}text-gray-400{% endif %}">
+          {% if row.actual_vs_expected > 0 %}+{% endif %}{{ "%.1f"|format(row.actual_vs_expected) }}pp
+        </td>
+
+        {# KPI 6: Gap Explained % #}
+        <td class="px-3 py-3 text-right tabular-nums text-xs
+          {% if row.gap_explained_pct is none %}text-gray-300
+          {% elif row.gap_explained_pct >= 70 %}text-green-600
+          {% elif row.gap_explained_pct >= 30 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {% if row.gap_explained_pct is none %}—{% else %}{{ "%.0f"|format(row.gap_explained_pct) }}%{% endif %}
+        </td>
+
+        {# KPI 8: Dial Mix Index #}
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
+          {% if row.dmi >= 110 %}text-green-600
+          {% elif row.dmi >= 90 %}text-gray-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.dmi) }}
+        </td>
+
+        {# KPI 9: Reach Efficiency Index #}
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
+          {% if row.rei >= 110 %}text-green-600
+          {% elif row.rei >= 90 %}text-gray-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.rei) }}
+        </td>
+
+        {# KPI 10: Timing Quality Index #}
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
+          {% if row.tqi >= 110 %}text-green-600
+          {% elif row.tqi >= 90 %}text-gray-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.tqi) }}
+        </td>
+
+        {# KPI 7: Field Coverage % #}
+        <td class="px-3 py-3 text-right tabular-nums text-xs
+          {% if row.field_coverage_pct >= 80 %}text-green-600
+          {% elif row.field_coverage_pct >= 50 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.field_coverage_pct) }}%
+        </td>
       </tr>
       {% endfor %}
+
       {# Team footer #}
       <tr class="border-t-2 border-gray-200 bg-gray-50 font-semibold text-sm">
-        <td class="px-6 py-3 text-gray-500 text-xs uppercase tracking-wider">Team</td>
-        <td class="px-4 py-3 text-right tabular-nums
+        <td class="px-5 py-3 text-gray-500 text-xs uppercase tracking-wider">Team avg</td>
+        <td class="px-3 py-3 text-right tabular-nums
           {% if t.connect_rate >= 10 %}text-green-600
           {% elif t.connect_rate >= 7 %}text-yellow-600
           {% else %}text-red-500{% endif %}">
           {{ "%.1f"|format(t.connect_rate) }}%
         </td>
-        <td class="px-4 py-3 text-right text-gray-400 text-xs">avg</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ "{:,}".format(tot.dials) }}</td>
-        <td class="px-4 py-3" colspan="3"></td>
+        <td class="px-3 py-3 text-center text-gray-400 text-xs">—</td>
+        <td class="px-3 py-3 text-center text-gray-400 text-xs">—</td>
+        <td class="px-3 py-3 text-center text-gray-400 text-xs">—</td>
+        <td class="px-3 py-3 text-center text-gray-400 text-xs">—</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">100</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">100</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">100</td>
+        <td class="px-3 py-3 text-right tabular-nums
+          {% if t.field_coverage_pct >= 80 %}text-green-600
+          {% elif t.field_coverage_pct >= 50 %}text-yellow-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(t.field_coverage_pct) }}%
+        </td>
       </tr>
     </tbody>
   </table>
+  <div class="px-6 pb-3 pt-1 flex flex-wrap gap-x-6 gap-y-1 text-[10px] text-gray-400">
+    <span><span class="font-semibold text-gray-500">DMI</span> = Dial Mix Index &nbsp;·&nbsp; <span class="font-semibold text-gray-500">REI</span> = Reach Efficiency Index &nbsp;·&nbsp; <span class="font-semibold text-gray-500">TQI</span> = Timing Quality Index &nbsp;·&nbsp; team baseline = 100 for all indexes</span>
+    <span><span class="font-semibold text-gray-500">Gap Expl'd %</span> = how much of this rep's Delta vs Team is explained by the three driver indexes · shown only when |delta| ≥ 0.5pp</span>
+  </div>
 </div>
 
-{# ── 3. Dial Mix ──────────────────────────────────────────────────────────── #}
+{# ── 3. Dial Mix (KPI 8) ──────────────────────────────────────────────────── #}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
   <div class="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
     <div>
-      <h2 class="text-base font-semibold text-gray-800">Dial Mix</h2>
-      <p class="text-xs text-gray-400 mt-0.5">Who you call and what number you reach them at</p>
+      <div class="flex items-center gap-2">
+        <h2 class="text-base font-semibold text-gray-800">Dial Mix</h2>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">KPI 8 — DMI</span>
+      </div>
+      <p class="text-xs text-gray-400 mt-0.5">ICP rank quality + line type quality of dialed contacts · ICP high % and direct line % color-coded vs team (±5pp)</p>
     </div>
-    <span class="text-xs text-gray-400 mt-1 max-w-xs text-right leading-relaxed hidden md:block"
-          title="High-ICP accounts (A+/A) and direct lines tend to have higher connect rates. Columns in green are above team average; red are below (threshold: ±5pp).">
-      A+/A ICP and direct lines tend to connect at higher rates
-    </span>
   </div>
   <table class="w-full text-sm">
     <thead>
       <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-        <th class="px-6 py-3 text-left font-semibold">Rep</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials to A+ or A ICP-ranked accounts">High ICP (A+/A) %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials to D or Suppress ICP-ranked accounts">Low ICP (D/Supr) %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials to contacts with no ICP rank set">Unknown ICP %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials to direct office or VoIP lines">Direct Line %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials to mobile numbers">Mobile %</th>
+        <th class="px-5 py-3 text-left font-semibold">Rep</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 8: Dial Mix Index (team = 100)">DMI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials to A+ or A ICP-ranked accounts">High ICP (A+/A) %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials to D or Suppress ICP-ranked accounts">Low ICP (D/Supr) %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials to contacts with no ICP rank set">No ICP Data %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials to direct office or VoIP lines">Direct Line %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials to mobile numbers">Mobile %</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
       <tr class="hover:bg-blue-50/60 transition-colors">
-        <td class="px-6 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
+        <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
+          {% if row.dmi >= 110 %}text-green-600
+          {% elif row.dmi >= 90 %}text-gray-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.dmi) }}
+        </td>
+        <td class="px-3 py-3 text-right tabular-nums font-medium
           {% if row.icp_high_pct > t.icp_high_pct + 5 %}text-green-600
           {% elif row.icp_high_pct < t.icp_high_pct - 5 %}text-red-500
           {% else %}text-gray-600{% endif %}">
           {{ "%.1f"|format(row.icp_high_pct) }}%
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ "%.1f"|format(row.icp_low_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(row.icp_unknown_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(row.icp_low_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-400">{{ "%.1f"|format(row.icp_unknown_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums font-medium
           {% if row.direct_line_pct > t.direct_line_pct + 5 %}text-green-600
           {% elif row.direct_line_pct < t.direct_line_pct - 5 %}text-red-500
           {% else %}text-gray-600{% endif %}">
           {{ "%.1f"|format(row.direct_line_pct) }}%
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ "%.1f"|format(row.mobile_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(row.mobile_pct) }}%</td>
       </tr>
       {% endfor %}
-      {# Team footer #}
       <tr class="border-t-2 border-gray-200 bg-gray-50 font-semibold text-sm">
-        <td class="px-6 py-3 text-gray-500 text-xs uppercase tracking-wider">Team</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.icp_high_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.icp_low_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(tot.icp_unknown_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.direct_line_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.mobile_pct) }}%</td>
+        <td class="px-5 py-3 text-gray-500 text-xs uppercase tracking-wider">Team</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">100</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.icp_high_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(tot.icp_low_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-400">{{ "%.1f"|format(tot.icp_unknown_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.direct_line_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(tot.mobile_pct) }}%</td>
       </tr>
     </tbody>
   </table>
 </div>
 
-{# ── 4. Dialing Behavior ──────────────────────────────────────────────────── #}
+{# ── 4. Reach Efficiency (KPI 9) ──────────────────────────────────────────── #}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
-  <div class="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
-    <div>
-      <h2 class="text-base font-semibold text-gray-800">Dialing Behavior</h2>
-      <p class="text-xs text-gray-400 mt-0.5">How much you dial and what happens when you do</p>
+  <div class="px-6 py-4 border-b border-gray-100">
+    <div class="flex items-center gap-2">
+      <h2 class="text-base font-semibold text-gray-800">Reach Efficiency</h2>
+      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">KPI 9 — REI</span>
     </div>
-    <span class="text-xs text-gray-400 mt-1 max-w-xs text-right leading-relaxed hidden md:block"
-          title="Low volume caps your connect ceiling. High voicemail rates signal poor list quality or off-hours dialing.">
-      Low volume caps your ceiling · high VM% signals poor list or off-hours dialing
-    </span>
+    <p class="text-xs text-gray-400 mt-0.5">Dial volume + voicemail rate (inverted) + conversation rate · all three color-coded vs team average</p>
   </div>
   <table class="w-full text-sm">
     <thead>
       <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-        <th class="px-6 py-3 text-left font-semibold">Rep</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Average dials per business day this period">Dials / Day</th>
-        <th class="px-4 py-3 text-right font-semibold" title="Dials per day vs the 40/day target">vs 40 Target</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials that resulted in a voicemail (Left voicemail or Left live message)">Voicemail %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of dials with no answer, busy, or wrong number">No Answer %</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of connected calls that lasted 60+ seconds">Convo Rate</th>
+        <th class="px-5 py-3 text-left font-semibold">Rep</th>
+        <th class="px-3 py-3 text-right font-semibold" title="KPI 9: Reach Efficiency Index (team = 100)">REI</th>
+        <th class="px-3 py-3 text-right font-semibold" title="Average dials per business day this period">Dials / Day</th>
+        <th class="px-3 py-3 text-right font-semibold" title="Dials per day vs the 40/day target">vs 40 Target</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials that resulted in a voicemail. Lower is better (inverted in REI).">Voicemail %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of dials with no answer, busy, or wrong number">No Answer %</th>
+        <th class="px-3 py-3 text-right font-semibold" title="% of connected calls lasting 60+ seconds">Convo Rate</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in rows %}
       {% set dial_gap = row.avg_dials_per_day - 40 %}
       <tr class="hover:bg-blue-50/60 transition-colors">
-        <td class="px-6 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
-        <td class="px-4 py-3 text-right tabular-nums font-semibold
+        <td class="px-5 py-3 font-medium text-gray-800 whitespace-nowrap">{{ row.ae }}</td>
+        <td class="px-3 py-3 text-right tabular-nums font-semibold
+          {% if row.rei >= 110 %}text-green-600
+          {% elif row.rei >= 90 %}text-gray-600
+          {% else %}text-red-500{% endif %}">
+          {{ "%.0f"|format(row.rei) }}
+        </td>
+        <td class="px-3 py-3 text-right tabular-nums font-medium
           {% if row.avg_dials_per_day >= 40 %}text-green-600
           {% elif row.avg_dials_per_day >= 30 %}text-yellow-600
           {% else %}text-red-500{% endif %}">
           {{ "%.1f"|format(row.avg_dials_per_day) }}
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-xs font-medium
+        <td class="px-3 py-3 text-right tabular-nums text-xs font-medium
           {% if dial_gap >= 0 %}text-green-600
           {% elif dial_gap >= -10 %}text-yellow-600
           {% else %}text-red-500{% endif %}">
           {% if dial_gap >= 0 %}+{% endif %}{{ "%.1f"|format(dial_gap) }}
         </td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
+        <td class="px-3 py-3 text-right tabular-nums font-medium
           {% if row.voicemail_pct < t.voicemail_pct - 3 %}text-green-600
           {% elif row.voicemail_pct > t.voicemail_pct + 10 %}text-red-500
           {% else %}text-gray-600{% endif %}">
           {{ "%.1f"|format(row.voicemail_pct) }}%
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ "%.1f"|format(row.no_answer_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums font-medium
-          {% if row.conversation_rate > t.connect_rate + 2 %}text-green-600
-          {% elif row.conversation_rate < t.connect_rate - 2 %}text-red-500
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(row.no_answer_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums font-medium
+          {% if row.conversation_rate > t.convo_rate + 5 %}text-green-600
+          {% elif row.conversation_rate < t.convo_rate - 5 %}text-red-500
           {% else %}text-gray-600{% endif %}">
           {{ "%.1f"|format(row.conversation_rate) }}%
         </td>
       </tr>
       {% endfor %}
-      {# Team footer #}
       <tr class="border-t-2 border-gray-200 bg-gray-50 font-semibold text-sm">
-        <td class="px-6 py-3 text-gray-500 text-xs uppercase tracking-wider">Team</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(t.avg_dials_per_day) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-500 text-xs">avg</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.voicemail_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.no_answer_pct) }}%</td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.conversation_rate) }}%</td>
+        <td class="px-5 py-3 text-gray-500 text-xs uppercase tracking-wider">Team</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-600">100</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(t.avg_dials_per_day) }}</td>
+        <td class="px-3 py-3 text-center text-gray-400 text-xs">avg</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(tot.voicemail_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-500">{{ "%.1f"|format(tot.no_answer_pct) }}%</td>
+        <td class="px-3 py-3 text-right tabular-nums text-gray-700">{{ "%.1f"|format(t.convo_rate) }}%</td>
       </tr>
     </tbody>
   </table>
 </div>
 
-{# ── 5. Timing ────────────────────────────────────────────────────────────── #}
+{# ── 5. Timing (KPI 10) ───────────────────────────────────────────────────── #}
 {% set hours = range(7, 21) %}
 {% set ns_max = namespace(val=1) %}
 {% for row in rows %}
@@ -260,8 +328,11 @@
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
   <div class="px-6 py-4 border-b border-gray-100">
-    <h2 class="text-base font-semibold text-gray-800">Timing</h2>
-    <p class="text-xs text-gray-400 mt-0.5">When reps dial · peak hours computed from this period's team connect rate data (min. 25 dials/hour)</p>
+    <div class="flex items-center gap-2">
+      <h2 class="text-base font-semibold text-gray-800">Timing</h2>
+      <span class="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">KPI 10 — TQI</span>
+    </div>
+    <p class="text-xs text-gray-400 mt-0.5">Peak-hour dial concentration · peak hours computed from this period's team connect rate (min. 25 dials/hour) · amber = peak hours</p>
   </div>
 
   {# Peak hours banner #}
@@ -272,37 +343,43 @@
       <span class="bg-amber-100 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">{{ lbl }}</span>
       {% endfor %}
     {% else %}
-      <span class="text-xs text-gray-400">Not enough data to determine peak hours this period</span>
+      <span class="text-xs text-gray-400">Not enough data to determine peak hours for this period (need ≥ 25 dials/hour)</span>
     {% endif %}
-    <span class="text-xs text-gray-400 ml-2">· amber cells = peak hours</span>
   </div>
 
-  {# Peak hour % table + heatmap #}
   <div class="px-2 py-3 overflow-x-auto">
     <table class="text-xs border-collapse w-full">
       <thead>
         <tr>
           <th class="px-3 py-1.5 text-left text-gray-400 font-semibold min-w-[90px]">Rep</th>
-          <th class="px-3 py-1.5 text-center text-gray-400 font-semibold min-w-[80px]"
-              title="% of this rep's dials that fell in the team's top 3 connect-rate hours">Peak %</th>
+          <th class="px-2 py-1.5 text-center text-gray-400 font-semibold min-w-[50px]"
+              title="KPI 10: Timing Quality Index (team = 100)">TQI</th>
+          <th class="px-2 py-1.5 text-center text-gray-400 font-semibold min-w-[60px]"
+              title="% of this rep's dials that fell in the team's peak connect-rate hours">Peak %</th>
           {% for h in hours %}
           <th class="px-1 py-1.5 text-center font-medium w-10
             {% if h in data.peak_hours %}text-amber-600{% else %}text-gray-400{% endif %}">
             {% if h < 12 %}{{ h }}a{% elif h == 12 %}12p{% else %}{{ h - 12 }}p{% endif %}
           </th>
           {% endfor %}
-          <th class="px-3 py-1.5 text-center text-gray-500 font-semibold min-w-[90px]">MTD Dials / Goal</th>
+          <th class="px-3 py-1.5 text-center text-gray-500 font-semibold min-w-[90px]">MTD / Goal</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-50">
         {% for row in rows %}
         <tr class="hover:bg-gray-50/60 transition-colors">
           <td class="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{{ row.ae }}</td>
-          <td class="px-3 py-2 text-center tabular-nums font-semibold
+          <td class="px-2 py-2 text-center tabular-nums font-semibold
+            {% if row.tqi >= 110 %}text-green-600
+            {% elif row.tqi >= 90 %}text-gray-600
+            {% else %}text-red-500{% endif %}">
+            {{ "%.0f"|format(row.tqi) }}
+          </td>
+          <td class="px-2 py-2 text-center tabular-nums font-medium
             {% if row.peak_hour_pct > t.peak_hour_pct + 5 %}text-green-600
             {% elif row.peak_hour_pct < t.peak_hour_pct - 5 %}text-red-500
             {% else %}text-gray-600{% endif %}">
-            {{ "%.0f"|format(row.peak_hour_pct) }}%
+            {% if data.peak_hours %}{{ "%.0f"|format(row.peak_hour_pct) }}%{% else %}—{% endif %}
           </td>
           {% for h in hours %}
           {% set v = row.by_hour.get(h, 0) %}
@@ -323,9 +400,7 @@
             {% endif %}
           </td>
           {% endfor %}
-          {# Pacing column #}
-          {% set tgt = row.target_dials %}
-          {% set pct_pace = (row.dials / tgt * 100) if tgt else 0 %}
+          {% set pct_pace = (row.dials / row.target_dials * 100) if row.target_dials else 0 %}
           <td class="px-3 py-2 text-center whitespace-nowrap">
             <span class="font-semibold tabular-nums
               {% if pct_pace >= 100 %}text-green-600
@@ -333,31 +408,37 @@
               {% else %}text-red-500{% endif %}">
               {{ "{:,}".format(row.dials) }}
             </span>
-            <span class="text-gray-400"> / {{ "{:,}".format(tgt) }}</span>
+            <span class="text-gray-400"> / {{ "{:,}".format(row.target_dials) }}</span>
           </td>
         </tr>
         {% endfor %}
+
         {# Team total row #}
-        {% set ns_team_total = namespace(dials=0, target=0) %}
+        {% set ns_tt = namespace(dials=0, target=0) %}
         {% for row in rows %}
-          {% set ns_team_total.dials = ns_team_total.dials + row.dials %}
-          {% set ns_team_total.target = ns_team_total.target + row.target_dials %}
+          {% set ns_tt.dials = ns_tt.dials + row.dials %}
+          {% set ns_tt.target = ns_tt.target + row.target_dials %}
         {% endfor %}
         <tr class="border-t-2 border-gray-200 bg-gray-50 font-semibold">
           <td class="px-3 py-2 text-gray-500 text-xs uppercase tracking-wider">Team</td>
-          <td class="px-3 py-2 text-center tabular-nums text-gray-600">{{ "%.0f"|format(t.peak_hour_pct) }}%</td>
+          <td class="px-2 py-2 text-center tabular-nums text-gray-600">100</td>
+          <td class="px-2 py-2 text-center tabular-nums text-gray-600">
+            {% if data.peak_hours %}{{ "%.0f"|format(t.peak_hour_pct) }}%{% else %}—{% endif %}
+          </td>
           {% for h in hours %}
           {% set ns_hsum = namespace(v=0) %}
           {% for row in rows %}{% set ns_hsum.v = ns_hsum.v + row.by_hour.get(h, 0) %}{% endfor %}
           {% set v = ns_hsum.v %}
           <td class="px-1 py-2 text-center tabular-nums
-            {% if h in data.peak_hours %}text-amber-600 font-semibold{% elif v > 0 %}text-gray-600{% else %}text-gray-300{% endif %}">
+            {% if h in data.peak_hours %}text-amber-600 font-semibold
+            {% elif v > 0 %}text-gray-600
+            {% else %}text-gray-300{% endif %}">
             {% if v > 0 %}{{ v }}{% else %}—{% endif %}
           </td>
           {% endfor %}
           <td class="px-3 py-2 text-center tabular-nums text-gray-600">
-            {{ "{:,}".format(ns_team_total.dials) }}
-            <span class="text-gray-400 font-normal"> / {{ "{:,}".format(ns_team_total.target) }}</span>
+            {{ "{:,}".format(ns_tt.dials) }}
+            <span class="text-gray-400 font-normal"> / {{ "{:,}".format(ns_tt.target) }}</span>
           </td>
         </tr>
       </tbody>
@@ -366,16 +447,13 @@
 
   {# Color legend #}
   <div class="px-6 pb-4 flex flex-wrap items-center gap-4">
-    <div class="flex items-center gap-3">
-      <span class="text-[10px] text-gray-400 uppercase tracking-wider">Dials:</span>
-      <span class="flex items-center gap-1 text-[10px] text-gray-500">
-        <span class="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block"></span>None
-      </span>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] text-gray-400 uppercase tracking-wider">Volume:</span>
       <span class="flex items-center gap-1 text-[10px] text-gray-500">
         <span class="inline-flex gap-0.5">
           <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.15)"></span>
-          <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.45)"></span>
-          <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.80)"></span>
+          <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.50)"></span>
+          <span class="w-3 h-3 rounded-sm inline-block" style="background-color:rgba(109,40,217,0.85)"></span>
         </span>Low → High
       </span>
     </div>
@@ -384,10 +462,17 @@
       <span class="flex items-center gap-1 text-[10px] text-amber-700">
         <span class="inline-flex gap-0.5">
           <span class="w-3 h-3 rounded-sm inline-block bg-amber-200"></span>
-          <span class="w-3 h-3 rounded-sm inline-block bg-amber-400"></span>
-          <span class="w-3 h-3 rounded-sm inline-block bg-amber-600"></span>
-        </span>Amber = peak hour
+          <span class="w-3 h-3 rounded-sm inline-block bg-amber-500"></span>
+        </span>Amber columns
       </span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] text-gray-400 uppercase tracking-wider">Index:</span>
+      <span class="text-[10px] text-green-600 font-medium">≥ 110 favorable</span>
+      <span class="text-[10px] text-gray-400">·</span>
+      <span class="text-[10px] text-gray-500">90–109 neutral</span>
+      <span class="text-[10px] text-gray-400">·</span>
+      <span class="text-[10px] text-red-500 font-medium">&lt; 90 unfavorable</span>
     </div>
   </div>
 </div>
