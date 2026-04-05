@@ -708,25 +708,37 @@ def compute_connect_rate_drivers(period: str) -> dict:
     """Per-rep connect rate driver analysis across three buckets.
 
     Buckets:
-      Dial Mix      — ICP rank and line type of dialed contacts
-      Dialing Behavior — volume, voicemail rate, conversation rate
-      Timing        — % of dials in the team's top-3 connect-rate hours
+      Dial Mix           — ICP rank and line type of dialed contacts
+      Reach Efficiency   — volume, voicemail rate, conversation rate
+      Timing             — % of dials in the team's top-3 connect-rate hours
+
+    Locked KPI registry:
+      Rep Connect %          — rep pct_connect for the period
+      Team Avg Connect %     — total connects / total dials across included reps
+      Delta vs Team Avg      — Rep Connect % − Team Avg Connect %
+      Dial Mix Index (DMI)   — composite index, team baseline = 100
+      Reach Efficiency Index (REI) — composite index, team baseline = 100
+      Timing Quality Index (TQI)   — composite index, team baseline = 100
+      Expected Connect %     — Team Avg × (DMI/100) × (REI/100) × (TQI/100)
+      Actual vs Expected     — Rep Connect % − Expected Connect %
+      Gap Explained %        — (Expected − Team Avg) / (Actual − Team Avg); None if gap < 0.5pp
+      Field Coverage %       — dials with ICP rank + line type + timestamp all populated
 
     Returns:
-      rows          — per-rep list sorted by connect_rate desc; each row has
-                      connect_rate, vs_team, dial-mix metrics, behavior metrics,
-                      timing metrics, and +1/0/-1 signal for each bucket
-      team          — team-level averages for all driver metrics
+      rows          — per-rep list sorted by connect_rate desc
+      team          — team-level baselines used as index denominators
+      totals        — team footer row values
       peak_hours    — list of up-to-3 CT hours identified as best connect hours
       peak_hours_labels — human-readable labels for peak_hours
       hourly_stats  — [{hour, label, dials, connects, pct|None}] CT 7–20
-      target_dials  — dials goal for the period
+      target_dials  — dials goal for the period (period_bdays × 40)
     """
     from zoneinfo import ZoneInfo
     ET = ZoneInfo("America/Chicago")
     DIALS_PER_DAY_GOAL = 40
     HOURLY_MIN = 5
     BEST_HOUR_MIN = 25
+    INDEX_CAP = 200.0   # cap individual index components to avoid extreme outliers
 
     start, end = get_date_range(period)
     period_bdays = max(sum(
@@ -775,8 +787,10 @@ def compute_connect_rate_drivers(period: str) -> dict:
             "team": {
                 "connect_rate": 0.0, "avg_dials_per_day": 0.0,
                 "icp_high_pct": 0.0, "direct_line_pct": 0.0,
-                "voicemail_pct": 0.0, "peak_hour_pct": 0.0,
+                "voicemail_pct": 0.0, "convo_rate": 0.0,
+                "peak_hour_pct": 0.0, "field_coverage_pct": 0.0,
             },
+            "totals": {},
             "peak_hours": [], "peak_hours_labels": [],
             "hourly_stats": _empty_hourly,
             "target_dials": target_dials,
@@ -787,12 +801,13 @@ def compute_connect_rate_drivers(period: str) -> dict:
     _ICP_MID  = {"B", "C"}
     _ICP_LOW  = {"D", "Suppress"}
 
-    # Single-pass accumulation
+    # Accumulator — tracks all fields needed for three driver buckets + coverage
     owner_acc = defaultdict(lambda: {
         "dials": 0, "connects": 0, "conversations": 0,
         "icp_high": 0, "icp_mid": 0, "icp_low": 0, "icp_unknown": 0,
         "direct_line": 0, "mobile": 0, "unknown_line": 0,
         "voicemail": 0, "no_answer": 0,
+        "field_covered": 0,  # dials with ICP rank + line type + timestamp all present
         "by_hour": defaultdict(int),
         "days": set(),
     })
@@ -803,6 +818,8 @@ def compute_connect_rate_drivers(period: str) -> dict:
         disp = (call["properties"].get("hs_call_disposition") or "").strip()
         is_connect = disp in CALL_CONNECTED_GUIDS
         duration_ms = int(call["properties"].get("hs_call_duration") or 0)
+        ts_raw = (call["properties"].get("hs_timestamp")
+                  or call["properties"].get("hs_createdate") or "")
 
         acc = owner_acc[oid]
         acc["dials"] += 1
@@ -838,9 +855,14 @@ def compute_connect_rate_drivers(period: str) -> dict:
         elif bucket == "No answer":
             acc["no_answer"] += 1
 
+        # Field coverage: all 3 required fields present
+        has_icp  = icp not in ("—", "")
+        has_line = line != "Unknown"
+        has_ts   = bool(ts_raw)
+        if has_icp and has_line and has_ts:
+            acc["field_covered"] += 1
+
         # Hour (CT)
-        ts_raw = (call["properties"].get("hs_timestamp")
-                  or call["properties"].get("hs_createdate") or "")
         try:
             hour_et = _parse_hs_datetime(ts_raw).astimezone(ET).hour
         except (ValueError, AttributeError):
@@ -853,15 +875,14 @@ def compute_connect_rate_drivers(period: str) -> dict:
                 hourly_raw[hour_et]["connects"] += 1
 
         # Active days
-        ts_raw2 = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-        if ts_raw2:
+        if ts_raw:
             try:
-                dt = datetime.fromisoformat(str(ts_raw2).replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
                 acc["days"].add(dt.strftime("%Y-%m-%d"))
             except Exception:
                 pass
 
-    # Team hourly stats
+    # ── Team hourly stats ─────────────────────────────────────────────────────
     hourly_stats = []
     for h in range(7, 21):
         v = hourly_raw.get(h, {"dials": 0, "connects": 0})
@@ -872,12 +893,11 @@ def compute_connect_rate_drivers(period: str) -> dict:
             "pct": _pct(c, d) if d >= HOURLY_MIN else None,
         })
 
-    # Peak hours: top 3 by connect rate with min 25 dials
+    # Peak hours: top 3 by connect rate (min 25 dials); pad by volume if fewer qualify
     qualifying = [s for s in hourly_stats if s["dials"] >= BEST_HOUR_MIN and s["pct"] is not None]
     qualifying.sort(key=lambda s: s["pct"], reverse=True)
     peak_slots = qualifying[:3]
     if len(peak_slots) < 3:
-        # pad with next-best by dial volume from hours not already selected
         selected_hours = {s["hour"] for s in peak_slots}
         by_vol = sorted(
             [s for s in hourly_stats if s["hour"] not in selected_hours and s["dials"] > 0],
@@ -888,25 +908,43 @@ def compute_connect_rate_drivers(period: str) -> dict:
     peak_hours_labels = [_hour_label(h) for h in peak_hours]
     peak_hours_set = set(peak_hours)
 
-    # Team totals
-    total_dials    = sum(a["dials"]    for a in owner_acc.values())
-    total_connects = sum(a["connects"] for a in owner_acc.values())
-    team_icp_high  = sum(a["icp_high"] for a in owner_acc.values())
-    team_direct    = sum(a["direct_line"] for a in owner_acc.values())
-    team_voicemail = sum(a["voicemail"] for a in owner_acc.values())
-    team_peak_dials = sum(
-        v for acc in owner_acc.values()
-        for h, v in acc["by_hour"].items() if h in peak_hours_set
+    # ── Team-level baselines (denominators for all index computations) ─────────
+    total_dials    = sum(a["dials"]        for a in owner_acc.values())
+    total_connects = sum(a["connects"]     for a in owner_acc.values())
+    total_convos   = sum(a["conversations"] for a in owner_acc.values())
+    total_icp_high = sum(a["icp_high"]     for a in owner_acc.values())
+    total_direct   = sum(a["direct_line"]  for a in owner_acc.values())
+    total_voicemail= sum(a["voicemail"]    for a in owner_acc.values())
+    total_covered  = sum(a["field_covered"] for a in owner_acc.values())
+    total_peak_dials = sum(
+        v for a in owner_acc.values()
+        for h, v in a["by_hour"].items() if h in peak_hours_set
     )
-    team_connect_rate    = _pct(total_connects, total_dials)
-    team_icp_high_pct    = _pct(team_icp_high, total_dials)
-    team_direct_line_pct = _pct(team_direct, total_dials)
-    team_voicemail_pct   = _pct(team_voicemail, total_dials)
-    team_peak_hour_pct   = _pct(team_peak_dials, total_dials)
     n_reps = len(owner_acc)
+
+    team_connect_rate    = _pct(total_connects, total_dials)
+    team_icp_high_pct    = _pct(total_icp_high, total_dials)
+    team_direct_line_pct = _pct(total_direct,   total_dials)
+    team_voicemail_pct   = _pct(total_voicemail, total_dials)
+    team_convo_rate      = _pct(total_convos,   total_connects)
+    team_peak_hour_pct   = _pct(total_peak_dials, total_dials)
+    team_field_coverage  = _pct(total_covered,  total_dials)
     team_avg_dials_per_day = round(total_dials / period_bdays / n_reps, 1) if n_reps else 0.0
 
-    # Per-rep rows
+    # ── Index helper: rep/team ratio × 100, capped, safe on zero denominators ──
+    def _idx(rep_val: float, team_val: float, inverted: bool = False) -> float:
+        """Return team-baseline-100 index. inverted=True means lower rep value is better."""
+        if inverted:
+            if not team_val:
+                return 100.0
+            if not rep_val:
+                return INDEX_CAP
+            return min(round((team_val / rep_val) * 100, 1), INDEX_CAP)
+        if not team_val:
+            return 100.0
+        return min(round((rep_val / team_val) * 100, 1), INDEX_CAP)
+
+    # ── Per-rep rows ──────────────────────────────────────────────────────────
     rows = []
     for oid, acc in owner_acc.items():
         owner = owners.get(oid, {})
@@ -914,11 +952,9 @@ def compute_connect_rate_drivers(period: str) -> dict:
         d, c  = acc["dials"], acc["connects"]
         convos = acc["conversations"]
 
-        n_days = len(acc["days"]) or period_bdays
-        avg_dials_per_day = round(d / period_bdays, 1)
-
-        connect_rate   = _pct(c, d)
-        vs_team        = round(connect_rate - team_connect_rate, 1)
+        avg_dials_per_day  = round(d / period_bdays, 1)
+        connect_rate       = _pct(c, d)
+        vs_team            = round(connect_rate - team_connect_rate, 1)
 
         icp_high_pct    = _pct(acc["icp_high"],    d)
         icp_mid_pct     = _pct(acc["icp_mid"],     d)
@@ -927,96 +963,120 @@ def compute_connect_rate_drivers(period: str) -> dict:
         direct_line_pct = _pct(acc["direct_line"], d)
         mobile_pct      = _pct(acc["mobile"],      d)
         unknown_line_pct = _pct(acc["unknown_line"], d)
-
         voicemail_pct    = _pct(acc["voicemail"],  d)
         no_answer_pct    = _pct(acc["no_answer"],  d)
         conversation_rate = _pct(convos, c)
+        field_coverage_pct = _pct(acc["field_covered"], d)
 
-        peak_dials   = sum(v for h, v in acc["by_hour"].items() if h in peak_hours_set)
+        peak_dials    = sum(v for h, v in acc["by_hour"].items() if h in peak_hours_set)
         peak_hour_pct = _pct(peak_dials, d)
 
-        # Driver signals (+1 favorable / 0 neutral / -1 unfavorable)
-        # Dial Mix: favorable if high-ICP or direct-line significantly above team avg
-        dial_mix_up = (
-            icp_high_pct > team_icp_high_pct + 5
-            or direct_line_pct > team_direct_line_pct + 5
-        )
-        dial_mix_down = (
-            icp_high_pct < team_icp_high_pct - 5
-            or direct_line_pct < team_direct_line_pct - 5
-        )
-        signal_dial_mix = 1 if dial_mix_up else (-1 if dial_mix_down else 0)
+        # ── Composite indexes (team baseline = 100) ───────────────────────────
+        # Dial Mix Index: ICP quality + line type quality
+        icp_component  = _idx(icp_high_pct,    team_icp_high_pct)
+        line_component = _idx(direct_line_pct, team_direct_line_pct)
+        dmi = round((icp_component + line_component) / 2, 1)
 
-        # Behavior: favorable if hitting dial target with low voicemail
-        behavior_up = avg_dials_per_day >= 40 and voicemail_pct <= team_voicemail_pct + 3
-        behavior_down = avg_dials_per_day < 30 or voicemail_pct > team_voicemail_pct + 10
-        signal_behavior = 1 if behavior_up else (-1 if behavior_down else 0)
+        # Reach Efficiency Index: volume + voicemail (inverted) + conversation rate
+        vol_comp   = _idx(avg_dials_per_day, team_avg_dials_per_day)
+        vm_comp    = _idx(voicemail_pct,     team_voicemail_pct, inverted=True)
+        convo_comp = _idx(conversation_rate, team_convo_rate)
+        rei = round((vol_comp + vm_comp + convo_comp) / 3, 1)
 
-        # Timing: favorable if peak-hour concentration is above team avg
-        signal_timing = (
-            1 if peak_hour_pct > team_peak_hour_pct + 5
-            else (-1 if peak_hour_pct < team_peak_hour_pct - 5 else 0)
+        # Timing Quality Index: peak-hour dial concentration
+        tqi = _idx(peak_hour_pct, team_peak_hour_pct) if peak_hours_set else 100.0
+
+        # ── Locked outcome KPIs ───────────────────────────────────────────────
+        expected_connect_rate = round(
+            team_connect_rate * (dmi / 100) * (rei / 100) * (tqi / 100), 1
+        )
+        actual_vs_expected = round(connect_rate - expected_connect_rate, 1)
+
+        gap = connect_rate - team_connect_rate
+        explained_gap = expected_connect_rate - team_connect_rate
+        gap_explained_pct = (
+            round((explained_gap / gap) * 100, 1) if abs(gap) >= 0.5 else None
         )
 
         rows.append({
             "ae": name, "owner_id": oid,
             "dials": d, "connects": c,
-            "connect_rate": connect_rate,
-            "vs_team": vs_team,
+            # Locked outcome KPIs
+            "connect_rate": connect_rate,            # KPI 1: Rep Connect %
+            "vs_team": vs_team,                      # KPI 3: Delta vs Team Avg
+            "expected_connect_rate": expected_connect_rate,  # KPI 4
+            "actual_vs_expected": actual_vs_expected,        # KPI 5
+            "gap_explained_pct": gap_explained_pct,          # KPI 6
+            "field_coverage_pct": field_coverage_pct,        # KPI 7
+            # Locked driver indexes
+            "dmi": dmi,   # KPI 8: Dial Mix Index
+            "rei": rei,   # KPI 9: Reach Efficiency Index
+            "tqi": tqi,   # KPI 10: Timing Quality Index
+            # Supporting raw metrics (Dial Mix)
             "avg_dials_per_day": avg_dials_per_day,
-            # Dial Mix
             "icp_high_pct": icp_high_pct, "icp_mid_pct": icp_mid_pct,
             "icp_low_pct": icp_low_pct, "icp_unknown_pct": icp_unknown_pct,
             "direct_line_pct": direct_line_pct, "mobile_pct": mobile_pct,
             "unknown_line_pct": unknown_line_pct,
-            # Dialing Behavior
+            # Supporting raw metrics (Reach Efficiency)
             "voicemail_pct": voicemail_pct, "no_answer_pct": no_answer_pct,
             "conversation_rate": conversation_rate,
-            # Timing
+            # Supporting raw metrics (Timing)
             "peak_hour_pct": peak_hour_pct,
             "by_hour": dict(acc["by_hour"]),
             "target_dials": target_dials,
-            # Signals
-            "signal_dial_mix": signal_dial_mix,
-            "signal_behavior": signal_behavior,
-            "signal_timing": signal_timing,
         })
 
     rows.sort(key=lambda r: r["connect_rate"], reverse=True)
 
+    # ── Team totals for footer rows ──────────────────────────────────────────
+    _total_voicemail_all  = sum(a["voicemail"]    for a in owner_acc.values())
+    _total_no_answer_all  = sum(a["no_answer"]    for a in owner_acc.values())
+    _total_icp_mid_all    = sum(a["icp_mid"]      for a in owner_acc.values())
+    _total_icp_low_all    = sum(a["icp_low"]      for a in owner_acc.values())
+    _total_icp_unk_all    = sum(a["icp_unknown"]  for a in owner_acc.values())
+    _total_mobile_all     = sum(a["mobile"]       for a in owner_acc.values())
+    _total_unk_line_all   = sum(a["unknown_line"] for a in owner_acc.values())
+
     return {
         "period": period,
+        # KPI 2: Team Avg Connect % (and other team baselines)
         "team": {
             "connect_rate": team_connect_rate,
             "avg_dials_per_day": team_avg_dials_per_day,
             "icp_high_pct": team_icp_high_pct,
             "direct_line_pct": team_direct_line_pct,
             "voicemail_pct": team_voicemail_pct,
+            "convo_rate": team_convo_rate,
             "peak_hour_pct": team_peak_hour_pct,
+            "field_coverage_pct": team_field_coverage,
         },
         "peak_hours": peak_hours,
         "peak_hours_labels": peak_hours_labels,
         "hourly_stats": hourly_stats,
         "target_dials": target_dials,
         "rows": rows,
-        # Team totals for footer rows
         "totals": {
             "dials": total_dials, "connects": total_connects,
             "connect_rate": team_connect_rate,
             "avg_dials_per_day": team_avg_dials_per_day,
+            "field_coverage_pct": team_field_coverage,
+            # Dial Mix
             "icp_high_pct": team_icp_high_pct,
-            "icp_mid_pct": _pct(sum(a["icp_mid"] for a in owner_acc.values()), total_dials),
-            "icp_low_pct": _pct(sum(a["icp_low"] for a in owner_acc.values()), total_dials),
-            "icp_unknown_pct": _pct(sum(a["icp_unknown"] for a in owner_acc.values()), total_dials),
+            "icp_mid_pct":  _pct(_total_icp_mid_all, total_dials),
+            "icp_low_pct":  _pct(_total_icp_low_all, total_dials),
+            "icp_unknown_pct": _pct(_total_icp_unk_all, total_dials),
             "direct_line_pct": team_direct_line_pct,
-            "mobile_pct": _pct(sum(a["mobile"] for a in owner_acc.values()), total_dials),
-            "unknown_line_pct": _pct(sum(a["unknown_line"] for a in owner_acc.values()), total_dials),
-            "voicemail_pct": team_voicemail_pct,
-            "no_answer_pct": _pct(sum(a["no_answer"] for a in owner_acc.values()), total_dials),
-            "conversation_rate": _pct(
-                sum(a["conversations"] for a in owner_acc.values()), total_connects
-            ),
+            "mobile_pct":   _pct(_total_mobile_all,   total_dials),
+            "unknown_line_pct": _pct(_total_unk_line_all, total_dials),
+            # Reach Efficiency
+            "voicemail_pct":  _pct(_total_voicemail_all, total_dials),
+            "no_answer_pct":  _pct(_total_no_answer_all, total_dials),
+            "conversation_rate": team_convo_rate,
+            # Timing
             "peak_hour_pct": team_peak_hour_pct,
+            # Indexes (team = 100 by definition)
+            "dmi": 100.0, "rei": 100.0, "tqi": 100.0,
         },
     }
 
