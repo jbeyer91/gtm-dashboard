@@ -134,7 +134,7 @@ NAV = [
     {"type": "group", "label": "Calls", "children": [
         {"endpoint": "call_stats",                    "label": "Summary"},
         {"endpoint": "calls_drilldown.calls_drilldown", "label": "Connect Analysis"},
-        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dial Pipeline"},
+        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dial to Pipeline"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
