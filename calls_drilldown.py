@@ -80,6 +80,10 @@ def connect_rate_drivers():
     if period not in {p for p, _ in CALL_STATS_PERIODS}:
         period = "this_month"
 
+    team = request.args.get("team", "all")
+    rep = request.args.get("rep", "all")
+    segment = request.args.get("segment", "all")
+
     if not is_cached(analytics.compute_connect_rate_drivers, period):
         from app import NAV
         return render_template(
@@ -90,7 +94,7 @@ def connect_rate_drivers():
         ), 202
 
     try:
-        data = analytics.compute_connect_rate_drivers(period)
+        data = analytics.compute_connect_rate_drivers(period, team=team, rep=rep, segment=segment)
     except Exception as e:
         log.exception("connect_rate_drivers error")
         from app import NAV
@@ -100,10 +104,20 @@ def connect_rate_drivers():
     period_label = next((lbl for val, lbl in CALL_STATS_PERIODS if val == period), period)
 
     from app import NAV
+    from app import TEAMS
+    rep_options = [{"value": "all", "label": "All reps"}] + [
+        {"value": r["owner_id"], "label": r["ae"]}
+        for r in data.get("rows", [])
+    ]
     return render_template(
         "connect_rate_drivers.html",
         data=data,
         period=period,
+        team=team,
+        rep=rep,
+        segment=segment,
+        teams=TEAMS,
+        rep_options=rep_options,
         period_label=period_label,
         periods=CALL_STATS_PERIODS,
         nav=NAV,
