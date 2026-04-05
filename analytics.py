@@ -704,7 +704,7 @@ def compute_connect_diagnostics(period: str) -> dict:
 
 
 @ttl_cache
-def compute_connect_rate_drivers(period: str) -> dict:
+def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all", segment: str = "all") -> dict:
     """Per-rep connect rate driver analysis across three buckets.
 
     Buckets:
@@ -781,8 +781,18 @@ def compute_connect_rate_drivers(period: str) -> dict:
         {"hour": h, "label": _hour_label(h), "dials": 0, "connects": 0, "pct": None}
         for h in range(7, 21)
     ]
+    if team and team != "all":
+        owner_team_map = get_owner_team_map()
+        filtered = [
+            c for c in filtered
+            if owner_team_map.get(c["properties"].get("hubspot_owner_id")) == team
+        ]
+
     if not filtered:
         return {
+            "filters": {"period": period, "team": team, "rep": rep, "segment": segment},
+            "view_mode": "rep" if rep != "all" else "team",
+            "selected_rep": None,
             "rows": [],
             "team": {
                 "connect_rate": 0.0, "avg_dials_per_day": 0.0,
@@ -794,6 +804,12 @@ def compute_connect_rate_drivers(period: str) -> dict:
             "peak_hours": [], "peak_hours_labels": [],
             "hourly_stats": _empty_hourly,
             "target_dials": target_dials,
+            "kpi_strip": {},
+            "gap_decomposition": {"start": 0.0, "end": 0.0, "buckets": []},
+            "driver_cards": {},
+            "team_comparison_rows": [],
+            "diagnostic_rows": [],
+            "state_flags": {"is_empty": True, "partial_explanation": True, "mixed_signal": True},
         }
 
     # ICP rank → bucket
@@ -1029,7 +1045,6 @@ def compute_connect_rate_drivers(period: str) -> dict:
 
     rows.sort(key=lambda r: r["connect_rate"], reverse=True)
 
-    # ── Team totals for footer rows ──────────────────────────────────────────
     _total_voicemail_all  = sum(a["voicemail"]    for a in owner_acc.values())
     _total_no_answer_all  = sum(a["no_answer"]    for a in owner_acc.values())
     _total_icp_mid_all    = sum(a["icp_mid"]      for a in owner_acc.values())
@@ -1038,8 +1053,77 @@ def compute_connect_rate_drivers(period: str) -> dict:
     _total_mobile_all     = sum(a["mobile"]       for a in owner_acc.values())
     _total_unk_line_all   = sum(a["unknown_line"] for a in owner_acc.values())
 
+    rows_by_oid = {r["owner_id"]: r for r in rows}
+    selected_row = rows_by_oid.get(rep) if rep != "all" else None
+    selected_rows = [selected_row] if selected_row else rows
+    focal = selected_row or {
+        "ae": "Selected Team",
+        "owner_id": "team",
+        "connect_rate": team_connect_rate,
+        "vs_team": 0.0,
+        "expected_connect_rate": team_connect_rate,
+        "actual_vs_expected": 0.0,
+        "gap_explained_pct": 100.0,
+        "field_coverage_pct": team_field_coverage,
+        "dmi": 100.0,
+        "rei": 100.0,
+        "tqi": 100.0,
+        "direct_line_pct": team_direct_line_pct,
+        "unknown_line_pct": _pct(_total_unk_line_all, total_dials),
+        "icp_high_pct": team_icp_high_pct,
+        "icp_mid_pct": _pct(_total_icp_mid_all, total_dials),
+        "peak_hour_pct": team_peak_hour_pct,
+        "dials": total_dials,
+        "voicemail_pct": team_voicemail_pct,
+    }
+
+    def _safe(v):
+        return None if v is None else round(v, 1)
+
+    dial_mix_pts = round(((focal["dmi"] - 100) / 100) * team_connect_rate, 1)
+    dialing_behavior_pts = round(((focal["rei"] - 100) / 100) * team_connect_rate, 1)
+    timing_pts = round(((focal["tqi"] - 100) / 100) * team_connect_rate, 1)
+    unexplained_pts = round(
+        focal["vs_team"] - (dial_mix_pts + dialing_behavior_pts + timing_pts),
+        1
+    )
+
+    gap_explained = focal.get("gap_explained_pct")
+    partial_explanation = (gap_explained is None) or (gap_explained < 60) or (focal["field_coverage_pct"] < 60)
+    mixed_signal = partial_explanation or abs(unexplained_pts) > 1.0
+
+    def _driver_rank(row):
+        contributions = [
+            ("Dial Mix", abs(((row["dmi"] - 100) / 100) * team_connect_rate)),
+            ("Dialing Behavior", abs(((row["rei"] - 100) / 100) * team_connect_rate)),
+            ("Timing", abs(((row["tqi"] - 100) / 100) * team_connect_rate)),
+        ]
+        contributions.sort(key=lambda t: t[1], reverse=True)
+        return contributions[0][0], contributions[1][0]
+
+    diagnostic_rows = []
+    for r in rows:
+        primary, secondary = _driver_rank(r)
+        diagnostic_rows.append({
+            "rep": r["ae"],
+            "owner_id": r["owner_id"],
+            "connect_pct": r["connect_rate"],
+            "delta_vs_team_avg": r["vs_team"],
+            "expected_pct": r["expected_connect_rate"],
+            "vs_expected": r["actual_vs_expected"],
+            "gap_explained_pct": r["gap_explained_pct"],
+            "primary_driver": primary,
+            "secondary_driver": secondary,
+        })
+
     return {
         "period": period,
+        "filters": {"period": period, "team": team, "rep": rep, "segment": segment},
+        "view_mode": "rep" if selected_row else "team",
+        "selected_rep": {
+            "owner_id": selected_row["owner_id"],
+            "name": selected_row["ae"],
+        } if selected_row else None,
         # KPI 2: Team Avg Connect % (and other team baselines)
         "team": {
             "connect_rate": team_connect_rate,
@@ -1056,6 +1140,90 @@ def compute_connect_rate_drivers(period: str) -> dict:
         "hourly_stats": hourly_stats,
         "target_dials": target_dials,
         "rows": rows,
+        "selected_rows": selected_rows,
+        "kpi_strip": {
+            "Rep Connect %": focal["connect_rate"],
+            "Team Avg Connect %": team_connect_rate,
+            "Delta vs Team Avg": focal["vs_team"],
+            "Expected Connect %": focal["expected_connect_rate"],
+            "Actual vs Expected": focal["actual_vs_expected"],
+            "Gap Explained %": focal["gap_explained_pct"],
+            "Field Coverage %": focal["field_coverage_pct"],
+        },
+        "gap_decomposition": {
+            "start": team_connect_rate,
+            "end": focal["connect_rate"],
+            "buckets": [
+                {"label": "Dial Mix", "pts": dial_mix_pts},
+                {"label": "Dialing Behavior", "pts": dialing_behavior_pts},
+                {"label": "Timing", "pts": timing_pts},
+                {"label": "Unexplained", "pts": unexplained_pts},
+            ],
+        },
+        "driver_cards": {
+            "dial_mix": {
+                "index_label": "Dial Mix Index",
+                "index_value": focal["dmi"],
+                "rows": [
+                    {"metric": "Direct Number Rate", "rep": _safe(focal["direct_line_pct"]), "team": _safe(team_direct_line_pct)},
+                    {"metric": "Shared Number Rate", "rep": _safe(focal["unknown_line_pct"]), "team": _safe(_pct(_total_unk_line_all, total_dials))},
+                    {"metric": "High-Confidence Phone Rate", "rep": _safe(100 - focal["unknown_line_pct"]), "team": _safe(100 - _pct(_total_unk_line_all, total_dials))},
+                    {"metric": "Buyer-Title Rate", "rep": None, "team": None},
+                    {"metric": "ICP A/B Rate", "rep": _safe(focal["icp_high_pct"] + focal["icp_mid_pct"]), "team": _safe(team_icp_high_pct + _pct(_total_icp_mid_all, total_dials))},
+                    {"metric": "Dial Mix Index", "rep": _safe(focal["dmi"]), "team": 100.0},
+                ],
+            },
+            "dialing_behavior": {
+                "index_label": "Reach Efficiency Index",
+                "index_value": focal["rei"],
+                "rows": [
+                    {"metric": "Unique Numbers / 100 Dials", "rep": None, "team": None},
+                    {"metric": "Repeat Dial Rate", "rep": None, "team": None},
+                    {"metric": "First Attempt Rate", "rep": None, "team": None},
+                    {"metric": "Shared-Number Recycle Rate", "rep": None, "team": None},
+                    {"metric": "Reach Efficiency Index", "rep": _safe(focal["rei"]), "team": 100.0},
+                ],
+            },
+            "timing": {
+                "index_label": "Timing Quality Index",
+                "index_value": focal["tqi"],
+                "rows": [
+                    {"metric": "Best-Window Dial Rate", "rep": _safe(focal["peak_hour_pct"]), "team": _safe(team_peak_hour_pct)},
+                    {"metric": "Weak-Window Dial Rate", "rep": _safe(100 - focal["peak_hour_pct"]), "team": _safe(100 - team_peak_hour_pct)},
+                    {"metric": "Connect Rate in Strong Windows", "rep": None, "team": None},
+                    {"metric": "Connect Rate in Weak Windows", "rep": None, "team": None},
+                    {"metric": "Timing Quality Index", "rep": _safe(focal["tqi"]), "team": 100.0},
+                ],
+            },
+        },
+        "team_comparison_rows": [
+            {
+                "rep": r["ae"],
+                "owner_id": r["owner_id"],
+                "connect_pct": r["connect_rate"],
+                "expected_pct": r["expected_connect_rate"],
+                "delta_vs_team_avg": r["vs_team"],
+                "actual_vs_expected": r["actual_vs_expected"],
+            }
+            for r in rows
+        ],
+        "diagnostic_rows": diagnostic_rows,
+        "state_flags": {
+            "is_empty": False,
+            "partial_explanation": partial_explanation,
+            "mixed_signal": mixed_signal,
+            "low_coverage": focal["field_coverage_pct"] < 60,
+            "small_sample": focal["dials"] < 60,
+        },
+        "tooltips": {
+            "Expected Connect %": "Estimated connect rate based on dial mix, dialing behavior, and timing conditions.",
+            "Actual vs Expected": "How much actual connect rate is above or below the modeled expectation.",
+            "Gap Explained %": "How much of the rep's gap versus team average is explained by measured drivers.",
+            "Field Coverage %": "Share of dials with the required fields used to explain the connect-rate gap.",
+            "Dial Mix Index": "Relative quality of reachable record mix versus the team baseline of 100.",
+            "Reach Efficiency Index": "Relative efficiency of creating fresh reach versus the team baseline of 100.",
+            "Timing Quality Index": "Relative quality of dialing windows versus the team baseline of 100.",
+        },
         "totals": {
             "dials": total_dials, "connects": total_connects,
             "connect_rate": team_connect_rate,
