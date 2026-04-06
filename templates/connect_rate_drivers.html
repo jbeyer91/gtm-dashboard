@@ -516,6 +516,11 @@ function updateParam(key, value) {
       },
       scales: {
         x: {
+          min: 0,
+          suggestedMax: (function() {
+            var finiteVals = actualValues.filter(function(v) { return isFinite(v) && v > 0; });
+            return finiteVals.length ? Math.max.apply(null, finiteVals) * 1.15 : 0.3;
+          }()),
           grid: { color: 'rgba(0,0,0,0.06)' },
           ticks: {
             color: '#94a3b8',
