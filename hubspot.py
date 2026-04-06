@@ -1,6 +1,7 @@
 import logging
 import os
 import requests
+import time
 
 log = logging.getLogger(__name__)
 logger = log
@@ -440,7 +441,6 @@ def get_prior_range(period: str):
 
 def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> list:
     """Fetch all matching records up to max_records (HubSpot caps at 10,000 per search)."""
-    import time
     results = []
     payload = {**payload, "limit": 200}
     after = None
@@ -806,16 +806,35 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
     return contacts
 
 
+def _post_with_retry(url: str, json_payload: dict, label: str):
+    """POST to HubSpot with up to 4 attempts, retrying on 429 rate-limit responses.
+
+    Returns the last ``requests.Response`` object. The caller is responsible for
+    checking ``resp.ok``; non-429 errors are returned immediately without retry.
+    """
+    for attempt in range(4):
+        resp = requests.post(url, headers=HEADERS, json=json_payload, timeout=_TIMEOUT)
+        if resp.status_code == 429:
+            wait = 2 ** attempt  # 1s, 2s, 4s, 8s
+            log.warning(
+                "HubSpot 429 rate limit for %s (attempt %d/4), retrying in %ds",
+                label, attempt + 1, wait,
+            )
+            time.sleep(wait)
+            continue
+        break  # success or non-429 error — exit retry loop
+    return resp
+
+
 def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
     """Batch fetch associations. Returns {from_id: [to_id, ...]}."""
     result = {}
     for i in range(0, len(from_ids), 100):
         batch = from_ids[i:i + 100]
-        resp = requests.post(
+        resp = _post_with_retry(
             f"{BASE_URL}/crm/v4/associations/{from_type}/{to_type}/batch/read",
-            headers=HEADERS,
-            json={"inputs": [{"id": str(fid)} for fid in batch]},
-            timeout=_TIMEOUT,
+            {"inputs": [{"id": str(fid)} for fid in batch]},
+            f"{from_type}->{to_type} associations",
         )
         if not resp.ok:
             continue
@@ -1062,14 +1081,13 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
     company_icp_ranks = {}
     for i in range(0, len(company_ids), 100):
         batch = company_ids[i:i + 100]
-        resp = requests.post(
+        resp = _post_with_retry(
             f"{BASE_URL}/crm/v3/objects/companies/batch/read",
-            headers=HEADERS,
-            json={
+            {
                 "inputs": [{"id": cid} for cid in batch],
                 "properties": ["icp_rank"],
             },
-            timeout=_TIMEOUT,
+            "companies batch/read",
         )
         if not resp.ok:
             continue
@@ -1077,10 +1095,9 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
             company_icp_ranks[str(company["id"])] = (company["properties"].get("icp_rank") or "").strip()
     for i in range(0, len(contact_ids), 100):
         batch = contact_ids[i:i + 100]
-        resp = requests.post(
+        resp = _post_with_retry(
             f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
-            headers=HEADERS,
-            json={
+            {
                 "inputs": [{"id": cid} for cid in batch],
                 "properties": [
                     "cop_line_type",
@@ -1094,7 +1111,7 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
                     "jobtitle",
                 ],
             },
-            timeout=_TIMEOUT,
+            "contacts batch/read",
         )
         if not resp.ok:
             continue
