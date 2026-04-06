@@ -1146,13 +1146,16 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
     """Return calls with _line_type, _icp_rank, and _contact_id pre-attached.
 
     Each item in the returned list is the original call dict extended with:
-      _line_type   — cop_line_type of the linked contact (or "Unknown")
-      _icp_rank    — company_icp_rank of the linked contact (or "—")
-      _contact_id  — HubSpot contact ID linked to this call (or None)
-      _email       — contact email
-      _phone       — contact phone
-      _mobilephone — contact mobile phone
-      _jobtitle    — contact title
+      _line_type            — cop_line_type of the linked contact (or "Unknown")
+      _icp_rank             — company_icp_rank of the linked contact, or company icp_rank
+                              for company-object calls, or "—" if unknown
+      _contact_id           — HubSpot contact ID linked to this call (or None)
+      _from_company_object  — True when the call has a company association but no
+                              contact association (rep dialled from the company record)
+      _email                — contact email
+      _phone                — contact phone
+      _mobilephone          — contact mobile phone
+      _jobtitle             — contact title
 
     Not cached — depends on get_calls() which is cached.
     """
@@ -1162,15 +1165,45 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
     call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
     contact_ids = list(set(call_to_contact.values()))
     contact_props = get_contacts_for_drilldown(contact_ids)
+
+    # For calls with no contact association, try to resolve ICP rank via company object
+    no_contact_ids = [c["id"] for c in calls if c["id"] not in call_to_contact]
+    call_to_company: dict = {}
+    co_icp_ranks: dict = {}
+    if no_contact_ids:
+        call_to_company = _batch_associations("calls", "companies", no_contact_ids)
+        company_ids = sorted({cid for cids in call_to_company.values() for cid in cids})
+        for i in range(0, len(company_ids), 100):
+            batch = company_ids[i:i + 100]
+            resp = _post_with_retry(
+                f"{BASE_URL}/crm/v3/objects/companies/batch/read",
+                {"inputs": [{"id": cid} for cid in batch], "properties": ["icp_rank"]},
+                "companies batch/read (call enrichment)",
+            )
+            if resp.ok:
+                for co in resp.json().get("results", []):
+                    co_icp_ranks[str(co["id"])] = (co["properties"].get("icp_rank") or "").strip()
+
     enriched = []
     for call in calls:
         contact_id = call_to_contact.get(call["id"])
         cp = contact_props.get(str(contact_id), {}) if contact_id else {}
+
+        from_company_object = contact_id is None and call["id"] in call_to_company
+        company_icp = ""
+        if from_company_object:
+            co_ids = call_to_company.get(call["id"], [])
+            company_icp = next(
+                (co_icp_ranks[str(cid)] for cid in co_ids if co_icp_ranks.get(str(cid))),
+                "",
+            )
+
         enriched.append({
             **call,
             "_line_type":             cp.get("cop_line_type") or "Unknown",
-            "_icp_rank":              cp.get("company_icp_rank") or "—",
+            "_icp_rank":              cp.get("company_icp_rank") or company_icp or "—",
             "_contact_id":            contact_id,
+            "_from_company_object":   from_company_object,
             "_email":                 cp.get("email") or "",
             "_phone":                 cp.get("phone") or "",
             "_mobilephone":           cp.get("mobilephone") or "",

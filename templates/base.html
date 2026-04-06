@@ -87,32 +87,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loader-spin { animation: spin 0.7s linear infinite; }
 
-    [data-tip] { position: relative; cursor: help; }
-    [data-tip]::after {
-      content: attr(data-tip);
-      position: absolute;
-      bottom: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1e293b;
-      color: #f1f5f9;
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 400;
-      line-height: 1.5;
-      white-space: normal;
-      width: max-content;
-      max-width: 240px;
-      text-align: center;
-      text-transform: none;
-      letter-spacing: 0;
-      z-index: 500;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
-    }
-    [data-tip]:hover::after { opacity: 1; }
+    [data-tip] { cursor: help; }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -373,6 +348,48 @@
   });
   document.addEventListener('submit', function() { loader.style.display = 'flex'; });
   window.addEventListener('pageshow', function(e) { if (e.persisted) loader.style.display = 'none'; });
+</script>
+<script>
+(function () {
+  var tip = null;
+  function showTip(el) {
+    var text = el.getAttribute('data-tip');
+    if (!text) return;
+    tip = document.createElement('div');
+    tip.id = '__datatip';
+    tip.style.cssText = [
+      'position:fixed', 'z-index:9999', 'pointer-events:none',
+      'background:#1e293b', 'color:#f1f5f9', 'padding:5px 10px',
+      'border-radius:6px', 'font-size:11px', 'font-weight:400',
+      'line-height:1.5', 'white-space:normal', 'max-width:240px',
+      'text-align:center', 'text-transform:none', 'letter-spacing:0',
+      'opacity:0', 'transition:opacity 0.15s'
+    ].join(';');
+    tip.textContent = text;
+    document.body.appendChild(tip);
+    var r = el.getBoundingClientRect();
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = r.left + r.width / 2 - tw / 2;
+    var top  = r.top - th - 6;
+    if (top < 4) top = r.bottom + 6;
+    left = Math.max(4, Math.min(left, window.innerWidth - tw - 4));
+    tip.style.left = left + 'px';
+    tip.style.top  = top  + 'px';
+    requestAnimationFrame(function () { if (tip) tip.style.opacity = '1'; });
+  }
+  function hideTip() {
+    if (tip) { tip.remove(); tip = null; }
+  }
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest('[data-tip]');
+    if (el) { hideTip(); showTip(el); }
+  });
+  document.addEventListener('mouseout', function (e) {
+    var el = e.target.closest('[data-tip]');
+    if (el) hideTip();
+  });
+  document.addEventListener('scroll', hideTip, true);
+})();
 </script>
 </body>
 </html>
