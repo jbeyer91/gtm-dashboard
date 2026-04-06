@@ -735,26 +735,46 @@ def _is_buyer_title(title: str) -> bool:
     return bool(t and any(token in t for token in _BUYER_TITLE_PATTERNS))
 
 
-_TITLE_CSUITE = ("chief", "ceo", "cto", "cfo", "coo", "ciso", "founder", "owner", "president", "partner")
-_TITLE_VP     = ("vp", "vice president")
-_TITLE_DIR    = ("director",)
-_TITLE_MGR    = ("manager",)
+_TITLE_SEGMENTS = [
+    ("Owner / Executive", (
+        re.compile(r"\bceo\b"), re.compile(r"\bcfo\b"), re.compile(r"\bcto\b"),
+        re.compile(r"\bcoo\b"), re.compile(r"\bciso\b"),
+        "owner", "chief", "founder", "president", "partner", "executive", "principal",
+    )),
+    ("Operations / General Manager", ("operations", "general manager", "ops manager", "plant manager", "branch manager", "regional manager")),
+    ("Field Supervisor / Site Manager", ("supervisor", "site manager", "field manager", "foreman", "superintendent", "crew lead")),
+    ("Scheduler / Dispatcher", ("scheduler", "dispatch", "coordinator", "logistics")),
+    ("Finance / Payroll", ("finance", "payroll", "accounting", "controller", "comptroller", "bookkeeper", "accounts payable", "accounts receivable", "billing")),
+    ("IT / Technical", (re.compile(r"\bit\b"), "information technology", "technical", "technology", "systems admin", "network admin", "helpdesk", "help desk", "sysadmin")),
+]
+
+TITLE_SEGMENT_ORDER = [
+    "No Title Available",
+    "Owner / Executive",
+    "Operations / General Manager",
+    "Field Supervisor / Site Manager",
+    "Scheduler / Dispatcher",
+    "Finance / Payroll",
+    "IT / Technical",
+    "Other",
+]
+
+
+def _title_keyword_match(keyword, text: str) -> bool:
+    if isinstance(keyword, re.Pattern):
+        return bool(keyword.search(text))
+    return keyword in text
 
 
 def _classify_title(title: str) -> str:
-    """Classify a job title into one of: csuite, vp, director, manager, other."""
+    """Classify a job title into one of the calling title segments."""
     t = (title or "").strip().lower()
     if not t:
-        return "other"
-    if any(tok in t for tok in _TITLE_CSUITE):
-        return "csuite"
-    if any(tok in t for tok in _TITLE_VP):
-        return "vp"
-    if any(tok in t for tok in _TITLE_DIR):
-        return "director"
-    if any(tok in t for tok in _TITLE_MGR):
-        return "manager"
-    return "other"
+        return "No Title Available"
+    for segment_label, keywords in _TITLE_SEGMENTS:
+        if any(_title_keyword_match(kw, t) for kw in keywords):
+            return segment_label
+    return "Other"
 
 
 def _looks_placeholder_email(email: str) -> bool:
@@ -894,7 +914,7 @@ def _build_connect_driver_aggregate(calls: list[dict], strong_hours: set[int], w
             "Shared Number Rate": shared_rate,
             "High-Confidence Phone Rate": high_conf_rate,
             "Buyer-Title Rate": buyer_rate,
-            "ICP A/B Rate": icp_ab_rate,
+            "ICP A–C Rate": icp_ab_rate,
             "Low ICP Rate": _safe_share_pct(low_icp_count, dials),
             "No ICP Data Rate": _safe_share_pct(no_icp_count, dials),
             "Company-Object Dial Rate": _safe_share_pct(company_object_count, dials),
@@ -934,8 +954,7 @@ def _build_driver_contributions(current_calls: list[dict], benchmark_calls: list
         metric_delta("Direct Number Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_direct"]),
         metric_delta("Shared Number Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_shared_number"]),
         metric_delta("High-Confidence Phone Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_high_conf_phone"]),
-        metric_delta("Buyer-Title Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_buyer_title"]),
-        metric_delta("ICP A/B Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_icp_ab"]),
+        metric_delta("ICP A–C Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_icp_ab"]),
     ])
     behavior = sum([
         metric_delta("First Attempt Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_first_attempt"]),
@@ -954,14 +973,44 @@ def _build_driver_contributions(current_calls: list[dict], benchmark_calls: list
     }
 
 
-def _build_driver_cards(current_stats: dict, benchmark_stats: dict) -> list[dict]:
+def _build_icp_breakdown(current_calls: list[dict], benchmark_calls: list[dict]) -> list[dict]:
+    ranks = ["A+", "A", "B", "C", "D", "Least Priority", "—"]
+    current_total = len(current_calls) or 1
+    benchmark_total = len(benchmark_calls) or 1
+    result = []
+    for rank in ranks:
+        rep_count = sum(1 for c in current_calls if c["icp_rank"] == rank)
+        team_count = sum(1 for c in benchmark_calls if c["icp_rank"] == rank)
+        result.append({
+            "rank": rank,
+            "rep": round(rep_count / current_total * 100, 1),
+            "team": round(team_count / benchmark_total * 100, 1),
+        })
+    return result
+
+
+def _build_title_breakdown(current_calls: list[dict], benchmark_calls: list[dict]) -> list[dict]:
+    current_total = len(current_calls) or 1
+    benchmark_total = len(benchmark_calls) or 1
+    result = []
+    for bucket in TITLE_SEGMENT_ORDER:
+        rep_count = sum(1 for c in current_calls if c["title_segment"] == bucket)
+        team_count = sum(1 for c in benchmark_calls if c["title_segment"] == bucket)
+        result.append({
+            "bucket": bucket,
+            "rep": round(rep_count / current_total * 100, 1),
+            "team": round(team_count / benchmark_total * 100, 1),
+        })
+    return result
+
+
+def _build_driver_cards(current_stats: dict, benchmark_stats: dict, current_calls: list[dict] | None = None, benchmark_calls: list[dict] | None = None) -> list[dict]:
     dial_mix_rows = []
     for label in (
         "Direct Number Rate",
         "Shared Number Rate",
         "High-Confidence Phone Rate",
-        "Buyer-Title Rate",
-        "ICP A/B Rate",
+        "ICP A–C Rate",
     ):
         rep = current_stats["metrics"][label]
         team = benchmark_stats["metrics"][label]
@@ -1023,6 +1072,8 @@ def _build_driver_cards(current_stats: dict, benchmark_stats: dict) -> list[dict
             "index_team_baseline": 100,
             "tip": "Composite read of reachable-record quality versus the selected team baseline. Shared Number Rate tracks the same normalized phone number attached to multiple contacts.",
             "rows": dial_mix_rows,
+            "icp_breakdown": _build_icp_breakdown(current_calls, benchmark_calls) if current_calls is not None else [],
+            "title_breakdown": _build_title_breakdown(current_calls, benchmark_calls) if current_calls is not None else [],
         },
         {
             "title": "Dialing Behavior",
@@ -1126,7 +1177,8 @@ def compute_connect_rate_drivers(
             "is_direct": line_type in {"Direct line", "Mobile"},
             "is_high_conf_phone": bool(normalized_phone and line_type != "Unknown"),
             "is_buyer_title": _is_buyer_title(jobtitle),
-            "is_icp_ab": icp_rank in {"A+", "A", "B"},
+            "title_segment": _classify_title(jobtitle),
+            "is_icp_ab": icp_rank in {"A+", "A", "B", "C"},
             "is_low_icp": icp_rank in {"D", "Least Priority"},
             "is_no_icp_data": icp_rank == "—",
             "is_from_company_object": call.get("_from_company_object", False),
@@ -1269,7 +1321,7 @@ def compute_connect_rate_drivers(
                 "Timing": contributions["Timing"],
                 "Unexplained": unexplained,
             },
-            "driver_cards": _build_driver_cards(owner_stats, current_team_stats),
+            "driver_cards": _build_driver_cards(owner_stats, current_team_stats, owner_calls, visible_calls),
             "stats": owner_stats,
         }
         rep_rows.append(row)
@@ -1384,7 +1436,7 @@ def compute_connect_rate_drivers(
         },
     ]
 
-    driver_cards = _build_driver_cards(selected_stats, selected_benchmark_stats)
+    driver_cards = _build_driver_cards(selected_stats, selected_benchmark_stats, selected_calls, selected_benchmark_calls)
     team_avg_row = {
         "rep": "Team Avg",
         "actual_connect_pct": current_team_stats["connect_pct"],

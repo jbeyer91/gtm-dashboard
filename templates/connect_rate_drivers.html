@@ -35,7 +35,7 @@
 </div>
 {% endmacro %}
 
-{% macro variance_row(row, is_aggregate=false) %}
+{% macro variance_row(row, is_aggregate=false, scope_label="Selected") %}
 {% set delta = row.delta %}
 {% set abs_delta = delta|abs %}
 {% set bar_width = [abs_delta * 8, 100]|min %}
@@ -46,7 +46,7 @@
       {% if is_aggregate %}
       <p class="text-xs text-slate-400 mt-0.5">Team avg: {{ row.display.rep }}</p>
       {% else %}
-      <p class="text-xs text-slate-400 mt-0.5">Rep {{ row.display.rep }} · Team {{ row.display.team }}</p>
+      <p class="text-xs text-slate-400 mt-0.5">{{ scope_label }} {{ row.display.rep }} · All-team avg {{ row.display.team }}</p>
       {% endif %}
     </div>
     {% if not is_aggregate %}
@@ -225,7 +225,7 @@
     </div>
     <div class="mt-4">
       {% for row in card.rows %}
-      {{ variance_row(row, is_aggregate=data.view.is_aggregate_view) }}
+      {{ variance_row(row, is_aggregate=data.view.is_aggregate_view, scope_label=(data.view.team|title if data.view.team != 'all' else 'All')) }}
       {% endfor %}
     </div>
 
@@ -238,7 +238,7 @@
         {% set rep_val = row.rep or 0 %}
         {% set team_val = row.team or 0 %}
         <div class="flex items-center gap-2">
-          <span class="text-xs font-medium text-slate-600 w-16 shrink-0">{{ row.rank }}</span>
+          <span class="text-xs font-medium text-slate-600 w-20 shrink-0">{{ row.rank }}</span>
           <div class="flex-1 h-2 bg-slate-100 rounded-full relative overflow-hidden">
             <div class="absolute inset-y-0 left-0 bg-indigo-400 rounded-full" style="width:{{ [rep_val, 100]|min }}%"></div>
           </div>
@@ -259,7 +259,7 @@
         {% set rep_val = row.rep or 0 %}
         {% set team_val = row.team or 0 %}
         <div class="flex items-center gap-2">
-          <span class="text-xs font-medium text-slate-600 w-16 shrink-0">{{ row.bucket }}</span>
+          <span class="text-xs font-medium text-slate-600 w-44 shrink-0">{{ row.bucket }}</span>
           <div class="flex-1 h-2 bg-slate-100 rounded-full relative overflow-hidden">
             <div class="absolute inset-y-0 left-0 bg-violet-400 rounded-full" style="width:{{ [rep_val, 100]|min }}%"></div>
           </div>
