@@ -80,7 +80,7 @@ def _normalize_connect_rate_driver_payload(
     normalized_cards = []
     for key, title, index_label, tip in card_map:
         card = driver_cards.get(key, {})
-        normalized_cards.append({
+        card_entry = {
             "title": title,
             "question": "",
             "index_label": index_label,
@@ -88,7 +88,11 @@ def _normalize_connect_rate_driver_payload(
             "index_team_baseline": 100,
             "tip": tip,
             "rows": _fmt_card_rows(card.get("rows")),
-        })
+        }
+        if key == "dial_mix":
+            card_entry["icp_breakdown"] = card.get("icp_breakdown", [])
+            card_entry["title_breakdown"] = card.get("title_breakdown", [])
+        normalized_cards.append(card_entry)
 
     rows = raw.get("rows", [])
     comparison_rows = []
@@ -164,7 +168,7 @@ def _normalize_connect_rate_driver_payload(
         "notes": {
             "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
             "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
-            "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+            "clearout_phone_source": "Line-type uses `cop_line_type` with automatic fallback to `clearoutphone_line_type` when blank. Additional ClearoutPhone fields (`clearoutphone_status`, `clearoutphone_carrier`) are fetched and available for future enrichment.",
         },
         "gap_decomposition": {
             "title": "What is driving the gap?",

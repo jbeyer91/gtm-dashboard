@@ -214,6 +214,48 @@
       {{ variance_row(row) }}
       {% endfor %}
     </div>
+
+    {# ICP Rank breakdown (Dial Mix card only) #}
+    {% if card.icp_breakdown is defined and card.icp_breakdown %}
+    <div class="mt-5 pt-4 border-t border-slate-100">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">ICP Rank — % of Dials</p>
+      <div class="space-y-1.5">
+        {% for row in card.icp_breakdown %}
+        {% set rep_val = row.rep or 0 %}
+        {% set team_val = row.team or 0 %}
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-slate-600 w-16 shrink-0">{{ row.rank }}</span>
+          <div class="flex-1 h-2 bg-slate-100 rounded-full relative overflow-hidden">
+            <div class="absolute inset-y-0 left-0 bg-indigo-400 rounded-full" style="width:{{ [rep_val, 100]|min }}%"></div>
+          </div>
+          <span class="text-xs tabular-nums text-slate-700 w-10 text-right">{{ "%.0f"|format(rep_val) }}%</span>
+          <span class="text-xs tabular-nums text-slate-400 w-14 text-right">team {{ "%.0f"|format(team_val) }}%</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# Title Segment breakdown (Dial Mix card only) #}
+    {% if card.title_breakdown is defined and card.title_breakdown %}
+    <div class="mt-5 pt-4 border-t border-slate-100">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">Title Segment — % of Dials</p>
+      <div class="space-y-1.5">
+        {% for row in card.title_breakdown %}
+        {% set rep_val = row.rep or 0 %}
+        {% set team_val = row.team or 0 %}
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-slate-600 w-16 shrink-0">{{ row.bucket }}</span>
+          <div class="flex-1 h-2 bg-slate-100 rounded-full relative overflow-hidden">
+            <div class="absolute inset-y-0 left-0 bg-violet-400 rounded-full" style="width:{{ [rep_val, 100]|min }}%"></div>
+          </div>
+          <span class="text-xs tabular-nums text-slate-700 w-10 text-right">{{ "%.0f"|format(rep_val) }}%</span>
+          <span class="text-xs tabular-nums text-slate-400 w-14 text-right">team {{ "%.0f"|format(team_val) }}%</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 </section>
@@ -265,9 +307,9 @@
           <th class="px-4 py-3 text-left font-semibold">Rep</th>
           <th class="px-4 py-3 text-right font-semibold">Connect %</th>
           <th class="px-4 py-3 text-right font-semibold">Delta vs Team</th>
-          <th class="px-4 py-3 text-right font-semibold">Expected %</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="Team Avg Connect % × (Dial Mix Index/100) × (Reach Efficiency Index/100) × (Timing Quality Index/100)">Expected %</th>
           <th class="px-4 py-3 text-right font-semibold">Vs Expected</th>
-          <th class="px-4 py-3 text-right font-semibold">Gap Explained %</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="% of the connect rate gap explained by measurable drivers (dial mix, efficiency, timing). Over 100% = drivers over-predict; under 100% = partial explanation.">Gap Explained %</th>
           <th class="px-4 py-3 text-right font-semibold">Shared # %</th>
           <th class="px-4 py-3 text-right font-semibold">Convo %</th>
           <th class="px-4 py-3 text-right font-semibold">Low ICP %</th>
@@ -340,6 +382,13 @@ function updateParam(key, value) {
   var gapLabels = gapBuckets.map(function (bucket) { return bucket.label; });
   var gapValues = gapBuckets.map(function (bucket) { return bucket.points; });
 
+  var gapAllZero = gapValues.every(function(v) { return v === 0; });
+  if (gapAllZero) {
+    var gapCanvas = document.getElementById('gapDecompositionChart');
+    var gapParent = gapCanvas.parentElement;
+    gapParent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">Insufficient field data — field coverage too low to decompose gap</div>';
+  } else {
+
   new Chart(document.getElementById('gapDecompositionChart'), {
     type: 'bar',
     data: {
@@ -382,6 +431,7 @@ function updateParam(key, value) {
       }
     }
   });
+  } // end gapAllZero else
 
   var comparisonRows = {{ data.team_comparison.rows | tojson }};
   var mode = {{ data.team_comparison.mode | tojson }};
@@ -411,6 +461,13 @@ function updateParam(key, value) {
       ctx.restore();
     }
   };
+
+  var compAllZero = actualValues.every(function(v) { return !v || v === 0; });
+  if (compAllZero) {
+    var compCanvas = document.getElementById('teamComparisonChart');
+    var compParent = compCanvas.parentElement;
+    compParent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">No connect data for this period — charts will populate once call data is available</div>';
+  } else {
 
   new Chart(document.getElementById('teamComparisonChart'), {
     data: {
@@ -470,6 +527,7 @@ function updateParam(key, value) {
     },
     plugins: [referenceLinePlugin]
   });
+  } // end compAllZero else
 }());
 </script>
 {% endif %}
