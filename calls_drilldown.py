@@ -1,4 +1,5 @@
 """Blueprint: /calls/connect-analysis — connect-rate diagnostics drill-down."""
+import inspect
 import logging
 from functools import wraps
 
@@ -30,6 +31,183 @@ DIAL_PIPELINE_PERIODS = [
 ]
 
 CONNECT_RATE_DRIVER_PERIODS = CALL_STATS_PERIODS
+
+
+def _normalize_connect_rate_driver_payload(
+    raw: dict,
+    period: str,
+    team: str,
+    rep: str,
+    segment: str,
+    comparison_mode: str,
+    table_sort: str,
+) -> dict:
+    """Adapt the older analytics payload shape to the newer team-only template."""
+    if raw is None:
+        return raw
+    if "team_comparison" in raw and "diagnostic_table" in raw:
+        return raw
+
+    state_flags = raw.get("state_flags", {})
+    kpi_strip = raw.get("kpi_strip", {})
+    team = raw.get("team", {})
+    totals = raw.get("totals", {})
+    driver_cards = raw.get("driver_cards", {})
+
+    def _fmt_card_rows(rows):
+        formatted = []
+        for row in rows or []:
+            rep_val = row.get("rep")
+            team_val = row.get("team")
+            if rep_val is None or team_val is None:
+                continue
+            delta = round(rep_val - team_val, 1)
+            formatted.append({
+                "label": row.get("metric", "Metric"),
+                "rep": rep_val,
+                "team": team_val,
+                "delta": delta,
+                "display": analytics._metric_display(row.get("metric", "Metric"), rep_val, team_val),
+            })
+        return formatted
+
+    card_map = [
+        ("dial_mix", "Dial Mix", "Dial Mix Index", "Composite read of reachable-record quality versus the selected team baseline."),
+        ("dialing_behavior", "Dialing Behavior", "Reach Efficiency Index", "Composite read of how efficiently the dialing pattern creates fresh reach."),
+        ("timing", "Timing", "Timing Quality Index", "Composite read of timing quality versus when the selected team tends to connect best."),
+    ]
+
+    normalized_cards = []
+    for key, title, index_label, tip in card_map:
+        card = driver_cards.get(key, {})
+        normalized_cards.append({
+            "title": title,
+            "question": "",
+            "index_label": index_label,
+            "index_value": round(card.get("index_value", 100)),
+            "index_team_baseline": 100,
+            "tip": tip,
+            "rows": _fmt_card_rows(card.get("rows")),
+        })
+
+    rows = raw.get("rows", [])
+    comparison_rows = []
+    diagnostic_rows = []
+    for row in rows:
+        comparison_rows.append({
+            "owner_id": row.get("owner_id"),
+            "rep": row.get("ae"),
+            "actual_connect_pct": row.get("connect_rate", 0.0),
+            "expected_connect_pct": row.get("expected_connect_rate", 0.0),
+            "delta_vs_team_avg": row.get("vs_team", 0.0),
+            "actual_vs_expected": row.get("actual_vs_expected", 0.0),
+            "selected": False,
+        })
+        diagnostic_rows.append({
+            "owner_id": row.get("owner_id"),
+            "rep": row.get("ae"),
+            "actual_connect_pct": row.get("connect_rate", 0.0),
+            "expected_connect_pct": row.get("expected_connect_rate", 0.0),
+            "delta_vs_team_avg": row.get("vs_team", 0.0),
+            "actual_vs_expected": row.get("actual_vs_expected", 0.0),
+            "gap_explained_pct": row.get("gap_explained_pct") if row.get("gap_explained_pct") is not None else 0.0,
+            "shared_number_rate": row.get("unknown_line_pct", 0.0),
+            "conversation_pct": row.get("conversation_rate", 0.0),
+            "low_icp_rate": row.get("icp_low_pct", 0.0),
+            "no_icp_data_rate": row.get("icp_unknown_pct", 0.0),
+            "primary_driver": next((d.get("primary_driver") for d in raw.get("diagnostic_rows", []) if d.get("owner_id") == row.get("owner_id")), "Dial Mix"),
+            "secondary_driver": next((d.get("secondary_driver") for d in raw.get("diagnostic_rows", []) if d.get("owner_id") == row.get("owner_id")), "Timing"),
+        })
+
+    gap_buckets = raw.get("gap_decomposition", {}).get("buckets", [])
+    normalized_gap_buckets = [
+        {"label": bucket.get("label", "Bucket"), "points": bucket.get("pts", 0.0)}
+        for bucket in gap_buckets
+    ]
+
+    period_label = next((label for value, label in CONNECT_RATE_DRIVER_PERIODS if value == period), period.replace("_", " ").title())
+    team_avg_connect = team.get("connect_rate", 0.0)
+
+    return {
+        "view": {
+            "period": period,
+            "period_label": period_label,
+            "team": team,
+            "rep": "all",
+            "rep_label": "All reps",
+            "segment": segment,
+            "segment_enabled": False,
+            "is_rep_view": False,
+        },
+        "filters": {
+            "teams": [{"value": "all", "label": "All"}],
+            "reps": [{"value": "all", "label": "All reps"}],
+            "segments": [],
+        },
+        "state": {
+            "loading": False,
+            "empty": state_flags.get("is_empty", False),
+            "partial_explanation": state_flags.get("partial_explanation", False),
+            "sample_too_small": state_flags.get("small_sample", False),
+            "field_coverage_weak": state_flags.get("low_coverage", False),
+            "message": "Partial explanation" if state_flags.get("partial_explanation", False) else "Strong explanation",
+        },
+        "kpis": [
+            {"label": "Selected Team Connect %", "value": kpi_strip.get("Rep Connect %", team_avg_connect), "display": f"{kpi_strip.get('Rep Connect %', team_avg_connect):.1f}%", "delta_points": None, "tip": None},
+            {"label": "Team Avg Connect %", "value": kpi_strip.get("Team Avg Connect %", team_avg_connect), "display": f"{kpi_strip.get('Team Avg Connect %', team_avg_connect):.1f}%", "delta_points": None, "tip": None},
+            {"label": "Delta vs Team Avg", "value": kpi_strip.get("Delta vs Team Avg", 0.0), "display": analytics._fmt_point_delta(kpi_strip.get("Delta vs Team Avg", 0.0)), "delta_points": kpi_strip.get("Delta vs Team Avg", 0.0), "tip": None},
+            {"label": "Expected Connect %", "value": kpi_strip.get("Expected Connect %", team_avg_connect), "display": f"{kpi_strip.get('Expected Connect %', team_avg_connect):.1f}%", "delta_points": None, "tip": "Estimated connect rate based on dial mix, dialing behavior, and timing only."},
+            {"label": "Actual vs Expected", "value": kpi_strip.get("Actual vs Expected", 0.0), "display": analytics._fmt_point_delta(kpi_strip.get("Actual vs Expected", 0.0)), "delta_points": kpi_strip.get("Actual vs Expected", 0.0), "tip": "Shows whether actual connect rate landed above or below the measured-condition benchmark."},
+            {"label": "Gap Explained %", "value": kpi_strip.get("Gap Explained %") or 0.0, "display": f"{(kpi_strip.get('Gap Explained %') or 0.0):.0f}%", "delta_points": None, "band": analytics._pct_band((kpi_strip.get('Gap Explained %') or 0.0)), "tip": "Shows how much of the gap versus team average is explained by the tracked drivers."},
+            {"label": "Field Coverage %", "value": kpi_strip.get("Field Coverage %", team.get("field_coverage_pct", 0.0)), "display": f"{kpi_strip.get('Field Coverage %', team.get('field_coverage_pct', 0.0)):.0f}%", "delta_points": None, "tip": "Shows how much of the analyzed dialing volume has the fields needed to explain the read confidently."},
+        ],
+        "notes": {
+            "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
+            "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
+            "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+        },
+        "gap_decomposition": {
+            "title": "What is driving the gap?",
+            "team_avg_connect_pct": raw.get("gap_decomposition", {}).get("start", team_avg_connect),
+            "rep_connect_pct": raw.get("gap_decomposition", {}).get("end", team_avg_connect),
+            "expected_connect_pct": kpi_strip.get("Expected Connect %", team_avg_connect),
+            "buckets": normalized_gap_buckets,
+        },
+        "driver_cards": normalized_cards,
+        "team_comparison": {
+            "mode": comparison_mode,
+            "modes": [
+                {"value": "connect_pct", "label": "Connect %"},
+                {"value": "delta_vs_team", "label": "Delta vs Team"},
+                {"value": "actual_vs_expected", "label": "Actual vs Expected"},
+            ],
+            "team_avg_connect_pct": team_avg_connect,
+            "rows": comparison_rows,
+        },
+        "diagnostic_table": {
+            "sort": table_sort,
+            "sorts": [
+                {"value": "worst_delta_vs_team", "label": "worst Delta vs Team"},
+                {"value": "worst_vs_expected", "label": "worst Vs Expected"},
+                {"value": "lowest_gap_explained", "label": "lowest Gap Explained %"},
+                {"value": "highest_connect", "label": "highest Connect %"},
+            ],
+            "rows": diagnostic_rows,
+            "team_avg_row": {
+                "rep": "Team Avg",
+                "actual_connect_pct": totals.get("connect_rate", team_avg_connect),
+                "delta_vs_team_avg": 0.0,
+                "expected_connect_pct": totals.get("connect_rate", team_avg_connect),
+                "actual_vs_expected": 0.0,
+                "gap_explained_pct": 100.0,
+                "shared_number_rate": totals.get("unknown_line_pct", 0.0),
+                "conversation_pct": totals.get("conversation_rate", team.get("convo_rate", 0.0)),
+                "low_icp_rate": totals.get("icp_low_pct", 0.0),
+                "no_icp_data_rate": totals.get("icp_unknown_pct", 0.0),
+            },
+        },
+        "rep_detail": {"selected_owner_id": None, "available": False},
+    }
 
 
 def _login_required(f):
@@ -125,17 +303,30 @@ def connect_rate_drivers():
     table_sort = request.args.get("table_sort", "worst_delta_vs_team")
 
     try:
-        # This view accepts presentation params that the scheduler does not prewarm,
-        # so a cold request must compute live instead of waiting on a cache key
-        # that may never be built by the background sync.
-        data = analytics.compute_connect_rate_drivers(
-            period,
-            team,
-            rep,
-            segment,
-            comparison_mode,
-            table_sort,
-        )
+        sig = inspect.signature(analytics.compute_connect_rate_drivers)
+        if "comparison_mode" in sig.parameters and "table_sort" in sig.parameters:
+            # This view accepts presentation params that the scheduler does not prewarm,
+            # so a cold request must compute live instead of waiting on a cache key
+            # that may never be built by the background sync.
+            data = analytics.compute_connect_rate_drivers(
+                period,
+                team,
+                rep,
+                segment,
+                comparison_mode,
+                table_sort,
+            )
+        else:
+            legacy_data = analytics.compute_connect_rate_drivers(period, team, rep, segment)
+            data = _normalize_connect_rate_driver_payload(
+                legacy_data,
+                period,
+                team,
+                rep,
+                segment,
+                comparison_mode,
+                table_sort,
+            )
     except Exception as e:
         log.exception("connect_rate_drivers error")
         from app import NAV
