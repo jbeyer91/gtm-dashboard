@@ -59,7 +59,7 @@
 
     /* Group children */
     .s-group-body { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
-    @media (min-width: 768px) { #sidebar:hover .s-group-body { max-height: 260px; } }
+    @media (min-width: 768px) { .s-group-wrapper.s-expanded .s-group-body { max-height: 260px; } }
     @media (max-width: 767px) { #sidebar.open .s-group-body { max-height: 260px; } }
 
     /* Section header icons: full opacity when collapsed (icon-only mode),
@@ -194,6 +194,7 @@
       {% elif item.type == "group" %}
         {% set ns = namespace(group_active=false) %}
         {% for sub in item.children %}{% if active == sub.endpoint %}{% set ns.group_active = true %}{% endif %}{% endfor %}
+        <div class="s-group-wrapper">
         <div class="mx-2 mt-4 mb-0">
           {# Section header — acts as a label, not a destination.
              In collapsed mode (52px icon-only) it shows the section icon at full opacity;
@@ -220,6 +221,10 @@
               <svg class="s-section-icon w-5 h-5 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
               </svg>
+            {% elif item.label == "Analytics" %}
+              <svg class="s-section-icon w-5 h-5 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
             {% elif item.label == "Marketing" %}
               <svg class="s-section-icon w-5 h-5 shrink-0 {{ 'text-violet-300' if ns.group_active else 'text-white' }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
@@ -245,6 +250,7 @@
             {% endfor %}
           </div>
         </div>
+        </div>{# end s-group-wrapper #}
 
       {% endif %}
     {% endfor %}
@@ -323,6 +329,36 @@
     document.getElementById('sidebar-backdrop').classList.remove('visible');
     document.getElementById('mob-menu-btn').style.display = '';
   }
+
+  // ── Per-section nav hover (desktop only) ────────────────────────────────────
+  (function() {
+    var sidebar = document.getElementById('sidebar');
+    var groups = document.querySelectorAll('.s-group-wrapper');
+
+    // Pre-expand the active group on page load
+    groups.forEach(function(g) {
+      if (g.querySelector('a[style*="inset 2px"]')) {
+        g.classList.add('s-expanded');
+      }
+    });
+
+    groups.forEach(function(g) {
+      g.addEventListener('mouseenter', function() {
+        groups.forEach(function(x) { x.classList.remove('s-expanded'); });
+        g.classList.add('s-expanded');
+      });
+    });
+
+    sidebar.addEventListener('mouseleave', function() {
+      // On mouse leave, restore only the active group
+      groups.forEach(function(g) { g.classList.remove('s-expanded'); });
+      groups.forEach(function(g) {
+        if (g.querySelector('a[style*="inset 2px"]')) {
+          g.classList.add('s-expanded');
+        }
+      });
+    });
+  })();
 
   // ── Page-load spinner ───────────────────────────────────────────────────────
   var loader = document.getElementById('page-loader');

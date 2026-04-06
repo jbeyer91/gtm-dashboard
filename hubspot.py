@@ -931,6 +931,7 @@ def get_companies_for_coverage() -> list:
                 "hs_last_call_date",
                 "name",
                 "in_active_sequence",
+                "active_since_transfer",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
@@ -1083,6 +1084,9 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
                 "inputs": [{"id": cid} for cid in batch],
                 "properties": [
                     "cop_line_type",
+                    "clearoutphone_status",
+                    "clearoutphone_line_type",
+                    "clearoutphone_carrier",
                     "company_icp_rank",
                     "email",
                     "phone",
@@ -1103,8 +1107,14 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
                     (company_icp_ranks.get(str(company_id), "").strip() for company_id in company_ids if company_icp_ranks.get(str(company_id), "").strip()),
                     "",
                 )
+            cop_line_type    = (c["properties"].get("cop_line_type") or "").strip()
+            clearout_line    = (c["properties"].get("clearoutphone_line_type") or "").strip()
             result[str(c["id"])] = {
-                "cop_line_type":    (c["properties"].get("cop_line_type") or "").strip(),
+                # Use cop_line_type; fall back to clearoutphone_line_type if blank
+                "cop_line_type":         cop_line_type or clearout_line,
+                "clearoutphone_status":  (c["properties"].get("clearoutphone_status") or "").strip(),
+                "clearoutphone_line_type": clearout_line,
+                "clearoutphone_carrier": (c["properties"].get("clearoutphone_carrier") or "").strip(),
                 "company_icp_rank": company_icp_rank,
                 "email":            (c["properties"].get("email") or "").strip(),
                 "phone":            (c["properties"].get("phone") or "").strip(),
@@ -1141,13 +1151,16 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
         cp = contact_props.get(str(contact_id), {}) if contact_id else {}
         enriched.append({
             **call,
-            "_line_type":   cp.get("cop_line_type") or "Unknown",
-            "_icp_rank":    cp.get("company_icp_rank") or "—",
-            "_contact_id":  contact_id,
-            "_email":       cp.get("email") or "",
-            "_phone":       cp.get("phone") or "",
-            "_mobilephone": cp.get("mobilephone") or "",
-            "_jobtitle":    cp.get("jobtitle") or "",
+            "_line_type":             cp.get("cop_line_type") or "Unknown",
+            "_icp_rank":              cp.get("company_icp_rank") or "—",
+            "_contact_id":            contact_id,
+            "_email":                 cp.get("email") or "",
+            "_phone":                 cp.get("phone") or "",
+            "_mobilephone":           cp.get("mobilephone") or "",
+            "_jobtitle":              cp.get("jobtitle") or "",
+            "_clearout_status":       cp.get("clearoutphone_status") or "",
+            "_clearout_line_type":    cp.get("clearoutphone_line_type") or "",
+            "_clearout_carrier":      cp.get("clearoutphone_carrier") or "",
         })
     return enriched
 

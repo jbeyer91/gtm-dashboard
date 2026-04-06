@@ -112,6 +112,11 @@ COVERAGE_PERIODS = [
     ("next_month", "Next Month"),
 ]
 
+INBOUND_PERIODS = [
+    ("this_week",  "This Week"),
+    ("last_week",  "Last Week"),
+] + PERIODS
+
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
@@ -133,9 +138,11 @@ NAV = [
     {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
     {"type": "group", "label": "Calls", "children": [
         {"endpoint": "call_stats",                    "label": "Summary"},
+    ]},
+    {"type": "group", "label": "Analytics", "children": [
         {"endpoint": "calls_drilldown.calls_drilldown", "label": "Connect Analysis"},
         {"endpoint": "calls_drilldown.connect_rate_drivers", "label": "Rate Drivers"},
-        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dial to Pipeline"},
+        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dials to Pipeline"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
@@ -966,7 +973,7 @@ def inbound_funnel():
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="inbound_funnel")
-    return render_template("inbound_funnel.html", data=data, periods=PERIODS,
+    return render_template("inbound_funnel.html", data=data, periods=INBOUND_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="inbound_funnel")
 
@@ -974,11 +981,27 @@ def inbound_funnel():
 @app.route("/abm")
 @login_required
 def abm():
+    period = request.args.get("period", "this_month")
+    valid_periods = [p[0] for p in DEAL_PERIODS]
+    if period not in valid_periods:
+        period = "this_month"
     try:
-        data = analytics.compute_abm_coverage()
+        data = analytics.compute_abm_coverage(period)
+        prior_data, prior_label = _prior(period, analytics.compute_abm_coverage)
+        t  = data["totals"]
+        pt = (prior_data or {}).get("totals")
+        deltas = {
+            "active_pct":  _d(t, pt, "active_pct"),
+            "created_n":   _d(t, pt, "created_n"),
+            "created_amt": _d(t, pt, "created_amt"),
+            "won_n":       _d(t, pt, "won_n"),
+            "won_amt":     _d(t, pt, "won_amt"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="abm")
-    return render_template("abm.html", data=data, nav=NAV, active="abm")
+    return render_template("abm.html", data=data, deltas=deltas,
+                           period=period, periods=DEAL_PERIODS, prior_label=prior_label,
+                           nav=NAV, active="abm")
 
 
 @app.route("/book-coverage")
@@ -1568,17 +1591,17 @@ def book_coverage_csv():
     data = _filter_by_team(data, team) if is_admin else _filter_by_owner(data, owner_id)
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Active (30d)", "Called (120d)",
-                "In Sequence", "Active %", "Called %", "In Seq %", "Overdue Tasks"])
+    w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Within ROE",
+                "In Sequence", "Within ROE %", "In Seq %", "Overdue Tasks"])
     for r in data["rows"]:
-        w.writerow([r["ae"], r["total_accounts"], r["ac_accounts"], r["active_30"],
-                    r["called_120"], r["in_sequence"],
-                    f"{r['pct_active_30']:.1f}%", f"{r['pct_called_120']:.1f}%",
+        w.writerow([r["ae"], r["total_accounts"], r["ac_accounts"], r["within_roe"],
+                    r["in_sequence"],
+                    f"{r['pct_within_roe']:.1f}%",
                     f"{r['pct_in_sequence']:.1f}%", r["overdue_tasks"]])
     t = data["totals"]
-    w.writerow(["TOTAL", t["total_accounts"], t["ac_accounts"], t["active_30"],
-                t["called_120"], t["in_sequence"],
-                f"{t['pct_active_30']:.1f}%", f"{t['pct_called_120']:.1f}%",
+    w.writerow(["TOTAL", t["total_accounts"], t["ac_accounts"], t["within_roe"],
+                t["in_sequence"],
+                f"{t['pct_within_roe']:.1f}%",
                 f"{t['pct_in_sequence']:.1f}%", t["overdue_tasks"]])
     return Response(out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=book-coverage.csv"})

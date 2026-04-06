@@ -735,6 +735,28 @@ def _is_buyer_title(title: str) -> bool:
     return bool(t and any(token in t for token in _BUYER_TITLE_PATTERNS))
 
 
+_TITLE_CSUITE = ("chief", "ceo", "cto", "cfo", "coo", "ciso", "founder", "owner", "president", "partner")
+_TITLE_VP     = ("vp", "vice president")
+_TITLE_DIR    = ("director",)
+_TITLE_MGR    = ("manager",)
+
+
+def _classify_title(title: str) -> str:
+    """Classify a job title into one of: csuite, vp, director, manager, other."""
+    t = (title or "").strip().lower()
+    if not t:
+        return "other"
+    if any(tok in t for tok in _TITLE_CSUITE):
+        return "csuite"
+    if any(tok in t for tok in _TITLE_VP):
+        return "vp"
+    if any(tok in t for tok in _TITLE_DIR):
+        return "director"
+    if any(tok in t for tok in _TITLE_MGR):
+        return "manager"
+    return "other"
+
+
 def _looks_placeholder_email(email: str) -> bool:
     e = (email or "").strip().lower()
     return bool(e and any(token in e for token in _PLACEHOLDER_EMAIL_PATTERNS))
@@ -1548,7 +1570,14 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
     # Accumulator — tracks all fields needed for three driver buckets + coverage
     owner_acc = defaultdict(lambda: {
         "dials": 0, "connects": 0, "conversations": 0,
+        # ICP rank — aggregated buckets (used for DMI)
         "icp_high": 0, "icp_mid": 0, "icp_low": 0, "icp_unknown": 0,
+        # ICP rank — per-rank breakdown
+        "icp_a_plus": 0, "icp_a": 0, "icp_b": 0, "icp_c": 0,
+        "icp_d": 0, "icp_suppress": 0,
+        # Title buckets
+        "title_csuite": 0, "title_vp": 0, "title_director": 0,
+        "title_manager": 0, "title_other": 0,
         "direct_line": 0, "mobile": 0, "unknown_line": 0,
         "voicemail": 0, "no_answer": 0,
         "field_covered": 0,  # dials with ICP rank + line type + timestamp all present
@@ -1582,6 +1611,24 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             acc["icp_low"] += 1
         else:
             acc["icp_unknown"] += 1
+
+        # Per-rank ICP breakdown
+        if icp == "A+":
+            acc["icp_a_plus"] += 1
+        elif icp == "A":
+            acc["icp_a"] += 1
+        elif icp == "B":
+            acc["icp_b"] += 1
+        elif icp == "C":
+            acc["icp_c"] += 1
+        elif icp == "D":
+            acc["icp_d"] += 1
+        elif icp == "Suppress":
+            acc["icp_suppress"] += 1
+
+        # Title bucket
+        title_bucket = _classify_title(call.get("_jobtitle", ""))
+        acc[f"title_{title_bucket}"] += 1
 
         # Line type bucket
         line = _normalize_line_type(call.get("_line_type", ""))
@@ -1704,6 +1751,19 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         icp_mid_pct     = _pct(acc["icp_mid"],     d)
         icp_low_pct     = _pct(acc["icp_low"],     d)
         icp_unknown_pct = _pct(acc["icp_unknown"], d)
+        # Per-rank ICP
+        icp_a_plus_pct  = _pct(acc["icp_a_plus"],  d)
+        icp_a_pct       = _pct(acc["icp_a"],       d)
+        icp_b_pct       = _pct(acc["icp_b"],       d)
+        icp_c_pct       = _pct(acc["icp_c"],       d)
+        icp_d_pct       = _pct(acc["icp_d"],       d)
+        icp_suppress_pct= _pct(acc["icp_suppress"],d)
+        # Title breakdown
+        title_csuite_pct  = _pct(acc["title_csuite"],   d)
+        title_vp_pct      = _pct(acc["title_vp"],       d)
+        title_dir_pct     = _pct(acc["title_director"],  d)
+        title_mgr_pct     = _pct(acc["title_manager"],   d)
+        title_other_pct   = _pct(acc["title_other"],     d)
         direct_line_pct = _pct(acc["direct_line"], d)
         mobile_pct      = _pct(acc["mobile"],      d)
         unknown_line_pct = _pct(acc["unknown_line"], d)
@@ -1760,6 +1820,14 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             "avg_dials_per_day": avg_dials_per_day,
             "icp_high_pct": icp_high_pct, "icp_mid_pct": icp_mid_pct,
             "icp_low_pct": icp_low_pct, "icp_unknown_pct": icp_unknown_pct,
+            # Per-rank ICP breakdown
+            "icp_a_plus_pct": icp_a_plus_pct, "icp_a_pct": icp_a_pct,
+            "icp_b_pct": icp_b_pct, "icp_c_pct": icp_c_pct,
+            "icp_d_pct": icp_d_pct, "icp_suppress_pct": icp_suppress_pct,
+            # Title breakdown
+            "title_csuite_pct": title_csuite_pct, "title_vp_pct": title_vp_pct,
+            "title_dir_pct": title_dir_pct, "title_mgr_pct": title_mgr_pct,
+            "title_other_pct": title_other_pct,
             "direct_line_pct": direct_line_pct, "mobile_pct": mobile_pct,
             "unknown_line_pct": unknown_line_pct,
             # Supporting raw metrics (Reach Efficiency)
@@ -1773,13 +1841,38 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
 
     rows.sort(key=lambda r: r["connect_rate"], reverse=True)
 
-    _total_voicemail_all  = sum(a["voicemail"]    for a in owner_acc.values())
-    _total_no_answer_all  = sum(a["no_answer"]    for a in owner_acc.values())
-    _total_icp_mid_all    = sum(a["icp_mid"]      for a in owner_acc.values())
-    _total_icp_low_all    = sum(a["icp_low"]      for a in owner_acc.values())
-    _total_icp_unk_all    = sum(a["icp_unknown"]  for a in owner_acc.values())
-    _total_mobile_all     = sum(a["mobile"]       for a in owner_acc.values())
-    _total_unk_line_all   = sum(a["unknown_line"] for a in owner_acc.values())
+    _total_voicemail_all  = sum(a["voicemail"]      for a in owner_acc.values())
+    _total_no_answer_all  = sum(a["no_answer"]      for a in owner_acc.values())
+    _total_icp_mid_all    = sum(a["icp_mid"]        for a in owner_acc.values())
+    _total_icp_low_all    = sum(a["icp_low"]        for a in owner_acc.values())
+    _total_icp_unk_all    = sum(a["icp_unknown"]    for a in owner_acc.values())
+    _total_mobile_all     = sum(a["mobile"]         for a in owner_acc.values())
+    _total_unk_line_all   = sum(a["unknown_line"]   for a in owner_acc.values())
+    # Per-rank ICP team totals
+    _total_icp_a_plus     = sum(a["icp_a_plus"]     for a in owner_acc.values())
+    _total_icp_a          = sum(a["icp_a"]          for a in owner_acc.values())
+    _total_icp_b          = sum(a["icp_b"]          for a in owner_acc.values())
+    _total_icp_c          = sum(a["icp_c"]          for a in owner_acc.values())
+    _total_icp_d          = sum(a["icp_d"]          for a in owner_acc.values())
+    _total_icp_suppress   = sum(a["icp_suppress"]   for a in owner_acc.values())
+    # Title team totals
+    _total_title_csuite   = sum(a["title_csuite"]   for a in owner_acc.values())
+    _total_title_vp       = sum(a["title_vp"]       for a in owner_acc.values())
+    _total_title_director = sum(a["title_director"] for a in owner_acc.values())
+    _total_title_manager  = sum(a["title_manager"]  for a in owner_acc.values())
+    _total_title_other    = sum(a["title_other"]    for a in owner_acc.values())
+
+    team_icp_a_plus_pct   = _pct(_total_icp_a_plus,     total_dials)
+    team_icp_a_pct        = _pct(_total_icp_a,          total_dials)
+    team_icp_b_pct        = _pct(_total_icp_b,          total_dials)
+    team_icp_c_pct        = _pct(_total_icp_c,          total_dials)
+    team_icp_d_pct        = _pct(_total_icp_d,          total_dials)
+    team_icp_suppress_pct = _pct(_total_icp_suppress,   total_dials)
+    team_title_csuite_pct = _pct(_total_title_csuite,   total_dials)
+    team_title_vp_pct     = _pct(_total_title_vp,       total_dials)
+    team_title_dir_pct    = _pct(_total_title_director, total_dials)
+    team_title_mgr_pct    = _pct(_total_title_manager,  total_dials)
+    team_title_other_pct  = _pct(_total_title_other,    total_dials)
 
     rows_by_oid = {r["owner_id"]: r for r in rows}
     selected_row = rows_by_oid.get(rep) if rep != "all" else None
@@ -1800,9 +1893,16 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         "unknown_line_pct": _pct(_total_unk_line_all, total_dials),
         "icp_high_pct": team_icp_high_pct,
         "icp_mid_pct": _pct(_total_icp_mid_all, total_dials),
+        "icp_a_plus_pct": team_icp_a_plus_pct, "icp_a_pct": team_icp_a_pct,
+        "icp_b_pct": team_icp_b_pct, "icp_c_pct": team_icp_c_pct,
+        "icp_d_pct": team_icp_d_pct, "icp_suppress_pct": team_icp_suppress_pct,
+        "title_csuite_pct": team_title_csuite_pct, "title_vp_pct": team_title_vp_pct,
+        "title_dir_pct": team_title_dir_pct, "title_mgr_pct": team_title_mgr_pct,
+        "title_other_pct": team_title_other_pct,
         "peak_hour_pct": team_peak_hour_pct,
         "dials": total_dials,
         "voicemail_pct": team_voicemail_pct,
+        "rei": 100.0,
     }
 
     def _safe(v):
@@ -1894,11 +1994,25 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
                 "index_value": focal["dmi"],
                 "rows": [
                     {"metric": "Direct Number Rate", "rep": _safe(focal["direct_line_pct"]), "team": _safe(team_direct_line_pct)},
-                    {"metric": "Shared Number Rate", "rep": _safe(focal["unknown_line_pct"]), "team": _safe(_pct(_total_unk_line_all, total_dials))},
                     {"metric": "High-Confidence Phone Rate", "rep": _safe(100 - focal["unknown_line_pct"]), "team": _safe(100 - _pct(_total_unk_line_all, total_dials))},
-                    {"metric": "Buyer-Title Rate", "rep": None, "team": None},
                     {"metric": "ICP A/B Rate", "rep": _safe(focal["icp_high_pct"] + focal["icp_mid_pct"]), "team": _safe(team_icp_high_pct + _pct(_total_icp_mid_all, total_dials))},
                     {"metric": "Dial Mix Index", "rep": _safe(focal["dmi"]), "team": 100.0},
+                ],
+                "icp_breakdown": [
+                    {"rank": "A+", "rep": _safe(focal["icp_a_plus_pct"]),  "team": _safe(team_icp_a_plus_pct)},
+                    {"rank": "A",  "rep": _safe(focal["icp_a_pct"]),       "team": _safe(team_icp_a_pct)},
+                    {"rank": "B",  "rep": _safe(focal["icp_b_pct"]),       "team": _safe(team_icp_b_pct)},
+                    {"rank": "C",  "rep": _safe(focal["icp_c_pct"]),       "team": _safe(team_icp_c_pct)},
+                    {"rank": "D",  "rep": _safe(focal["icp_d_pct"]),       "team": _safe(team_icp_d_pct)},
+                    {"rank": "Suppress", "rep": _safe(focal["icp_suppress_pct"]), "team": _safe(team_icp_suppress_pct)},
+                    {"rank": "No Data",  "rep": _safe(focal["icp_unknown_pct"]),  "team": _safe(_pct(_total_icp_unk_all, total_dials))},
+                ],
+                "title_breakdown": [
+                    {"bucket": "C-Suite", "rep": _safe(focal["title_csuite_pct"]), "team": _safe(team_title_csuite_pct)},
+                    {"bucket": "VP",      "rep": _safe(focal["title_vp_pct"]),     "team": _safe(team_title_vp_pct)},
+                    {"bucket": "Director","rep": _safe(focal["title_dir_pct"]),    "team": _safe(team_title_dir_pct)},
+                    {"bucket": "Manager", "rep": _safe(focal["title_mgr_pct"]),   "team": _safe(team_title_mgr_pct)},
+                    {"bucket": "Other/IC","rep": _safe(focal["title_other_pct"]), "team": _safe(team_title_other_pct)},
                 ],
             },
             "dialing_behavior": {
@@ -1962,6 +2076,12 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             "icp_mid_pct":  _pct(_total_icp_mid_all, total_dials),
             "icp_low_pct":  _pct(_total_icp_low_all, total_dials),
             "icp_unknown_pct": _pct(_total_icp_unk_all, total_dials),
+            "icp_a_plus_pct": team_icp_a_plus_pct, "icp_a_pct": team_icp_a_pct,
+            "icp_b_pct": team_icp_b_pct, "icp_c_pct": team_icp_c_pct,
+            "icp_d_pct": team_icp_d_pct, "icp_suppress_pct": team_icp_suppress_pct,
+            "title_csuite_pct": team_title_csuite_pct, "title_vp_pct": team_title_vp_pct,
+            "title_dir_pct": team_title_dir_pct, "title_mgr_pct": team_title_mgr_pct,
+            "title_other_pct": team_title_other_pct,
             "direct_line_pct": team_direct_line_pct,
             "mobile_pct":   _pct(_total_mobile_all,   total_dials),
             "unknown_line_pct": _pct(_total_unk_line_all, total_dials),
@@ -3035,14 +3155,11 @@ def compute_book_coverage() -> dict:
     Metrics are calculated against each AE's A+ to C tier companies:
       - Total Named Accounts : all companies owned by the AE
       - A+ to C Accounts     : companies with icp_rank in {A+, A, B, C}
-      - % activity (30d)     : A-C companies with any activity in last 30 days
-      - % contacted (120d)   : A-C companies with notes_last_contacted in last 120 days
+      - % within ROE         : A-C companies where active_since_transfer is TRUE
       - % in sequence        : A-C companies with at least one contact in a sequence
       - Overdue tasks        : past-due not-started tasks owned by the AE
     """
     now = datetime.now(timezone.utc)
-    thirty_days_ago = now - timedelta(days=30)
-    onetwenty_days_ago = now - timedelta(days=120)
 
     owners = apply_manual_owner_overrides(get_owners())
     companies = get_companies_for_coverage()
@@ -3054,8 +3171,7 @@ def compute_book_coverage() -> dict:
     owner_data = defaultdict(lambda: {
         "total": 0,
         "ac_accounts": 0,
-        "active_30": 0,
-        "called_120": 0,
+        "within_roe": 0,
         "in_sequence": 0,
         "overdue_tasks": 0,
     })
@@ -3076,27 +3192,10 @@ def compute_book_coverage() -> dict:
         if is_ac:
             owner_data[oid]["ac_accounts"] += 1
 
-            # Any sales activity in last 30 days — prefer notes_last_activity_date
-            # (broadest activity signal); fall back to notes_last_contacted
-            last_act_raw = (props.get("notes_last_activity_date")
-                            or props.get("notes_last_contacted"))
-            if last_act_raw:
-                try:
-                    if _parse_hs_datetime(last_act_raw) >= thirty_days_ago:
-                        owner_data[oid]["active_30"] += 1
-                except Exception:
-                    pass
-
-            # Called within 120 days — use hs_last_call_date (call-specific rollup);
-            # fall back to notes_last_contacted if not populated
-            last_call_raw = (props.get("hs_last_call_date")
-                             or props.get("notes_last_contacted"))
-            if last_call_raw:
-                try:
-                    if _parse_hs_datetime(last_call_raw) >= onetwenty_days_ago:
-                        owner_data[oid]["called_120"] += 1
-                except Exception:
-                    pass
+            # Within ROE: active_since_transfer == TRUE
+            active_since = props.get("active_since_transfer")
+            if active_since is not None and _is_truthy(active_since):
+                owner_data[oid]["within_roe"] += 1
 
             # In active sequence
             custom_seq = props.get("in_active_sequence")
@@ -3123,11 +3222,9 @@ def compute_book_coverage() -> dict:
             "owner_id": oid,
             "total_accounts": data["total"],
             "ac_accounts": ac,
-            "active_30": data["active_30"],
-            "called_120": data["called_120"],
+            "within_roe": data["within_roe"],
             "in_sequence": data["in_sequence"],
-            "pct_active_30": _pct(data["active_30"], ac),
-            "pct_called_120": _pct(data["called_120"], ac),
+            "pct_within_roe": _pct(data["within_roe"], ac),
             "pct_in_sequence": _pct(data["in_sequence"], ac),
             "overdue_tasks": data["overdue_tasks"],
         })
@@ -3142,11 +3239,9 @@ def compute_book_coverage() -> dict:
         "ae": "TOTAL",
         "total_accounts": _sum("total_accounts"),
         "ac_accounts": total_ac,
-        "active_30": _sum("active_30"),
-        "called_120": _sum("called_120"),
+        "within_roe": _sum("within_roe"),
         "in_sequence": _sum("in_sequence"),
-        "pct_active_30": _pct(_sum("active_30"), total_ac),
-        "pct_called_120": _pct(_sum("called_120"), total_ac),
+        "pct_within_roe": _pct(_sum("within_roe"), total_ac),
         "pct_in_sequence": _pct(_sum("in_sequence"), total_ac),
         "overdue_tasks": _sum("overdue_tasks"),
     }
@@ -3447,24 +3542,25 @@ def compute_win_rate_by_source(period: str) -> dict:
 
 
 @ttl_cache
-def compute_abm_coverage() -> dict:
-    """ABM account coverage: target accounts per AE with activity and deal signals."""
+def compute_abm_coverage(period: str = "this_month") -> dict:
+    """ABM account coverage: target accounts per AE with activity and deal signals.
+
+    Period drives the created/won deal windows. Activity (30d) is always point-in-time.
+    """
     now = datetime.now(timezone.utc)
     thirty_days_ago = now - timedelta(days=30)
 
-    qm = ((now.month - 1) // 3) * 3 + 1
-    quarter_start = datetime(now.year, qm, 1, tzinfo=timezone.utc)
-    month_start   = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    start, end = get_date_range(period)
+    start_dt = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+    end_dt   = datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=timezone.utc)
+    start_ts = int(start_dt.timestamp() * 1000)
+    end_ts   = int(end_dt.timestamp() * 1000)
 
     owners    = apply_manual_owner_overrides(get_owners())
     companies = get_target_account_companies()
-
-    quarter_start_ts = int(quarter_start.timestamp() * 1000)
-    now_ts           = int(now.timestamp() * 1000)
-    allowed_oids     = get_team_owner_ids()  # frozenset; empty = no restriction
+    allowed_oids = get_team_owner_ids()
 
     def _deal_query(filters: list, properties: list) -> list:
-        """Fetch target-account NB deals matching filters, then restrict to allowed owners."""
         results = _search_all("deals", {
             "filterGroups": [{"filters": [
                 {"propertyName": "pipeline",       "operator": "EQ", "value": "31544320"},
@@ -3477,68 +3573,39 @@ def compute_abm_coverage() -> dict:
                        if d.get("properties", {}).get("hubspot_owner_id") in allowed_oids]
         return results
 
-    # Deals created this quarter
     created_deals = _deal_query(
-        [{"propertyName": "createdate", "operator": "GTE", "value": str(quarter_start_ts)},
-         {"propertyName": "createdate", "operator": "LTE", "value": str(now_ts)}],
+        [{"propertyName": "createdate", "operator": "GTE", "value": str(start_ts)},
+         {"propertyName": "createdate", "operator": "LTE", "value": str(end_ts)}],
         ["createdate", "hubspot_owner_id", "amount"],
     )
-
-    # Deals won this quarter (by close date)
     won_deals = _deal_query(
-        [{"propertyName": "closedate",        "operator": "GTE", "value": str(quarter_start_ts)},
-         {"propertyName": "closedate",        "operator": "LTE", "value": str(now_ts)},
+        [{"propertyName": "closedate",        "operator": "GTE", "value": str(start_ts)},
+         {"propertyName": "closedate",        "operator": "LTE", "value": str(end_ts)},
          {"propertyName": "hs_is_closed_won", "operator": "EQ",  "value": "true"}],
         ["closedate", "hubspot_owner_id", "amount"],
     )
 
-    owner_created_month_n: dict   = defaultdict(int)
-    owner_created_month_amt: dict = defaultdict(float)
-    owner_created_qtr_n: dict     = defaultdict(int)
-    owner_created_qtr_amt: dict   = defaultdict(float)
+    owner_created_n: dict   = defaultdict(int)
+    owner_created_amt: dict = defaultdict(float)
     for deal in created_deals:
         p   = deal.get("properties") or {}
         oid = p.get("hubspot_owner_id", "")
         if not oid:
             continue
-        try:
-            cd = _parse_hs_datetime(p.get("createdate", ""))
-        except Exception:
-            continue
-        amt = float(p.get("amount") or 0)
-        owner_created_qtr_n[oid]   += 1
-        owner_created_qtr_amt[oid] += amt
-        if cd >= month_start:
-            owner_created_month_n[oid]   += 1
-            owner_created_month_amt[oid] += amt
+        owner_created_n[oid]   += 1
+        owner_created_amt[oid] += float(p.get("amount") or 0)
 
-    owner_won_month_n: dict   = defaultdict(int)
-    owner_won_month_amt: dict = defaultdict(float)
-    owner_won_qtr_n: dict     = defaultdict(int)
-    owner_won_qtr_amt: dict   = defaultdict(float)
+    owner_won_n: dict   = defaultdict(int)
+    owner_won_amt: dict = defaultdict(float)
     for deal in won_deals:
         p   = deal.get("properties") or {}
         oid = p.get("hubspot_owner_id", "")
         if not oid:
             continue
-        try:
-            cd = _parse_hs_datetime(p.get("closedate", ""))
-        except Exception:
-            continue
-        amt = float(p.get("amount") or 0)
-        owner_won_qtr_n[oid]   += 1
-        owner_won_qtr_amt[oid] += amt
-        if cd >= month_start:
-            owner_won_month_n[oid]   += 1
-            owner_won_month_amt[oid] += amt
+        owner_won_n[oid]   += 1
+        owner_won_amt[oid] += float(p.get("amount") or 0)
 
-    owner_data = defaultdict(lambda: {
-        "total": 0, "active_30": 0,
-        "created_month_n": 0, "created_month_amt": 0.0,
-        "created_qtr_n": 0, "created_qtr_amt": 0.0,
-        "won_month_n": 0, "won_month_amt": 0.0,
-        "won_qtr_n": 0, "won_qtr_amt": 0.0,
-    })
+    owner_data = defaultdict(lambda: {"total": 0, "active_30": 0})
 
     for company in companies:
         props = company.get("properties") or {}
@@ -3554,36 +3621,24 @@ def compute_abm_coverage() -> dict:
             except Exception:
                 pass
 
-    for oid in set(list(owner_created_qtr_n) + list(owner_won_qtr_n) + list(owner_data)):
-        owner_data[oid]["created_month_n"]   = owner_created_month_n[oid]
-        owner_data[oid]["created_month_amt"] = owner_created_month_amt[oid]
-        owner_data[oid]["created_qtr_n"]     = owner_created_qtr_n[oid]
-        owner_data[oid]["created_qtr_amt"]   = owner_created_qtr_amt[oid]
-        owner_data[oid]["won_month_n"]       = owner_won_month_n[oid]
-        owner_data[oid]["won_month_amt"]     = owner_won_month_amt[oid]
-        owner_data[oid]["won_qtr_n"]         = owner_won_qtr_n[oid]
-        owner_data[oid]["won_qtr_amt"]       = owner_won_qtr_amt[oid]
-
+    all_oids = set(list(owner_created_n) + list(owner_won_n) + list(owner_data))
     rows = []
-    for oid, d in owner_data.items():
+    for oid in all_oids:
         o = owners.get(oid)
         if not o:
             continue
+        d      = owner_data[oid]
         total  = d["total"]
         active = d["active_30"]
         rows.append({
-            "ae":              f"{o['first_name']} {o['last_name']}".strip() or o["name"],
-            "total":           total,
-            "active_30":       active,
-            "active_pct":      round(active / total * 100) if total else 0,
-            "created_month_n":   d["created_month_n"],
-            "created_month_amt": d["created_month_amt"],
-            "created_qtr_n":     d["created_qtr_n"],
-            "created_qtr_amt":   d["created_qtr_amt"],
-            "won_month_n":       d["won_month_n"],
-            "won_month_amt":     d["won_month_amt"],
-            "won_qtr_n":         d["won_qtr_n"],
-            "won_qtr_amt":       d["won_qtr_amt"],
+            "ae":          f"{o['first_name']} {o['last_name']}".strip() or o["name"],
+            "total":       total,
+            "active_30":   active,
+            "active_pct":  round(active / total * 100) if total else 0,
+            "created_n":   owner_created_n[oid],
+            "created_amt": owner_created_amt[oid],
+            "won_n":       owner_won_n[oid],
+            "won_amt":     owner_won_amt[oid],
         })
 
     rows.sort(key=lambda r: (-r["total"], r["ae"]))
@@ -3591,17 +3646,13 @@ def compute_abm_coverage() -> dict:
     tot_total  = sum(r["total"] for r in rows)
     tot_active = sum(r["active_30"] for r in rows)
     totals = {
-        "total":           tot_total,
-        "active_30":       tot_active,
-        "active_pct":      round(tot_active / tot_total * 100) if tot_total else 0,
-        "created_month_n":   sum(r["created_month_n"]   for r in rows),
-        "created_month_amt": sum(r["created_month_amt"] for r in rows),
-        "created_qtr_n":     sum(r["created_qtr_n"]     for r in rows),
-        "created_qtr_amt":   sum(r["created_qtr_amt"]   for r in rows),
-        "won_month_n":       sum(r["won_month_n"]        for r in rows),
-        "won_month_amt":     sum(r["won_month_amt"]      for r in rows),
-        "won_qtr_n":         sum(r["won_qtr_n"]          for r in rows),
-        "won_qtr_amt":       sum(r["won_qtr_amt"]        for r in rows),
+        "total":       tot_total,
+        "active_30":   tot_active,
+        "active_pct":  round(tot_active / tot_total * 100) if tot_total else 0,
+        "created_n":   sum(r["created_n"]   for r in rows),
+        "created_amt": sum(r["created_amt"] for r in rows),
+        "won_n":       sum(r["won_n"]       for r in rows),
+        "won_amt":     sum(r["won_amt"]     for r in rows),
     }
 
-    return {"rows": rows, "totals": totals}
+    return {"rows": rows, "totals": totals, "period": period}
