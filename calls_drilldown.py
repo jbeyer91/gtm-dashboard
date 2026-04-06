@@ -306,7 +306,7 @@ def connect_rate_drivers():
     comparison_mode = request.args.get("comparison_mode", "connect_pct")
     table_sort = request.args.get("table_sort", "worst_delta_vs_team")
 
-    if not is_cached(analytics.compute_connect_rate_drivers, period, team, rep, segment):
+    if not is_cached(analytics.compute_connect_rate_drivers, period):
         from app import NAV
         return render_template(
             "connect_rate_drivers.html",
