@@ -1395,6 +1395,7 @@ def compute_connect_rate_drivers(
             "segment": segment,
             "segment_enabled": False,
             "is_rep_view": False,
+            "is_aggregate_view": team == "all",
         },
         "filters": {
             "teams": team_options,

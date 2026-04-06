@@ -35,7 +35,7 @@
 </div>
 {% endmacro %}
 
-{% macro variance_row(row) %}
+{% macro variance_row(row, is_aggregate=false) %}
 {% set delta = row.delta %}
 {% set abs_delta = delta|abs %}
 {% set bar_width = [abs_delta * 8, 100]|min %}
@@ -43,12 +43,19 @@
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
       <p class="text-sm font-medium text-slate-800">{{ row.label }}</p>
+      {% if is_aggregate %}
+      <p class="text-xs text-slate-400 mt-0.5">Team avg: {{ row.display.rep }}</p>
+      {% else %}
       <p class="text-xs text-slate-400 mt-0.5">Rep {{ row.display.rep }} · Team {{ row.display.team }}</p>
+      {% endif %}
     </div>
+    {% if not is_aggregate %}
     <p class="text-sm font-semibold tabular-nums shrink-0 {% if delta > 0 %}text-emerald-600{% elif delta < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
       {{ row.display.delta }}
     </p>
+    {% endif %}
   </div>
+  {% if not is_aggregate %}
   <div class="mt-2 h-2 rounded-full bg-slate-100 relative overflow-hidden">
     <div class="absolute inset-y-0 left-1/2 w-px bg-slate-300"></div>
     {% if delta != 0 %}
@@ -57,6 +64,7 @@
       style="width: {{ bar_width / 2 }}%;"></div>
     {% endif %}
   </div>
+  {% endif %}
 </div>
 {% endmacro %}
 
@@ -168,6 +176,12 @@
 </div>
 {% endif %}
 
+{% if data.view.is_aggregate_view %}
+<section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <h2 class="text-base font-semibold text-gray-800">What is driving the gap?</h2>
+  <p class="text-sm text-slate-500 mt-3">Select a specific team above to compare its connect-rate drivers against the company baseline.</p>
+</section>
+{% else %}
 <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
   <div class="flex items-start justify-between gap-4 mb-4">
     <div>
@@ -197,6 +211,7 @@
     </div>
   </div>
 </section>
+{% endif %}
 
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-8">
   {% for card in data.driver_cards %}
@@ -213,7 +228,7 @@
     </div>
     <div class="mt-4">
       {% for row in card.rows %}
-      {{ variance_row(row) }}
+      {{ variance_row(row, is_aggregate=data.view.is_aggregate_view) }}
       {% endfor %}
     </div>
 
