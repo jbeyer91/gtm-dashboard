@@ -55,14 +55,35 @@ class LoginRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn(b"account access is being checked", response.data)
 
-    def test_connect_rate_drivers_loading_state_renders_for_cold_cache(self):
+    def test_connect_rate_drivers_cold_cache_computes_live(self):
         with self.client.session_transaction() as sess:
             sess["authenticated"] = True
 
-        with patch.object(app_module.calls_drilldown_bp, "is_cached", return_value=False):
+        payload = {
+            "view": {"period": "this_month", "period_label": "This Month", "team": "all", "rep": "all", "rep_label": "All reps", "segment": "all", "segment_enabled": False, "is_rep_view": False},
+            "filters": {"teams": [{"value": "all", "label": "All"}], "reps": [{"value": "all", "label": "All reps"}], "segments": []},
+            "state": {"loading": False, "empty": False, "partial_explanation": False, "sample_too_small": False, "field_coverage_weak": False, "message": "Strong explanation"},
+            "kpis": [],
+            "notes": {
+                "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
+                "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
+                "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+            },
+            "gap_decomposition": {"title": "What is driving the gap?", "expected_connect_pct": 10.1, "buckets": []},
+            "driver_cards": [],
+            "team_comparison": {"mode": "connect_pct", "modes": [], "team_avg_connect_pct": 10.1, "rows": []},
+            "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
+            "rep_detail": {"selected_owner_id": None, "available": False},
+        }
+
+        with patch.object(
+            app_module.analytics,
+            "compute_connect_rate_drivers",
+            return_value=payload,
+        ):
             response = self.client.get("/calls/connect-rate-drivers")
 
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 200)
         self.assertIn(b"Connect Rate Drivers", response.data)
 
     def test_connect_rate_drivers_page_renders_with_payload(self):
