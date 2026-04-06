@@ -97,7 +97,7 @@ _ICP_INTERNAL_TO_LABEL: dict[str, str] = {
     "moderate":       "B",
     "conservative":   "C",
     "least_priority": "D",
-    "suppress":       "Suppress",
+    "suppress":       "Least Priority",
 }
 
 # ── Disposition GUIDs → human-readable label (module-level for reuse) ────────
@@ -515,7 +515,7 @@ def compute_call_stats(period: str) -> dict:
 
 
 # ── ICP rank sort order (unknown/blank sorts last) ───────────────────────────
-_ICP_ORDER = ["A+", "A", "B", "C", "D", "Suppress"]
+_ICP_ORDER = ["A+", "A", "B", "C", "D", "Least Priority"]
 
 
 def _icp_sort_key(rank: str) -> tuple:
@@ -1125,7 +1125,7 @@ def compute_connect_rate_drivers(
             "is_high_conf_phone": bool(normalized_phone and line_type != "Unknown"),
             "is_buyer_title": _is_buyer_title(jobtitle),
             "is_icp_ab": icp_rank in {"A+", "A", "B"},
-            "is_low_icp": icp_rank in {"D", "Suppress"},
+            "is_low_icp": icp_rank in {"D", "Least Priority"},
             "is_no_icp_data": icp_rank == "—",
             "is_conversation": bool(is_connect and duration_ms >= 60000),
             "has_phone_and_email": bool(normalized_phone and email),
@@ -1413,7 +1413,7 @@ def compute_connect_rate_drivers(
         "notes": {
             "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
             "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
-            "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+            "clearout_phone_source": "Phone type (mobile vs. direct line) comes from the contact record in HubSpot. When the primary line-type field is blank, a secondary enrichment field is used as a fallback. A phone is considered high-confidence when a normalized number is present and the line type is known.",
         },
         "gap_decomposition": {
             "title": "What is driving the gap?",
@@ -1565,7 +1565,50 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
     # ICP rank → bucket
     _ICP_HIGH = {"A+", "A"}
     _ICP_MID  = {"B", "C"}
-    _ICP_LOW  = {"D", "Suppress"}
+    _ICP_LOW  = {"D", "Least Priority"}
+
+    # ── Per-owner phone-behaviour pre-pass (for Dialing Behavior card rows) ─────
+    # Build phone → contacts set to detect shared numbers (same phone across contacts)
+    _leg_phone_to_contacts: dict = defaultdict(set)
+    for _c in filtered:
+        _ph = _normalize_phone(_c.get("_mobilephone") or _c.get("_phone") or "")
+        _cid = _c.get("_contact_id")
+        if _ph and _cid:
+            _leg_phone_to_contacts[_ph].add(_cid)
+
+    # For each owner, sort calls by timestamp and mark first/repeat/shared behaviour
+    _leg_call_beh: dict = {}
+    _leg_owner_calls: dict = defaultdict(list)
+    for _c in filtered:
+        _oid2 = _c["properties"]["hubspot_owner_id"]
+        _ts_raw2 = _c["properties"].get("hs_timestamp") or _c["properties"].get("hs_createdate") or ""
+        try:
+            _ts2 = _parse_hs_datetime(_ts_raw2)
+        except Exception:
+            _ts2 = None
+        _ph2 = _normalize_phone(_c.get("_mobilephone") or _c.get("_phone") or "")
+        _leg_owner_calls[_oid2].append((_ts2, _c.get("id"), _ph2, _c.get("_contact_id")))
+
+    for _oid2, _ocalls2 in _leg_owner_calls.items():
+        _ocalls2.sort(key=lambda x: x[0] or datetime.min.replace(tzinfo=timezone.utc))
+        _seen2: set = set()
+        _shared_rpt2: dict = defaultdict(int)
+        for _ts2, _cid2, _ph2, _contact_id2 in _ocalls2:
+            _is_shared2 = bool(_ph2 and len(_leg_phone_to_contacts.get(_ph2, set())) > 1)
+            _is_first2  = bool(_ph2) and _ph2 not in _seen2
+            _is_repeat2 = bool(_ph2) and _ph2 in _seen2
+            if _ph2:
+                if _is_shared2 and _ph2 in _seen2:
+                    _shared_rpt2[_ph2] += 1
+                _seen2.add(_ph2)
+            _is_shared_recycle2 = bool(_ph2 and _is_shared2 and _shared_rpt2[_ph2] > 0)
+            if _cid2:
+                _leg_call_beh[_cid2] = {
+                    "shared_number":  _is_shared2,
+                    "first_attempt":  _is_first2,
+                    "repeat_dial":    _is_repeat2,
+                    "shared_recycle": _is_shared_recycle2,
+                }
 
     # Accumulator — tracks all fields needed for three driver buckets + coverage
     owner_acc = defaultdict(lambda: {
@@ -1583,6 +1626,8 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         "field_covered": 0,  # dials with ICP rank + line type + timestamp all present
         "by_hour": defaultdict(int),
         "days": set(),
+        # Dialing behaviour (computed from pre-pass above)
+        "shared_number": 0, "first_attempt": 0, "repeat_dial": 0, "shared_recycle": 0,
     })
     hourly_raw = defaultdict(lambda: {"dials": 0, "connects": 0})
 
@@ -1623,7 +1668,7 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             acc["icp_c"] += 1
         elif icp == "D":
             acc["icp_d"] += 1
-        elif icp == "Suppress":
+        elif icp == "Least Priority":
             acc["icp_suppress"] += 1
 
         # Title bucket
@@ -1664,6 +1709,13 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             hourly_raw[hour_et]["dials"] += 1
             if is_connect:
                 hourly_raw[hour_et]["connects"] += 1
+
+        # Dialing behaviour counters (from pre-pass lookup)
+        _beh = _leg_call_beh.get(call.get("id"), {})
+        if _beh.get("shared_number"):  acc["shared_number"]  += 1
+        if _beh.get("first_attempt"):  acc["first_attempt"]  += 1
+        if _beh.get("repeat_dial"):    acc["repeat_dial"]    += 1
+        if _beh.get("shared_recycle"): acc["shared_recycle"] += 1
 
         # Active days
         if ts_raw:
@@ -1771,6 +1823,11 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         no_answer_pct    = _pct(acc["no_answer"],  d)
         conversation_rate = _pct(convos, c)
         field_coverage_pct = _pct(acc["field_covered"], d)
+        # Dialing behaviour rates
+        repeat_dial_pct     = _pct(acc["repeat_dial"],    d)
+        first_attempt_pct   = _pct(acc["first_attempt"],  d)
+        shared_recycle_pct  = _pct(acc["shared_recycle"], d)
+        shared_number_pct   = _pct(acc["shared_number"],  d)
 
         peak_dials    = sum(v for h, v in acc["by_hour"].items() if h in peak_hours_set)
         peak_hour_pct = _pct(peak_dials, d)
@@ -1833,6 +1890,8 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
             # Supporting raw metrics (Reach Efficiency)
             "voicemail_pct": voicemail_pct, "no_answer_pct": no_answer_pct,
             "conversation_rate": conversation_rate,
+            "repeat_dial_pct": repeat_dial_pct, "first_attempt_pct": first_attempt_pct,
+            "shared_recycle_pct": shared_recycle_pct, "shared_number_pct": shared_number_pct,
             # Supporting raw metrics (Timing)
             "peak_hour_pct": peak_hour_pct,
             "by_hour": dict(acc["by_hour"]),
@@ -1861,6 +1920,11 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
     _total_title_director = sum(a["title_director"] for a in owner_acc.values())
     _total_title_manager  = sum(a["title_manager"]  for a in owner_acc.values())
     _total_title_other    = sum(a["title_other"]    for a in owner_acc.values())
+    # Dialing behaviour team totals
+    _total_repeat_dial    = sum(a["repeat_dial"]    for a in owner_acc.values())
+    _total_first_attempt  = sum(a["first_attempt"]  for a in owner_acc.values())
+    _total_shared_recycle = sum(a["shared_recycle"] for a in owner_acc.values())
+    _total_shared_number  = sum(a["shared_number"]  for a in owner_acc.values())
 
     team_icp_a_plus_pct   = _pct(_total_icp_a_plus,     total_dials)
     team_icp_a_pct        = _pct(_total_icp_a,          total_dials)
@@ -1873,6 +1937,10 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
     team_title_dir_pct    = _pct(_total_title_director, total_dials)
     team_title_mgr_pct    = _pct(_total_title_manager,  total_dials)
     team_title_other_pct  = _pct(_total_title_other,    total_dials)
+    team_repeat_dial_pct     = _pct(_total_repeat_dial,    total_dials)
+    team_first_attempt_pct   = _pct(_total_first_attempt,  total_dials)
+    team_shared_recycle_pct  = _pct(_total_shared_recycle, total_dials)
+    team_shared_number_pct   = _pct(_total_shared_number,  total_dials)
 
     rows_by_oid = {r["owner_id"]: r for r in rows}
     selected_row = rows_by_oid.get(rep) if rep != "all" else None
@@ -1904,6 +1972,10 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         "dials": total_dials,
         "voicemail_pct": team_voicemail_pct,
         "rei": 100.0,
+        "repeat_dial_pct": team_repeat_dial_pct,
+        "first_attempt_pct": team_first_attempt_pct,
+        "shared_recycle_pct": team_shared_recycle_pct,
+        "shared_number_pct": team_shared_number_pct,
     }
 
     def _safe(v):
@@ -2005,7 +2077,7 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
                     {"rank": "B",  "rep": _safe(focal["icp_b_pct"]),       "team": _safe(team_icp_b_pct)},
                     {"rank": "C",  "rep": _safe(focal["icp_c_pct"]),       "team": _safe(team_icp_c_pct)},
                     {"rank": "D",  "rep": _safe(focal["icp_d_pct"]),       "team": _safe(team_icp_d_pct)},
-                    {"rank": "Suppress", "rep": _safe(focal["icp_suppress_pct"]), "team": _safe(team_icp_suppress_pct)},
+                    {"rank": "Least Priority", "rep": _safe(focal["icp_suppress_pct"]), "team": _safe(team_icp_suppress_pct)},
                     {"rank": "No Data",  "rep": _safe(focal["icp_unknown_pct"]),  "team": _safe(_pct(_total_icp_unk_all, total_dials))},
                 ],
                 "title_breakdown": [
@@ -2020,11 +2092,10 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
                 "index_label": "Reach Efficiency Index",
                 "index_value": focal["rei"],
                 "rows": [
-                    {"metric": "Unique Numbers / 100 Dials", "rep": None, "team": None},
-                    {"metric": "Repeat Dial Rate", "rep": None, "team": None},
-                    {"metric": "First Attempt Rate", "rep": None, "team": None},
-                    {"metric": "Shared-Number Recycle Rate", "rep": None, "team": None},
-                    {"metric": "Reach Efficiency Index", "rep": _safe(focal["rei"]), "team": 100.0},
+                    {"metric": "Repeat Dial Rate",          "rep": _safe(focal["repeat_dial_pct"]),    "team": _safe(team_repeat_dial_pct)},
+                    {"metric": "First Attempt Rate",         "rep": _safe(focal["first_attempt_pct"]),  "team": _safe(team_first_attempt_pct)},
+                    {"metric": "Shared-Number Recycle Rate", "rep": _safe(focal["shared_recycle_pct"]), "team": _safe(team_shared_recycle_pct)},
+                    {"metric": "Reach Efficiency Index",     "rep": _safe(focal["rei"]),                "team": 100.0},
                 ],
             },
             "timing": {

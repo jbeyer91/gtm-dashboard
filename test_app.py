@@ -67,7 +67,7 @@ class LoginRouteTests(unittest.TestCase):
             "notes": {
                 "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
                 "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
-                "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+                "clearout_phone_source": "Phone type (mobile vs. direct line) comes from the contact record in HubSpot. When the primary line-type field is blank, a secondary enrichment field is used as a fallback. A phone is considered high-confidence when a normalized number is present and the line type is known.",
             },
             "gap_decomposition": {"title": "What is driving the gap?", "expected_connect_pct": 10.1, "buckets": []},
             "driver_cards": [],
@@ -126,7 +126,7 @@ class LoginRouteTests(unittest.TestCase):
             "notes": {
                 "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
                 "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
-                "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+                "clearout_phone_source": "Phone type (mobile vs. direct line) comes from the contact record in HubSpot. When the primary line-type field is blank, a secondary enrichment field is used as a fallback. A phone is considered high-confidence when a normalized number is present and the line type is known.",
             },
             "gap_decomposition": {
                 "title": "What is driving the gap?",
