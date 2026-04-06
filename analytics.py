@@ -1278,6 +1278,15 @@ def compute_connect_rate_drivers(
     selected_delta = round(selected_stats["connect_pct"] - selected_benchmark_stats["connect_pct"], 1)
     selected_explained = round(sum(selected_contributions.values()), 1)
     selected_unexplained = round(selected_delta - selected_explained, 1)
+    if team == "all" and rep_rows:
+        _n = len(rep_rows)
+        selected_contributions = {
+            "Dial Mix":         round(sum(r["driver_points"]["Dial Mix"]         for r in rep_rows) / _n, 1),
+            "Dialing Behavior": round(sum(r["driver_points"]["Dialing Behavior"] for r in rep_rows) / _n, 1),
+            "Timing":           round(sum(r["driver_points"]["Timing"]           for r in rep_rows) / _n, 1),
+        }
+        selected_explained   = round(sum(selected_contributions.values()), 1)
+        selected_unexplained = round(sum(r["driver_points"]["Unexplained"] for r in rep_rows) / _n, 1)
     selected_expected = round(selected_benchmark_stats["connect_pct"] + selected_explained, 1)
     selected_actual_vs_expected = round(selected_stats["connect_pct"] - selected_expected, 1)
     selected_gap_explained = 100.0 if abs(selected_delta) < 0.1 else round(min(100.0, abs(selected_explained) / abs(selected_delta) * 100), 1)
