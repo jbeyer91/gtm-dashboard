@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from statistics import median
@@ -700,6 +701,733 @@ def compute_connect_diagnostics(period: str) -> dict:
         "hourly_stats": hourly_stats,
         "target_dials": target_dials,
         "best_connect_hour": best_slot["label"] if best_slot else "—",
+    }
+
+
+_BUYER_TITLE_PATTERNS = (
+    "chief", "vp", "vice president", "head", "director", "manager",
+    "founder", "owner", "president", "partner",
+)
+
+_PLACEHOLDER_EMAIL_PATTERNS = (
+    "example.com", "noemail", "noreply", "invalid", "fake", "test@", "@test.",
+)
+
+_CONNECT_DRIVER_SORTS = {
+    "worst_delta_vs_team",
+    "worst_vs_expected",
+    "lowest_gap_explained",
+    "highest_connect",
+}
+
+_COMPARISON_MODES = {"connect_pct", "delta_vs_team", "actual_vs_expected"}
+
+
+def _normalize_phone(raw: str) -> str:
+    digits = re.sub(r"\D+", "", raw or "")
+    if len(digits) >= 10:
+        return digits[-10:]
+    return ""
+
+
+def _is_buyer_title(title: str) -> bool:
+    t = (title or "").strip().lower()
+    return bool(t and any(token in t for token in _BUYER_TITLE_PATTERNS))
+
+
+def _looks_placeholder_email(email: str) -> bool:
+    e = (email or "").strip().lower()
+    return bool(e and any(token in e for token in _PLACEHOLDER_EMAIL_PATTERNS))
+
+
+def _fmt_pct_points(value: float, digits: int = 1) -> str:
+    return f"{value:.{digits}f}%"
+
+
+def _fmt_point_delta(value: float, digits: int = 1) -> str:
+    if value > 0:
+        return f"+{value:.{digits}f} pts"
+    return f"{value:.{digits}f} pts"
+
+
+def _fmt_percent_delta(value: float, digits: int = 1) -> str:
+    if value > 0:
+        return f"+{value:.{digits}f}%"
+    return f"{value:.{digits}f}%"
+
+
+def _fmt_index_delta(value: float) -> str:
+    if value > 0:
+        return f"+{value:.0f}"
+    return f"{value:.0f}"
+
+
+def _safe_share_pct(part: float, total: float) -> float:
+    return round(part / total * 100, 1) if total else 0.0
+
+
+def _metric_display(label: str, rep: float, team: float) -> dict:
+    delta = round(rep - team, 1)
+    if "Index" in label:
+        return {
+            "rep": f"{rep:.0f}",
+            "team": f"{team:.0f}",
+            "delta": _fmt_index_delta(delta),
+        }
+    if "Unique Numbers / 100 Dials" == label:
+        return {
+            "rep": f"{rep:.1f}",
+            "team": f"{team:.1f}",
+            "delta": _fmt_percent_delta(delta),
+        }
+    return {
+        "rep": _fmt_pct_points(rep),
+        "team": _fmt_pct_points(team),
+        "delta": _fmt_point_delta(delta),
+    }
+
+
+def _pct_band(value: float) -> str:
+    if value >= 80:
+        return "strong"
+    if value >= 60:
+        return "directional"
+    return "incomplete"
+
+
+def _compute_timing_windows(calls: list[dict]) -> tuple[set[int], set[int], dict[int, dict]]:
+    hourly = defaultdict(lambda: {"dials": 0, "connects": 0})
+    for call in calls:
+        hour = call.get("local_hour")
+        if hour is None:
+            continue
+        hourly[hour]["dials"] += 1
+        if call.get("is_connect"):
+            hourly[hour]["connects"] += 1
+    valid_hours = []
+    for hour, stats in hourly.items():
+        if stats["dials"] < 5:
+            continue
+        valid_hours.append((hour, _pct(stats["connects"], stats["dials"])))
+    valid_hours.sort(key=lambda item: item[1], reverse=True)
+    strong = {hour for hour, _ in valid_hours[:3]}
+    weak = {hour for hour, _ in valid_hours[-3:]} if len(valid_hours) >= 3 else set()
+    return strong, weak, hourly
+
+
+def _call_meets_scope(call: dict, team: str, rep: str, owner_team_map: dict) -> bool:
+    owner_id = call.get("owner_id")
+    if rep != "all":
+        return owner_id == rep
+    if team != "all":
+        return owner_team_map.get(owner_id) == team
+    return True
+
+
+def _build_connect_driver_aggregate(calls: list[dict], strong_hours: set[int], weak_hours: set[int]) -> dict:
+    dials = len(calls)
+    connects = sum(1 for call in calls if call["is_connect"])
+    conversations = sum(1 for call in calls if call.get("is_conversation"))
+    unique_numbers = {call["normalized_phone"] for call in calls if call.get("normalized_phone")}
+    unique_contacts = {call["contact_id"] for call in calls if call.get("contact_id")}
+    direct_count = sum(1 for call in calls if call["is_direct"])
+    shared_count = sum(1 for call in calls if call["is_shared_number"])
+    high_conf_count = sum(1 for call in calls if call["is_high_conf_phone"])
+    buyer_count = sum(1 for call in calls if call["is_buyer_title"])
+    icp_ab_count = sum(1 for call in calls if call["is_icp_ab"])
+    low_icp_count = sum(1 for call in calls if call.get("is_low_icp"))
+    no_icp_count = sum(1 for call in calls if call.get("is_no_icp_data"))
+    repeat_count = sum(1 for call in calls if call["is_repeat_dial"])
+    first_attempt_count = sum(1 for call in calls if call["is_first_attempt"])
+    shared_recycle_count = sum(1 for call in calls if call["is_shared_recycle"])
+    strong_dials = [call for call in calls if call.get("local_hour") in strong_hours]
+    weak_dials = [call for call in calls if call.get("local_hour") in weak_hours]
+    covered_scores = [call["coverage_score"] for call in calls]
+
+    direct_rate = _safe_share_pct(direct_count, dials)
+    shared_rate = _safe_share_pct(shared_count, dials)
+    high_conf_rate = _safe_share_pct(high_conf_count, dials)
+    buyer_rate = _safe_share_pct(buyer_count, dials)
+    icp_ab_rate = _safe_share_pct(icp_ab_count, dials)
+    unique_numbers_per_100 = round(len(unique_numbers) / dials * 100, 1) if dials else 0.0
+    repeat_rate = _safe_share_pct(repeat_count, dials)
+    first_attempt_rate = _safe_share_pct(first_attempt_count, dials)
+    shared_recycle_rate = _safe_share_pct(shared_recycle_count, dials)
+    best_window_rate = _safe_share_pct(len(strong_dials), dials)
+    weak_window_rate = _safe_share_pct(len(weak_dials), dials)
+    strong_connect_rate = _pct(sum(1 for call in strong_dials if call["is_connect"]), len(strong_dials))
+    weak_connect_rate = _pct(sum(1 for call in weak_dials if call["is_connect"]), len(weak_dials))
+
+    return {
+        "dials": dials,
+        "connects": connects,
+        "conversations": conversations,
+        "connect_pct": _pct(connects, dials),
+        "conversation_pct": _pct(conversations, connects),
+        "field_coverage_pct": round(sum(covered_scores) / len(covered_scores) * 100, 1) if covered_scores else 0.0,
+        "unique_contacts": len(unique_contacts),
+        "metrics": {
+            "Direct Number Rate": direct_rate,
+            "Shared Number Rate": shared_rate,
+            "High-Confidence Phone Rate": high_conf_rate,
+            "Buyer-Title Rate": buyer_rate,
+            "ICP A/B Rate": icp_ab_rate,
+            "Low ICP Rate": _safe_share_pct(low_icp_count, dials),
+            "No ICP Data Rate": _safe_share_pct(no_icp_count, dials),
+            "Unique Numbers / 100 Dials": unique_numbers_per_100,
+            "Repeat Dial Rate": repeat_rate,
+            "First Attempt Rate": first_attempt_rate,
+            "Shared-Number Recycle Rate": shared_recycle_rate,
+            "Best-Window Dial Rate": best_window_rate,
+            "Weak-Window Dial Rate": weak_window_rate,
+            "Connect Rate in Strong Windows": strong_connect_rate,
+            "Connect Rate in Weak Windows": weak_connect_rate,
+        },
+    }
+
+
+def _rate_for(calls: list[dict], predicate) -> float:
+    subset = [call for call in calls if predicate(call)]
+    if not subset:
+        return 0.0
+    return _pct(sum(1 for call in subset if call["is_connect"]), len(subset))
+
+
+def _metric_lift(current_calls: list[dict], team_calls: list[dict], predicate) -> float:
+    team_rate = _rate_for(team_calls, predicate)
+    baseline = _pct(sum(1 for call in current_calls if call["is_connect"]), len(current_calls))
+    return round(team_rate - baseline, 3)
+
+
+def _build_driver_contributions(current_calls: list[dict], benchmark_calls: list[dict], strong_hours: set[int], weak_hours: set[int]) -> dict:
+    current = _build_connect_driver_aggregate(current_calls, strong_hours, weak_hours)
+    benchmark = _build_connect_driver_aggregate(benchmark_calls, strong_hours, weak_hours)
+
+    def metric_delta(label: str) -> float:
+        return (current["metrics"][label] - benchmark["metrics"][label]) / 100.0
+
+    dial_mix = sum([
+        metric_delta("Direct Number Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_direct"]),
+        metric_delta("Shared Number Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_shared_number"]),
+        metric_delta("High-Confidence Phone Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_high_conf_phone"]),
+        metric_delta("Buyer-Title Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_buyer_title"]),
+        metric_delta("ICP A/B Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_icp_ab"]),
+    ])
+    behavior = sum([
+        metric_delta("First Attempt Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_first_attempt"]),
+        metric_delta("Repeat Dial Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_repeat_dial"]),
+        metric_delta("Shared-Number Recycle Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c["is_shared_recycle"]),
+    ])
+    timing = sum([
+        metric_delta("Best-Window Dial Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c.get("local_hour") in strong_hours),
+        metric_delta("Weak-Window Dial Rate") * _metric_lift(current_calls, benchmark_calls, lambda c: c.get("local_hour") in weak_hours),
+    ])
+
+    return {
+        "Dial Mix": round(dial_mix, 1),
+        "Dialing Behavior": round(behavior, 1),
+        "Timing": round(timing, 1),
+    }
+
+
+def _build_driver_cards(current_stats: dict, benchmark_stats: dict) -> list[dict]:
+    dial_mix_rows = []
+    for label in (
+        "Direct Number Rate",
+        "Shared Number Rate",
+        "High-Confidence Phone Rate",
+        "Buyer-Title Rate",
+        "ICP A/B Rate",
+    ):
+        rep = current_stats["metrics"][label]
+        team = benchmark_stats["metrics"][label]
+        dial_mix_rows.append({
+            "label": label,
+            "rep": rep,
+            "team": team,
+            "delta": round(rep - team, 1),
+            "display": _metric_display(label, rep, team),
+        })
+
+    behavior_rows = []
+    for label in (
+        "Unique Numbers / 100 Dials",
+        "Repeat Dial Rate",
+        "First Attempt Rate",
+        "Shared-Number Recycle Rate",
+    ):
+        rep = current_stats["metrics"][label]
+        team = benchmark_stats["metrics"][label]
+        behavior_rows.append({
+            "label": label,
+            "rep": rep,
+            "team": team,
+            "delta": round(rep - team, 1),
+            "display": _metric_display(label, rep, team),
+        })
+
+    timing_rows = []
+    for label in (
+        "Best-Window Dial Rate",
+        "Weak-Window Dial Rate",
+        "Connect Rate in Strong Windows",
+        "Connect Rate in Weak Windows",
+    ):
+        rep = current_stats["metrics"][label]
+        team = benchmark_stats["metrics"][label]
+        timing_rows.append({
+            "label": label,
+            "rep": rep,
+            "team": team,
+            "delta": round(rep - team, 1),
+            "display": _metric_display(label, rep, team),
+        })
+
+    def index_value(card_rows: list[dict], invert_labels: set[str]) -> float:
+        score = 100.0
+        for row in card_rows:
+            sign = -1 if row["label"] in invert_labels else 1
+            score += row["delta"] * sign
+        return round(max(40.0, min(160.0, score)))
+
+    return [
+        {
+            "title": "Dial Mix",
+            "question": "Is this team calling stronger or weaker reachable records than average, including the same number across different contacts?",
+            "index_label": "Dial Mix Index",
+            "index_value": index_value(dial_mix_rows, {"Shared Number Rate"}),
+            "index_team_baseline": 100,
+            "tip": "Composite read of reachable-record quality versus the selected team baseline. Shared Number Rate tracks the same normalized phone number attached to multiple contacts.",
+            "rows": dial_mix_rows,
+        },
+        {
+            "title": "Dialing Behavior",
+            "question": "Is this rep creating fresh reach efficiently or wasting volume?",
+            "index_label": "Reach Efficiency Index",
+            "index_value": index_value(behavior_rows, {"Repeat Dial Rate", "Shared-Number Recycle Rate"}),
+            "index_team_baseline": 100,
+            "tip": "Composite read of how efficiently the dialing pattern creates fresh reach.",
+            "rows": behavior_rows,
+        },
+        {
+            "title": "Timing",
+            "question": "Is this rep calling in productive windows?",
+            "index_label": "Timing Quality Index",
+            "index_value": index_value(timing_rows, {"Weak-Window Dial Rate"}),
+            "index_team_baseline": 100,
+            "tip": "Composite read of timing quality versus when the selected team tends to connect best.",
+            "rows": timing_rows,
+        },
+    ]
+
+
+@ttl_cache
+def compute_connect_rate_drivers(
+    period: str,
+    team: str = "all",
+    rep: str = "all",
+    segment: str = "all",
+    comparison_mode: str = "connect_pct",
+    table_sort: str = "worst_delta_vs_team",
+) -> dict:
+    from zoneinfo import ZoneInfo
+
+    if comparison_mode not in _COMPARISON_MODES:
+        comparison_mode = "connect_pct"
+    if table_sort not in _CONNECT_DRIVER_SORTS:
+        table_sort = "worst_delta_vs_team"
+    rep = "all"
+
+    ct = ZoneInfo("America/Chicago")
+    start, end = get_date_range(period)
+    owners = apply_manual_owner_overrides(get_owners())
+    owner_team_map = get_owner_team_map()
+    contact_windows = get_deal_contact_windows()
+    calls = get_calls_enriched(start, end)
+
+    prepared_calls = []
+    for call in calls:
+        props = call.get("properties", {})
+        owner_id = props.get("hubspot_owner_id", "")
+        if not owner_id or not _owner_allowed(owner_id, end):
+            continue
+        if (props.get("hs_call_direction") or "").upper() == "INBOUND":
+            continue
+        contact_id = call.get("_contact_id")
+        ts_raw = props.get("hs_timestamp") or props.get("hs_createdate") or ""
+        try:
+            ts = _parse_hs_datetime(ts_raw)
+        except (ValueError, AttributeError):
+            ts = None
+        if contact_id and contact_id in contact_windows and ts is not None:
+            call_ts_ms = int(ts.timestamp() * 1000)
+            skip = False
+            for open_start, open_end in contact_windows[contact_id]:
+                if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
+                    skip = True
+                    break
+            if skip:
+                continue
+
+        owner = owners.get(owner_id, {})
+        email = call.get("_email") or ""
+        phone = call.get("_mobilephone") or call.get("_phone") or ""
+        normalized_phone = _normalize_phone(phone)
+        jobtitle = call.get("_jobtitle") or ""
+        line_type = _normalize_line_type(call.get("_line_type") or "Unknown")
+        icp_rank = _normalize_icp_rank(call.get("_icp_rank") or "—")
+        is_connect = (props.get("hs_call_disposition") or "").strip() in CALL_CONNECTED_GUIDS
+        duration_ms = int(props.get("hs_call_duration") or 0)
+        local_hour = ts.astimezone(ct).hour if ts else None
+        coverage_fields = [
+            1 if normalized_phone else 0,
+            1 if line_type != "Unknown" else 0,
+            1 if (icp_rank != "—" or jobtitle) else 0,
+            1 if local_hour is not None else 0,
+        ]
+        prepared_calls.append({
+            "owner_id": owner_id,
+            "rep": owner.get("last_name") or owner.get("name") or owner_id,
+            "team": owner_team_map.get(owner_id, "Unassigned"),
+            "contact_id": str(contact_id) if contact_id else "",
+            "call_id": call.get("id"),
+            "is_connect": is_connect,
+            "timestamp": ts,
+            "local_hour": local_hour,
+            "line_type": line_type,
+            "icp_rank": icp_rank,
+            "email": email,
+            "jobtitle": jobtitle,
+            "normalized_phone": normalized_phone,
+            "is_direct": line_type in {"Direct line", "Mobile"},
+            "is_high_conf_phone": bool(normalized_phone and line_type != "Unknown"),
+            "is_buyer_title": _is_buyer_title(jobtitle),
+            "is_icp_ab": icp_rank in {"A+", "A", "B"},
+            "is_low_icp": icp_rank in {"D", "Suppress"},
+            "is_no_icp_data": icp_rank == "—",
+            "is_conversation": bool(is_connect and duration_ms >= 60000),
+            "has_phone_and_email": bool(normalized_phone and email),
+            "is_placeholder_email": _looks_placeholder_email(email),
+            "coverage_score": sum(coverage_fields) / len(coverage_fields),
+        })
+
+    if not prepared_calls:
+        return {
+            "view": {
+                "period": period,
+                "period_label": period.replace("_", " ").title(),
+                "team": team,
+                "rep": "all",
+                "rep_label": "All reps",
+                "segment": segment,
+                "segment_enabled": False,
+                "is_rep_view": False,
+            },
+            "filters": {"teams": [], "reps": [], "segments": []},
+            "state": {
+                "loading": False,
+                "empty": True,
+                "partial_explanation": False,
+                "sample_too_small": False,
+                "field_coverage_weak": False,
+                "message": "No eligible call data for selected filters",
+            },
+            "kpis": [],
+            "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
+            "driver_cards": [],
+            "team_comparison": {"mode": comparison_mode, "modes": [], "rows": []},
+            "diagnostic_table": {"sort": table_sort, "sorts": [], "rows": [], "team_avg_row": None},
+            "rep_detail": {"selected_owner_id": None, "available": False},
+        }
+
+    phone_to_contacts = defaultdict(set)
+    calls_by_owner = defaultdict(list)
+    for call in prepared_calls:
+        if call["normalized_phone"]:
+            if call["contact_id"]:
+                phone_to_contacts[call["normalized_phone"]].add(call["contact_id"])
+        calls_by_owner[call["owner_id"]].append(call)
+
+    for owner_calls in calls_by_owner.values():
+        owner_calls.sort(key=lambda call: call["timestamp"] or datetime.min.replace(tzinfo=timezone.utc))
+        seen_phones = set()
+        shared_repeat_counts = defaultdict(int)
+        for call in owner_calls:
+            phone = call["normalized_phone"]
+            is_shared = bool(phone and len(phone_to_contacts.get(phone, set())) > 1)
+            call["is_shared_number"] = is_shared
+            call["is_first_attempt"] = bool(phone) and phone not in seen_phones
+            call["is_repeat_dial"] = bool(phone) and phone in seen_phones
+            if phone:
+                if is_shared and phone in seen_phones:
+                    shared_repeat_counts[phone] += 1
+                seen_phones.add(phone)
+            call["is_shared_recycle"] = bool(phone and is_shared and shared_repeat_counts[phone] > 0)
+
+    strong_hours, weak_hours, _ = _compute_timing_windows(prepared_calls)
+    global_stats = _build_connect_driver_aggregate(prepared_calls, strong_hours, weak_hours)
+    team_options = [{"value": "all", "label": "All"}]
+    for team_name in sorted({call["team"] for call in prepared_calls if call["team"] in {"Veterans", "Rising"}}):
+        team_options.append({"value": team_name, "label": team_name})
+
+    visible_calls = [call for call in prepared_calls if _call_meets_scope(call, team, "all", owner_team_map)]
+    if not visible_calls:
+        return {
+            "view": {
+                "period": period,
+                "period_label": period.replace("_", " ").title(),
+                "team": team,
+                "rep": "all",
+                "rep_label": "All reps",
+                "segment": segment,
+                "segment_enabled": False,
+                "is_rep_view": False,
+            },
+            "filters": {
+                "teams": team_options,
+                "reps": [{"value": "all", "label": "All reps"}],
+                "segments": [],
+            },
+            "state": {
+                "loading": False,
+                "empty": True,
+                "partial_explanation": False,
+                "sample_too_small": False,
+                "field_coverage_weak": False,
+                "message": "No eligible call data for selected filters",
+            },
+            "kpis": [],
+            "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
+            "driver_cards": [],
+            "team_comparison": {"mode": comparison_mode, "modes": [], "rows": []},
+            "diagnostic_table": {"sort": table_sort, "sorts": [], "rows": [], "team_avg_row": None},
+            "rep_detail": {"selected_owner_id": None, "available": False},
+        }
+    benchmark_calls = prepared_calls if team != "all" else visible_calls
+    benchmark_stats = _build_connect_driver_aggregate(benchmark_calls, strong_hours, weak_hours)
+    current_team_stats = _build_connect_driver_aggregate(visible_calls, strong_hours, weak_hours)
+
+    rep_rows = []
+    visible_owner_ids = sorted({call["owner_id"] for call in visible_calls}, key=lambda oid: owners.get(oid, {}).get("last_name") or owners.get(oid, {}).get("name") or oid)
+    for owner_id in visible_owner_ids:
+        rep_label = owners.get(owner_id, {}).get("last_name") or owners.get(owner_id, {}).get("name") or owner_id
+        owner_calls = [call for call in visible_calls if call["owner_id"] == owner_id]
+        owner_stats = _build_connect_driver_aggregate(owner_calls, strong_hours, weak_hours)
+        contributions = _build_driver_contributions(owner_calls, visible_calls, strong_hours, weak_hours)
+        explained_points = round(sum(contributions.values()), 1)
+        delta_vs_team = round(owner_stats["connect_pct"] - current_team_stats["connect_pct"], 1)
+        unexplained = round(delta_vs_team - explained_points, 1)
+        expected = round(current_team_stats["connect_pct"] + explained_points, 1)
+        actual_vs_expected = round(owner_stats["connect_pct"] - expected, 1)
+        gap_explained = 100.0 if abs(delta_vs_team) < 0.1 else round(min(100.0, abs(explained_points) / abs(delta_vs_team) * 100), 1)
+        row = {
+            "owner_id": owner_id,
+            "rep": rep_label,
+            "actual_connect_pct": owner_stats["connect_pct"],
+            "expected_connect_pct": expected,
+            "delta_vs_team_avg": delta_vs_team,
+            "actual_vs_expected": actual_vs_expected,
+            "gap_explained_pct": gap_explained,
+            "field_coverage_pct": owner_stats["field_coverage_pct"],
+            "shared_number_rate": owner_stats["metrics"]["Shared Number Rate"],
+            "conversation_pct": owner_stats["conversation_pct"],
+            "low_icp_rate": owner_stats["metrics"]["Low ICP Rate"],
+            "no_icp_data_rate": owner_stats["metrics"]["No ICP Data Rate"],
+            "primary_driver": max(contributions, key=lambda label: abs(contributions[label])) if contributions else "Unexplained",
+            "secondary_driver": sorted(contributions, key=lambda label: abs(contributions[label]), reverse=True)[1] if len(contributions) > 1 else "Unexplained",
+            "partial_explanation": gap_explained < 80 or owner_stats["field_coverage_pct"] < 70 or owner_stats["dials"] < 25,
+            "sample_too_small": owner_stats["dials"] < 25,
+            "driver_points": {
+                "Dial Mix": contributions["Dial Mix"],
+                "Dialing Behavior": contributions["Dialing Behavior"],
+                "Timing": contributions["Timing"],
+                "Unexplained": unexplained,
+            },
+            "driver_cards": _build_driver_cards(owner_stats, current_team_stats),
+            "stats": owner_stats,
+        }
+        rep_rows.append(row)
+
+    selected_calls = [call for call in prepared_calls if _call_meets_scope(call, team, "all", owner_team_map)]
+    selected_stats = _build_connect_driver_aggregate(selected_calls, strong_hours, weak_hours) if selected_calls else current_team_stats
+    selected_benchmark_calls = benchmark_calls
+    selected_benchmark_stats = _build_connect_driver_aggregate(selected_benchmark_calls, strong_hours, weak_hours)
+    selected_contributions = _build_driver_contributions(selected_calls, selected_benchmark_calls, strong_hours, weak_hours) if selected_calls else {"Dial Mix": 0.0, "Dialing Behavior": 0.0, "Timing": 0.0}
+    selected_delta = round(selected_stats["connect_pct"] - selected_benchmark_stats["connect_pct"], 1)
+    selected_explained = round(sum(selected_contributions.values()), 1)
+    selected_unexplained = round(selected_delta - selected_explained, 1)
+    selected_expected = round(selected_benchmark_stats["connect_pct"] + selected_explained, 1)
+    selected_actual_vs_expected = round(selected_stats["connect_pct"] - selected_expected, 1)
+    selected_gap_explained = 100.0 if abs(selected_delta) < 0.1 else round(min(100.0, abs(selected_explained) / abs(selected_delta) * 100), 1)
+    selected_partial = selected_gap_explained < 80 or selected_stats["field_coverage_pct"] < 70 or selected_stats["dials"] < 25
+
+    comparison_rows = []
+    for row in rep_rows:
+        comparison_rows.append({
+            "owner_id": row["owner_id"],
+            "rep": row["rep"],
+            "actual_connect_pct": row["actual_connect_pct"],
+            "expected_connect_pct": row["expected_connect_pct"],
+            "delta_vs_team_avg": row["delta_vs_team_avg"],
+            "actual_vs_expected": row["actual_vs_expected"],
+            "selected": False,
+        })
+
+    if table_sort == "worst_delta_vs_team":
+        rep_rows.sort(key=lambda row: (row["delta_vs_team_avg"], row["rep"]))
+    elif table_sort == "worst_vs_expected":
+        rep_rows.sort(key=lambda row: (row["actual_vs_expected"], row["rep"]))
+    elif table_sort == "lowest_gap_explained":
+        rep_rows.sort(key=lambda row: (row["gap_explained_pct"], row["rep"]))
+    else:
+        rep_rows.sort(key=lambda row: (-row["actual_connect_pct"], row["rep"]))
+
+    period_label = {
+        "today": "Today",
+        "this_week": "This Week",
+        "last_week": "Last Week",
+        "this_month": "This Month",
+        "last_month": "Last Month",
+        "last_30": "Last 30 Days",
+        "last_90": "Last 90 Days",
+        "this_quarter": "This Quarter",
+        "last_quarter": "Last Quarter",
+        "ytd": "Year to Date",
+    }.get(period, period.replace("_", " ").title())
+    selected_label = "Selected Team Connect %"
+
+    kpis = [
+        {
+            "label": selected_label,
+            "value": selected_stats["connect_pct"],
+            "display": _fmt_pct_points(selected_stats["connect_pct"]),
+            "delta_points": None,
+            "tip": None,
+        },
+        {
+            "label": "Team Avg Connect %",
+            "value": selected_benchmark_stats["connect_pct"],
+            "display": _fmt_pct_points(selected_benchmark_stats["connect_pct"]),
+            "delta_points": None,
+            "tip": None,
+        },
+        {
+            "label": "Delta vs Team Avg",
+            "value": selected_delta,
+            "display": _fmt_point_delta(selected_delta),
+            "delta_points": selected_delta,
+            "tip": None,
+        },
+        {
+            "label": "Expected Connect %",
+            "value": selected_expected,
+            "display": _fmt_pct_points(selected_expected),
+            "delta_points": None,
+            "tip": "Estimated connect rate based on dial mix, dialing behavior, and timing only.",
+        },
+        {
+            "label": "Actual vs Expected",
+            "value": selected_actual_vs_expected,
+            "display": _fmt_point_delta(selected_actual_vs_expected),
+            "delta_points": selected_actual_vs_expected,
+            "tip": "Shows whether actual connect rate landed above or below the measured-condition benchmark.",
+        },
+        {
+            "label": "Gap Explained %",
+            "value": selected_gap_explained,
+            "display": f"{selected_gap_explained:.0f}%",
+            "delta_points": None,
+            "band": _pct_band(selected_gap_explained),
+            "tip": "Shows how much of the gap versus team average is explained by the tracked drivers.",
+        },
+        {
+            "label": "Field Coverage %",
+            "value": selected_stats["field_coverage_pct"],
+            "display": f"{selected_stats['field_coverage_pct']:.0f}%",
+            "delta_points": None,
+            "tip": "Shows how much of the analyzed dialing volume has the fields needed to explain the read confidently.",
+        },
+    ]
+
+    driver_cards = _build_driver_cards(selected_stats, selected_benchmark_stats)
+    team_avg_row = {
+        "rep": "Team Avg",
+        "actual_connect_pct": current_team_stats["connect_pct"],
+        "delta_vs_team_avg": 0.0,
+        "expected_connect_pct": current_team_stats["connect_pct"],
+        "actual_vs_expected": 0.0,
+        "gap_explained_pct": 100.0,
+        "shared_number_rate": current_team_stats["metrics"]["Shared Number Rate"],
+        "conversation_pct": current_team_stats["conversation_pct"],
+        "low_icp_rate": current_team_stats["metrics"]["Low ICP Rate"],
+        "no_icp_data_rate": current_team_stats["metrics"]["No ICP Data Rate"],
+    }
+
+    return {
+        "view": {
+            "period": period,
+            "period_label": period_label,
+            "team": team,
+            "rep": "all",
+            "rep_label": "All reps",
+            "segment": segment,
+            "segment_enabled": False,
+            "is_rep_view": False,
+        },
+        "filters": {
+            "teams": team_options,
+            "reps": [{"value": "all", "label": "All reps"}],
+            "segments": [],
+        },
+        "state": {
+            "loading": False,
+            "empty": False,
+            "partial_explanation": selected_partial,
+            "sample_too_small": selected_stats["dials"] < 25,
+            "field_coverage_weak": selected_stats["field_coverage_pct"] < 70,
+            "message": "Partial explanation" if selected_partial else "Strong explanation",
+        },
+        "kpis": kpis,
+        "notes": {
+            "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
+            "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
+            "clearout_phone_source": "Current line-type and phone-quality logic uses HubSpot contact fields `cop_line_type`, `phone`, and `mobilephone`. No separate Clearout-specific field is wired into this page yet.",
+        },
+        "gap_decomposition": {
+            "title": "What is driving the gap?",
+            "team_avg_connect_pct": selected_benchmark_stats["connect_pct"],
+            "rep_connect_pct": selected_stats["connect_pct"],
+            "expected_connect_pct": selected_expected,
+            "buckets": [
+                {"label": "Dial Mix", "points": selected_contributions["Dial Mix"]},
+                {"label": "Dialing Behavior", "points": selected_contributions["Dialing Behavior"]},
+                {"label": "Timing", "points": selected_contributions["Timing"]},
+                {"label": "Unexplained", "points": selected_unexplained},
+            ],
+        },
+        "driver_cards": driver_cards,
+        "team_comparison": {
+            "mode": comparison_mode,
+            "modes": [
+                {"value": "connect_pct", "label": "Connect %"},
+                {"value": "delta_vs_team", "label": "Delta vs Team"},
+                {"value": "actual_vs_expected", "label": "Actual vs Expected"},
+            ],
+            "team_avg_connect_pct": current_team_stats["connect_pct"],
+            "rows": comparison_rows,
+        },
+        "diagnostic_table": {
+            "sort": table_sort,
+            "sorts": [
+                {"value": "worst_delta_vs_team", "label": "worst Delta vs Team"},
+                {"value": "worst_vs_expected", "label": "worst Vs Expected"},
+                {"value": "lowest_gap_explained", "label": "lowest Gap Explained %"},
+                {"value": "highest_connect", "label": "highest Connect %"},
+            ],
+            "rows": rep_rows,
+            "team_avg_row": team_avg_row,
+        },
+        "rep_detail": {"selected_owner_id": None, "available": False},
     }
 
 

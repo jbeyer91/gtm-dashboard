@@ -29,6 +29,8 @@ DIAL_PIPELINE_PERIODS = [
     ("last_month", "Last Month"),
 ]
 
+CONNECT_RATE_DRIVER_PERIODS = CALL_STATS_PERIODS
+
 
 def _login_required(f):
     @wraps(f)
@@ -177,4 +179,71 @@ def dial_pipeline():
         periods=DIAL_PIPELINE_PERIODS,
         nav=NAV,
         active="calls_drilldown.dial_pipeline",
+    )
+
+
+@bp.route("/calls/connect-rate-drivers")
+@_login_required
+def connect_rate_drivers():
+    period = request.args.get("period", "this_month")
+    if period not in {p for p, _ in CONNECT_RATE_DRIVER_PERIODS}:
+        period = "this_month"
+
+    team = request.args.get("team", "all")
+    rep = "all"
+    segment = request.args.get("segment", "all")
+    comparison_mode = request.args.get("comparison_mode", "connect_pct")
+    table_sort = request.args.get("table_sort", "worst_delta_vs_team")
+
+    if not is_cached(
+        analytics.compute_connect_rate_drivers,
+        period,
+        team,
+        rep,
+        segment,
+        comparison_mode,
+        table_sort,
+    ):
+        from app import NAV
+        return render_template(
+            "connect_rate_drivers.html",
+            loading=True,
+            period=period,
+            team=team,
+            rep=rep,
+            segment=segment,
+            comparison_mode=comparison_mode,
+            table_sort=table_sort,
+            periods=CONNECT_RATE_DRIVER_PERIODS,
+            nav=NAV,
+            active="calls_drilldown.connect_rate_drivers",
+        ), 202
+
+    try:
+        data = analytics.compute_connect_rate_drivers(
+            period,
+            team,
+            rep,
+            segment,
+            comparison_mode,
+            table_sort,
+        )
+    except Exception as e:
+        log.exception("connect_rate_drivers error")
+        from app import NAV
+        return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
+
+    from app import NAV
+    return render_template(
+        "connect_rate_drivers.html",
+        data=data,
+        period=period,
+        team=team,
+            rep=rep,
+        segment=segment,
+        comparison_mode=comparison_mode,
+        table_sort=table_sort,
+        periods=CONNECT_RATE_DRIVER_PERIODS,
+        nav=NAV,
+        active="calls_drilldown.connect_rate_drivers",
     )

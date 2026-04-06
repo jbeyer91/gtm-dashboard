@@ -1040,14 +1040,40 @@ def get_call_to_contact_map(call_ids: list) -> dict:
 
 
 def get_contacts_for_drilldown(contact_ids: list) -> dict:
-    """Batch-read cop_line_type + company_icp_rank for a list of contact IDs.
+    """Batch-read contact properties needed by call-diagnostic pages.
 
-    Returns {contact_id: {"cop_line_type": str, "company_icp_rank": str}}.
+    Returns:
+      {contact_id: {
+          "cop_line_type": str,
+          "company_icp_rank": str,
+          "email": str,
+          "phone": str,
+          "mobilephone": str,
+          "jobtitle": str,
+      }}
     Not cached — called from analytics functions that are themselves cached.
     """
     if not contact_ids:
         return {}
     result = {}
+    contact_to_companies = _batch_associations("contacts", "companies", contact_ids)
+    company_ids = sorted({company_id for company_ids in contact_to_companies.values() for company_id in company_ids})
+    company_icp_ranks = {}
+    for i in range(0, len(company_ids), 100):
+        batch = company_ids[i:i + 100]
+        resp = requests.post(
+            f"{BASE_URL}/crm/v3/objects/companies/batch/read",
+            headers=HEADERS,
+            json={
+                "inputs": [{"id": cid} for cid in batch],
+                "properties": ["icp_rank"],
+            },
+            timeout=_TIMEOUT,
+        )
+        if not resp.ok:
+            continue
+        for company in resp.json().get("results", []):
+            company_icp_ranks[str(company["id"])] = (company["properties"].get("icp_rank") or "").strip()
     for i in range(0, len(contact_ids), 100):
         batch = contact_ids[i:i + 100]
         resp = requests.post(
@@ -1055,16 +1081,35 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
             headers=HEADERS,
             json={
                 "inputs": [{"id": cid} for cid in batch],
-                "properties": ["cop_line_type", "company_icp_rank"],
+                "properties": [
+                    "cop_line_type",
+                    "company_icp_rank",
+                    "email",
+                    "phone",
+                    "mobilephone",
+                    "jobtitle",
+                ],
             },
             timeout=_TIMEOUT,
         )
         if not resp.ok:
             continue
         for c in resp.json().get("results", []):
+            contact_id = str(c["id"])
+            company_icp_rank = (c["properties"].get("company_icp_rank") or "").strip()
+            if not company_icp_rank:
+                company_ids = contact_to_companies.get(contact_id, [])
+                company_icp_rank = next(
+                    (company_icp_ranks.get(str(company_id), "").strip() for company_id in company_ids if company_icp_ranks.get(str(company_id), "").strip()),
+                    "",
+                )
             result[str(c["id"])] = {
                 "cop_line_type":    (c["properties"].get("cop_line_type") or "").strip(),
-                "company_icp_rank": (c["properties"].get("company_icp_rank") or "").strip(),
+                "company_icp_rank": company_icp_rank,
+                "email":            (c["properties"].get("email") or "").strip(),
+                "phone":            (c["properties"].get("phone") or "").strip(),
+                "mobilephone":      (c["properties"].get("mobilephone") or "").strip(),
+                "jobtitle":         (c["properties"].get("jobtitle") or "").strip(),
             }
     return result
 
@@ -1074,9 +1119,13 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
     """Return calls with _line_type, _icp_rank, and _contact_id pre-attached.
 
     Each item in the returned list is the original call dict extended with:
-      _line_type  — cop_line_type of the linked contact (or "Unknown")
-      _icp_rank   — company_icp_rank of the linked contact (or "—")
-      _contact_id — HubSpot contact ID linked to this call (or None)
+      _line_type   — cop_line_type of the linked contact (or "Unknown")
+      _icp_rank    — company_icp_rank of the linked contact (or "—")
+      _contact_id  — HubSpot contact ID linked to this call (or None)
+      _email       — contact email
+      _phone       — contact phone
+      _mobilephone — contact mobile phone
+      _jobtitle    — contact title
 
     Not cached — depends on get_calls() which is cached.
     """
@@ -1095,6 +1144,10 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
             "_line_type":   cp.get("cop_line_type") or "Unknown",
             "_icp_rank":    cp.get("company_icp_rank") or "—",
             "_contact_id":  contact_id,
+            "_email":       cp.get("email") or "",
+            "_phone":       cp.get("phone") or "",
+            "_mobilephone": cp.get("mobilephone") or "",
+            "_jobtitle":    cp.get("jobtitle") or "",
         })
     return enriched
 
