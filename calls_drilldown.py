@@ -168,7 +168,7 @@ def _normalize_connect_rate_driver_payload(
         "notes": {
             "shared_number_definition": "Shared Number Rate flags the same normalized phone number appearing across multiple contact records, which is the closest read on reps calling the same number through different people.",
             "conversation_rate_definition": "Conversation rate uses the same definition as Call Stats: connected outbound calls with 60+ seconds duration divided by live connects.",
-            "clearout_phone_source": "Line-type uses `cop_line_type` with automatic fallback to `clearoutphone_line_type` when blank. Additional ClearoutPhone fields (`clearoutphone_status`, `clearoutphone_carrier`) are fetched and available for future enrichment.",
+            "clearout_phone_source": "Phone type (mobile vs. direct line) comes from the contact record in HubSpot. When the primary line-type field is blank, a secondary enrichment field is used as a fallback. A phone is considered high-confidence when a normalized number is present and the line type is known.",
         },
         "gap_decomposition": {
             "title": "What is driving the gap?",

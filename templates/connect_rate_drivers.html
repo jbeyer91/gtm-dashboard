@@ -386,7 +386,12 @@ function updateParam(key, value) {
   if (gapAllZero) {
     var gapCanvas = document.getElementById('gapDecompositionChart');
     var gapParent = gapCanvas.parentElement;
-    gapParent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">Insufficient field data — field coverage too low to decompose gap</div>';
+    var repPct = {{ data.gap_decomposition.rep_connect_pct | tojson }};
+    var teamPct = {{ data.gap_decomposition.team_avg_connect_pct | tojson }};
+    var gapMsg = (Math.abs(repPct - teamPct) < 0.05)
+      ? 'No gap to decompose \u2014 the selected view matches the team benchmark.'
+      : 'Insufficient field data \u2014 field coverage too low to decompose gap.';
+    gapParent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">' + gapMsg + '</div>';
   } else {
 
   new Chart(document.getElementById('gapDecompositionChart'), {
