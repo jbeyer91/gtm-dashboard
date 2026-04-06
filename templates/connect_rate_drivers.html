@@ -70,6 +70,40 @@
 </div>
 {% else %}
 
+{# ── Team vs Target health banner ─────────────────────────────────────────── #}
+<div class="flex flex-wrap gap-3 mb-6">
+  <div class="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium
+    {% if t.connect_rate >= 10 %}bg-green-50 border-green-200 text-green-800
+    {% elif t.connect_rate >= 7 %}bg-yellow-50 border-yellow-200 text-yellow-800
+    {% else %}bg-red-50 border-red-200 text-red-800{% endif %}">
+    <span class="text-base font-bold">
+      {% if t.connect_rate >= 10 %}&#10003;{% else %}&#10007;{% endif %}
+    </span>
+    <span>
+      <span class="font-semibold">Connect Rate:</span>
+      {{ "%.1f"|format(t.connect_rate) }}%
+      <span class="font-normal opacity-75">vs 10% target</span>
+      &mdash;
+      {% if t.connect_rate >= 10 %}above target{% elif t.connect_rate >= 7 %}near target{% else %}below target{% endif %}
+    </span>
+  </div>
+  <div class="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium
+    {% if t.avg_dials_per_day >= 40 %}bg-green-50 border-green-200 text-green-800
+    {% elif t.avg_dials_per_day >= 30 %}bg-yellow-50 border-yellow-200 text-yellow-800
+    {% else %}bg-red-50 border-red-200 text-red-800{% endif %}">
+    <span class="text-base font-bold">
+      {% if t.avg_dials_per_day >= 40 %}&#10003;{% else %}&#10007;{% endif %}
+    </span>
+    <span>
+      <span class="font-semibold">Dials / Day:</span>
+      {{ "%.1f"|format(t.avg_dials_per_day) }}
+      <span class="font-normal opacity-75">vs 40 target</span>
+      &mdash;
+      {% if t.avg_dials_per_day >= 40 %}at target{% elif t.avg_dials_per_day >= 30 %}near target{% else %}below target{% endif %}
+    </span>
+  </div>
+</div>
+
 {# ── Gap waterfall — only when a specific rep is selected ─────────────────── #}
 {% if waterfall %}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
@@ -155,12 +189,20 @@
 {# ── 2. Rep KPI table — all locked outcome + index KPIs side by side ──────── #}
 
 {# Index legend callout #}
-<div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-4 py-2.5 mb-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-500">
-  <span class="font-semibold text-gray-600 whitespace-nowrap">How to read the index scores:</span>
-  <span class="whitespace-nowrap">Team average = <span class="font-semibold text-gray-700">100</span></span>
-  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-green-400 inline-block"></span><span class="font-semibold text-green-700">≥ 110</span> above team average</span>
-  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-gray-300 inline-block"></span><span class="font-semibold text-gray-600">90–109</span> near team average</span>
-  <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-red-400 inline-block"></span><span class="font-semibold text-red-600">&lt; 90</span> below team average</span>
+<div class="px-4 py-3 mb-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-500 space-y-2">
+  <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+    <span class="font-semibold text-gray-600 whitespace-nowrap">How to read the index scores:</span>
+    <span class="whitespace-nowrap">Team average = <span class="font-semibold text-gray-700">100</span> &nbsp;·&nbsp; not a percentage &mdash; a relative score vs team</span>
+    <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-green-400 inline-block"></span><span class="font-semibold text-green-700">≥ 110</span> above team average</span>
+    <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-gray-300 inline-block"></span><span class="font-semibold text-gray-600">90–109</span> near team average</span>
+    <span class="flex items-center gap-1.5 whitespace-nowrap"><span class="w-2.5 h-2.5 rounded-sm bg-red-400 inline-block"></span><span class="font-semibold text-red-600">&lt; 90</span> below team average</span>
+  </div>
+  <div class="flex flex-wrap gap-x-6 gap-y-1 pt-1 border-t border-gray-200">
+    <span><span class="font-semibold text-violet-600">Dial Mix (DMI)</span> &mdash; quality of <em>who</em> you call (ICP rank) + <em>what number</em> you dial (direct line vs mobile)</span>
+    <span><span class="font-semibold text-blue-600">Reach Efficiency (REI)</span> &mdash; dial volume + how often you actually reach people (lower voicemail, higher conversation rate)</span>
+    <span><span class="font-semibold text-amber-600">Timing (TQI)</span> &mdash; share of dials placed during the team's peak connect-rate hours</span>
+    <span class="text-gray-400 italic">e.g. a score of 150 = 50% better than the team average &nbsp;·&nbsp; a score of 50 = 50% worse</span>
+  </div>
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-8">
@@ -177,17 +219,17 @@
         <th class="px-3 py-3 text-right font-semibold" title="KPI 4: Expected Connect %">Expected %</th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 5: Actual vs Expected">vs Expected</th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 6: Gap Explained % — how much of the delta vs team is explained by the tracked drivers">Gap Expl'd %</th>
-        <th class="px-3 py-3 text-right font-semibold" title="Dial Mix score — who you call (ICP rank) + what number you reach them at (line type). Above 100 = better dial mix than team average.">
-          <span class="block">Dial Mix</span>
-          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        <th class="px-3 py-3 text-right font-semibold" title="Dial Mix Index (DMI) — who you call (ICP rank) + what number you reach them at (direct line vs mobile). Above 100 = better dial mix than team average; below 100 = worse.">
+          <span class="block">Dial Mix <span class="font-normal text-gray-400">(DMI)</span></span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">ICP rank + line type</span>
         </th>
-        <th class="px-3 py-3 text-right font-semibold" title="Reach Efficiency score — how much you dial (volume) + how effectively you reach people (voicemail rate + conversation rate). Above 100 = more efficient than team average.">
-          <span class="block">Reach Eff.</span>
-          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        <th class="px-3 py-3 text-right font-semibold" title="Reach Efficiency Index (REI) — how much you dial (volume) + how effectively you reach people (lower voicemail rate, higher conversation rate). Above 100 = more efficient than team average; below 100 = less.">
+          <span class="block">Reach Eff. <span class="font-normal text-gray-400">(REI)</span></span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">volume + VM + convo rate</span>
         </th>
-        <th class="px-3 py-3 text-right font-semibold" title="Timing score — how much of your dialing lands in the team's peak connect-rate hours. Above 100 = better timing than team average.">
-          <span class="block">Timing</span>
-          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">score vs team</span>
+        <th class="px-3 py-3 text-right font-semibold" title="Timing Quality Index (TQI) — share of dials placed in the team's top 3 connect-rate hours. Above 100 = better timing than team average; below 100 = worse.">
+          <span class="block">Timing <span class="font-normal text-gray-400">(TQI)</span></span>
+          <span class="block text-[10px] font-normal normal-case tracking-normal text-gray-400">% dials in peak hours</span>
         </th>
         <th class="px-3 py-3 text-right font-semibold" title="KPI 7: Field Coverage % — dials with all 3 required fields populated">Coverage %</th>
       </tr>
@@ -295,6 +337,7 @@
     </tbody>
   </table>
   <div class="px-6 pb-3 pt-1 flex flex-wrap gap-x-6 gap-y-1 text-[10px] text-gray-400">
+    <span><span class="font-semibold text-gray-500">DMI / REI / TQI</span> = relative scores vs team, not percentages — team average is always 100; higher = better than team, lower = worse</span>
     <span><span class="font-semibold text-gray-500">Gap Expl'd %</span> = how much of this rep's connect-rate gap vs team is explained by the three driver scores · shown only when |gap| ≥ 0.5pp</span>
     <span><span class="font-semibold text-gray-500">Expected %</span> = predicted connect rate based on this rep's dial mix, reach efficiency, and timing scores vs team</span>
   </div>
