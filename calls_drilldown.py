@@ -29,6 +29,8 @@ DIAL_PIPELINE_PERIODS = [
     ("last_month", "Last Month"),
 ]
 
+CONNECT_RATE_DRIVER_PERIODS = CALL_STATS_PERIODS
+
 
 def _login_required(f):
     @wraps(f)
@@ -73,77 +75,6 @@ def calls_drilldown():
     )
 
 
-@bp.route("/calls/connect-rate-drivers")
-@_login_required
-def connect_rate_drivers():
-    period = request.args.get("period", "this_month")
-    if period not in {p for p, _ in CALL_STATS_PERIODS}:
-        period = "this_month"
-
-    team = request.args.get("team", "all")
-    rep = request.args.get("rep", "all")
-    segment = request.args.get("segment", "all")
-
-    if not is_cached(analytics.compute_connect_rate_drivers, period):
-        from app import NAV
-        return render_template(
-            "connect_rate_drivers.html",
-            loading=True, period=period,
-            periods=CALL_STATS_PERIODS,
-            nav=NAV, active="calls_drilldown.connect_rate_drivers",
-        ), 202
-
-    try:
-        data = analytics.compute_connect_rate_drivers(period, team=team, rep=rep, segment=segment)
-    except Exception as e:
-        log.exception("connect_rate_drivers error")
-        from app import NAV
-        return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
-
-    # Resolve period label
-    period_label = next((lbl for val, lbl in CALL_STATS_PERIODS if val == period), period)
-
-    # Rep filter — drill into a single rep vs team
-    rep_id = request.args.get("rep", "all")
-    selected_row = next((r for r in data["rows"] if r["owner_id"] == rep_id), None)
-
-    # Gap waterfall: attribute the explained gap to each driver bucket (in pp)
-    waterfall = None
-    if selected_row:
-        t_rate = data["team"]["connect_rate"]
-        waterfall = {
-            "dmi_contribution": round(t_rate * (selected_row["dmi"] - 100) / 100, 2),
-            "rei_contribution": round(t_rate * (selected_row["rei"] - 100) / 100, 2),
-            "tqi_contribution": round(t_rate * (selected_row["tqi"] - 100) / 100, 2),
-            "unexplained":      selected_row["actual_vs_expected"],
-            "total_gap":        selected_row["vs_team"],
-        }
-
-    from app import NAV
-    from app import TEAMS
-    rep_options = [{"value": "all", "label": "All reps"}] + [
-        {"value": r["owner_id"], "label": r["ae"]}
-        for r in data.get("rows", [])
-    ]
-    return render_template(
-        "connect_rate_drivers.html",
-        data=data,
-        period=period,
-        team=team,
-        rep=rep,
-        segment=segment,
-        teams=TEAMS,
-        rep_options=rep_options,
-        period_label=period_label,
-        periods=CALL_STATS_PERIODS,
-        rep_id=rep_id,
-        selected_row=selected_row,
-        waterfall=waterfall,
-        nav=NAV,
-        active="calls_drilldown.connect_rate_drivers",
-    )
-
-
 @bp.route("/calls/dial-pipeline")
 @_login_required
 def dial_pipeline():
@@ -177,4 +108,71 @@ def dial_pipeline():
         periods=DIAL_PIPELINE_PERIODS,
         nav=NAV,
         active="calls_drilldown.dial_pipeline",
+    )
+
+
+@bp.route("/calls/connect-rate-drivers")
+@_login_required
+def connect_rate_drivers():
+    period = request.args.get("period", "this_month")
+    if period not in {p for p, _ in CONNECT_RATE_DRIVER_PERIODS}:
+        period = "this_month"
+
+    team = request.args.get("team", "all")
+    rep = "all"
+    segment = request.args.get("segment", "all")
+    comparison_mode = request.args.get("comparison_mode", "connect_pct")
+    table_sort = request.args.get("table_sort", "worst_delta_vs_team")
+
+    if not is_cached(
+        analytics.compute_connect_rate_drivers,
+        period,
+        team,
+        rep,
+        segment,
+        comparison_mode,
+        table_sort,
+    ):
+        from app import NAV
+        return render_template(
+            "connect_rate_drivers.html",
+            loading=True,
+            period=period,
+            team=team,
+            rep=rep,
+            segment=segment,
+            comparison_mode=comparison_mode,
+            table_sort=table_sort,
+            periods=CONNECT_RATE_DRIVER_PERIODS,
+            nav=NAV,
+            active="calls_drilldown.connect_rate_drivers",
+        ), 202
+
+    try:
+        data = analytics.compute_connect_rate_drivers(
+            period,
+            team,
+            rep,
+            segment,
+            comparison_mode,
+            table_sort,
+        )
+    except Exception as e:
+        log.exception("connect_rate_drivers error")
+        from app import NAV
+        return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
+
+    from app import NAV
+    return render_template(
+        "connect_rate_drivers.html",
+        data=data,
+        period=period,
+        team=team,
+            rep=rep,
+        segment=segment,
+        comparison_mode=comparison_mode,
+        table_sort=table_sort,
+        periods=CONNECT_RATE_DRIVER_PERIODS,
+        nav=NAV,
+        active="calls_drilldown.connect_rate_drivers",
     )
