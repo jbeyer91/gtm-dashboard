@@ -328,6 +328,10 @@
           <th class="px-4 py-3 text-right font-semibold">Convo %</th>
           <th class="px-4 py-3 text-right font-semibold">Low ICP %</th>
           <th class="px-4 py-3 text-right font-semibold">No ICP Data %</th>
+          <th class="px-4 py-3 text-right font-semibold"
+              data-tip="% of dials logged from the company record instead of a contact — these bypass contact-level data and inflate No ICP Data %">
+            Co-Object %
+          </th>
           <th class="px-4 py-3 text-left font-semibold">Primary Driver</th>
           <th class="px-4 py-3 text-left font-semibold">Secondary Driver</th>
         </tr>
@@ -349,6 +353,9 @@
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.conversation_pct) }}%</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.low_icp_rate) }}%</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.no_icp_data_rate) }}%</td>
+          <td class="px-4 py-3 text-right tabular-nums {% if row.company_object_rate > 10 %}text-amber-600 font-medium{% else %}text-slate-600{% endif %}">
+            {{ "%.1f"|format(row.company_object_rate) }}%
+          </td>
           <td class="px-4 py-3 text-slate-700">{{ row.primary_driver }}</td>
           <td class="px-4 py-3 text-slate-500">{{ row.secondary_driver }}</td>
         </tr>
@@ -368,6 +375,7 @@
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.conversation_pct) }}%</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.low_icp_rate) }}%</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.no_icp_data_rate) }}%</td>
+          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.company_object_rate) }}%</td>
           <td class="px-4 py-3 text-slate-500">Baseline</td>
           <td class="px-4 py-3 text-slate-500">Baseline</td>
         </tr>

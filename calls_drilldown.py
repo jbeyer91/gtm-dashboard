@@ -119,6 +119,7 @@ def _normalize_connect_rate_driver_payload(
             "conversation_pct": row.get("conversation_rate", 0.0),
             "low_icp_rate": row.get("icp_low_pct", 0.0),
             "no_icp_data_rate": row.get("icp_unknown_pct", 0.0),
+            "company_object_rate": row.get("company_object_rate", 0.0),
             "primary_driver": next((d.get("primary_driver") for d in raw.get("diagnostic_rows", []) if d.get("owner_id") == row.get("owner_id")), "Dial Mix"),
             "secondary_driver": next((d.get("secondary_driver") for d in raw.get("diagnostic_rows", []) if d.get("owner_id") == row.get("owner_id")), "Timing"),
         })
@@ -208,6 +209,7 @@ def _normalize_connect_rate_driver_payload(
                 "conversation_pct": totals.get("conversation_rate", team.get("convo_rate", 0.0)),
                 "low_icp_rate": totals.get("icp_low_pct", 0.0),
                 "no_icp_data_rate": totals.get("icp_unknown_pct", 0.0),
+                "company_object_rate": totals.get("company_object_rate", 0.0),
             },
         },
         "rep_detail": {"selected_owner_id": None, "available": False},

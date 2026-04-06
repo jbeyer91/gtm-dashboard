@@ -859,6 +859,7 @@ def _build_connect_driver_aggregate(calls: list[dict], strong_hours: set[int], w
     icp_ab_count = sum(1 for call in calls if call["is_icp_ab"])
     low_icp_count = sum(1 for call in calls if call.get("is_low_icp"))
     no_icp_count = sum(1 for call in calls if call.get("is_no_icp_data"))
+    company_object_count = sum(1 for call in calls if call.get("is_from_company_object"))
     repeat_count = sum(1 for call in calls if call["is_repeat_dial"])
     first_attempt_count = sum(1 for call in calls if call["is_first_attempt"])
     shared_recycle_count = sum(1 for call in calls if call["is_shared_recycle"])
@@ -896,6 +897,7 @@ def _build_connect_driver_aggregate(calls: list[dict], strong_hours: set[int], w
             "ICP A/B Rate": icp_ab_rate,
             "Low ICP Rate": _safe_share_pct(low_icp_count, dials),
             "No ICP Data Rate": _safe_share_pct(no_icp_count, dials),
+            "Company-Object Dial Rate": _safe_share_pct(company_object_count, dials),
             "Unique Numbers / 100 Dials": unique_numbers_per_100,
             "Repeat Dial Rate": repeat_rate,
             "First Attempt Rate": first_attempt_rate,
@@ -1127,6 +1129,7 @@ def compute_connect_rate_drivers(
             "is_icp_ab": icp_rank in {"A+", "A", "B"},
             "is_low_icp": icp_rank in {"D", "Least Priority"},
             "is_no_icp_data": icp_rank == "—",
+            "is_from_company_object": call.get("_from_company_object", False),
             "is_conversation": bool(is_connect and duration_ms >= 60000),
             "has_phone_and_email": bool(normalized_phone and email),
             "is_placeholder_email": _looks_placeholder_email(email),
@@ -1255,6 +1258,7 @@ def compute_connect_rate_drivers(
             "conversation_pct": owner_stats["conversation_pct"],
             "low_icp_rate": owner_stats["metrics"]["Low ICP Rate"],
             "no_icp_data_rate": owner_stats["metrics"]["No ICP Data Rate"],
+            "company_object_rate": owner_stats["metrics"].get("Company-Object Dial Rate", 0.0),
             "primary_driver": max(contributions, key=lambda label: abs(contributions[label])) if contributions else "Unexplained",
             "secondary_driver": sorted(contributions, key=lambda label: abs(contributions[label]), reverse=True)[1] if len(contributions) > 1 else "Unexplained",
             "partial_explanation": gap_explained < 80 or owner_stats["field_coverage_pct"] < 70 or owner_stats["dials"] < 25,
@@ -1392,6 +1396,7 @@ def compute_connect_rate_drivers(
         "conversation_pct": current_team_stats["conversation_pct"],
         "low_icp_rate": current_team_stats["metrics"]["Low ICP Rate"],
         "no_icp_data_rate": current_team_stats["metrics"]["No ICP Data Rate"],
+        "company_object_rate": current_team_stats["metrics"].get("Company-Object Dial Rate", 0.0),
     }
 
     return {
