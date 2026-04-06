@@ -992,15 +992,25 @@ def _build_icp_breakdown(current_calls: list[dict], benchmark_calls: list[dict])
 def _build_title_breakdown(current_calls: list[dict], benchmark_calls: list[dict]) -> list[dict]:
     current_total = len(current_calls) or 1
     benchmark_total = len(benchmark_calls) or 1
-    result = []
+    raw = []
     for bucket in TITLE_SEGMENT_ORDER:
         rep_count = sum(1 for c in current_calls if c["title_segment"] == bucket)
         team_count = sum(1 for c in benchmark_calls if c["title_segment"] == bucket)
-        result.append({
+        raw.append({
             "bucket": bucket,
             "rep": round(rep_count / current_total * 100, 1),
             "team": round(team_count / benchmark_total * 100, 1),
         })
+
+    # Consolidate segments where both rep and team are < 5% into "Other"
+    other = next(r for r in raw if r["bucket"] == "Other")
+    result = []
+    for row in raw:
+        if row["bucket"] != "Other" and row["rep"] < 5 and row["team"] < 5:
+            other["rep"] = round(other["rep"] + row["rep"], 1)
+            other["team"] = round(other["team"] + row["team"], 1)
+        else:
+            result.append(row)
     return result
 
 
