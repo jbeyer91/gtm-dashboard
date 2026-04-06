@@ -192,6 +192,82 @@ class LoginRouteTests(unittest.TestCase):
         self.assertIn(b"Same Number Across Contacts", response.data)
         self.assertNotIn(b"Rep Detail", response.data)
 
+    def test_connect_rate_drivers_legacy_payload_is_normalized(self):
+        with self.client.session_transaction() as sess:
+            sess["authenticated"] = True
+
+        legacy_payload = {
+            "rows": [{
+                "ae": "Rep A",
+                "owner_id": "1",
+                "connect_rate": 10.1,
+                "vs_team": 0.0,
+                "expected_connect_rate": 10.1,
+                "actual_vs_expected": 0.0,
+                "gap_explained_pct": 100.0,
+                "unknown_line_pct": 5.0,
+                "conversation_rate": 60.0,
+                "icp_low_pct": 10.0,
+                "icp_unknown_pct": 0.0,
+                "dmi": 100.0,
+                "rei": 100.0,
+                "tqi": 100.0,
+                "direct_line_pct": 25.0,
+                "icp_high_pct": 31.4,
+                "icp_mid_pct": 20.0,
+                "peak_hour_pct": 50.0,
+                "field_coverage_pct": 85.0,
+            }],
+            "team": {
+                "connect_rate": 10.1,
+                "avg_dials_per_day": 10.7,
+                "icp_high_pct": 31.4,
+                "direct_line_pct": 16.4,
+                "voicemail_pct": 5.5,
+                "convo_rate": 64.6,
+                "peak_hour_pct": 50.0,
+                "field_coverage_pct": 85.0,
+            },
+            "totals": {
+                "connect_rate": 10.1,
+                "conversation_rate": 64.6,
+                "icp_low_pct": 0.0,
+                "icp_unknown_pct": 43.9,
+                "unknown_line_pct": 35.8,
+            },
+            "kpi_strip": {
+                "Rep Connect %": 10.1,
+                "Team Avg Connect %": 10.1,
+                "Delta vs Team Avg": 0.0,
+                "Expected Connect %": 10.1,
+                "Actual vs Expected": 0.0,
+                "Gap Explained %": 100.0,
+                "Field Coverage %": 85.0,
+            },
+            "gap_decomposition": {
+                "start": 10.1,
+                "end": 10.1,
+                "buckets": [{"label": "Dial Mix", "pts": 0.0}],
+            },
+            "driver_cards": {
+                "dial_mix": {"index_value": 100.0, "rows": []},
+                "dialing_behavior": {"index_value": 100.0, "rows": []},
+                "timing": {"index_value": 100.0, "rows": []},
+            },
+            "diagnostic_rows": [{"owner_id": "1", "primary_driver": "Dial Mix", "secondary_driver": "Timing"}],
+            "state_flags": {"is_empty": False, "partial_explanation": False, "low_coverage": False, "small_sample": False},
+        }
+
+        def legacy_compute(period, team="all", rep="all", segment="all"):
+            return legacy_payload
+
+        with patch.object(app_module.analytics, "compute_connect_rate_drivers", side_effect=legacy_compute):
+            response = self.client.get("/calls/connect-rate-drivers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Rep diagnostic table", response.data)
+        self.assertIn(b"Convo %", response.data)
+
 
 if __name__ == "__main__":
     unittest.main()
