@@ -1896,6 +1896,7 @@ def compute_connect_rate_drivers(period: str, team: str = "all", rep: str = "all
         "icp_a_plus_pct": team_icp_a_plus_pct, "icp_a_pct": team_icp_a_pct,
         "icp_b_pct": team_icp_b_pct, "icp_c_pct": team_icp_c_pct,
         "icp_d_pct": team_icp_d_pct, "icp_suppress_pct": team_icp_suppress_pct,
+        "icp_unknown_pct": _pct(_total_icp_unk_all, total_dials),
         "title_csuite_pct": team_title_csuite_pct, "title_vp_pct": team_title_vp_pct,
         "title_dir_pct": team_title_dir_pct, "title_mgr_pct": team_title_mgr_pct,
         "title_other_pct": team_title_other_pct,
