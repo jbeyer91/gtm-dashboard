@@ -92,6 +92,7 @@ def _normalize_connect_rate_driver_payload(
         if key == "dial_mix":
             card_entry["icp_breakdown"] = card.get("icp_breakdown", [])
             card_entry["title_breakdown"] = card.get("title_breakdown", [])
+            card_entry["phone_type_breakdown"] = card.get("phone_type_breakdown", [])
         normalized_cards.append(card_entry)
 
     rows = raw.get("rows", [])
