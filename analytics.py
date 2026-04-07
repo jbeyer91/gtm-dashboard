@@ -2261,15 +2261,17 @@ def compute_revenue_chart(period: str) -> dict:
     revenue, capturing the real pattern of when deals close (e.g. month-end
     spikes) rather than assuming a flat linear distribution.
     """
-    start, end = get_date_range(period)
-    quota_start, quota_end = _quota_window(period, start, end)
+    start_dt, end_dt = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start_dt, end_dt)
+    start = start_dt.date()
+    end = end_dt.date()
     today = datetime.now(tz=timezone.utc).date()
 
     holiday_map = _holiday_map_between(start, end)
     quotas = get_quotas(quota_start, quota_end)
     total_quota = sum(quotas.values())
 
-    won_deals = get_deals(start, end, "closedate")
+    won_deals = get_deals(start_dt, end_dt, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
 
     # Daily revenue keyed by close date string (YYYY-MM-DD)
