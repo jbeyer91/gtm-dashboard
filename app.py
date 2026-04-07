@@ -130,6 +130,7 @@ NAV = [
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
         {"endpoint": "forecast",        "label": "Forecast"},
+        {"endpoint": "revenue_chart",   "label": "Revenue Chart"},
     ]},
     {"type": "group", "label": "Pipeline", "children": [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
@@ -904,6 +905,21 @@ def deals_won():
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deals_won")
+
+
+@app.route("/revenue-chart")
+@login_required
+def revenue_chart():
+    period = request.args.get("period", "this_month")
+    team   = request.args.get("team", "all")
+    try:
+        data = analytics.compute_revenue_chart(period)
+        data = _filter_by_team(data, team)
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="revenue_chart")
+    return render_template("revenue_chart.html", data=data, periods=PERIODS,
+                           period=period, team=team, teams=TEAMS,
+                           nav=NAV, active="revenue_chart")
 
 
 @app.route("/deals-lost")

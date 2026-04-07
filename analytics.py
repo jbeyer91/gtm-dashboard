@@ -2244,6 +2244,97 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
 
 @ttl_cache
+def compute_revenue_chart(period: str) -> dict:
+    """Show cumulative revenue won vs linear quota pace over time."""
+    start, end = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start, end)
+    today = datetime.now(tz=timezone.utc).date()
+
+    holiday_map = _holiday_map_between(start, end)
+    quotas = get_quotas(quota_start, quota_end)
+    total_quota = sum(quotas.values())
+
+    won_deals = get_deals(start, end, "closedate")
+    won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
+
+    # Daily revenue and deal count keyed by close date string (YYYY-MM-DD)
+    daily_revenue: dict = defaultdict(float)
+    for d in won_deals:
+        close_str = (d["properties"].get("closedate") or "")[:10]
+        if not close_str:
+            continue
+        amt = _parse_amount(d["properties"].get("amount"))
+        daily_revenue[close_str] += amt
+
+    # For this_month, extend goal line to end of month so the full pace curve shows
+    if period == "this_month":
+        goal_end = _month_end(start)
+    else:
+        goal_end = end
+
+    goal_business_days = _working_days_between(start, goal_end, holiday_map)
+    quota_per_business_day = total_quota / goal_business_days if goal_business_days else 0.0
+
+    # Build trend_points — one entry per calendar day
+    trend_end = goal_end if period == "this_month" else end
+    current_day = start
+    cumulative_won = 0.0
+    cumulative_goal = 0.0
+    trend_points = []
+
+    while current_day <= trend_end:
+        day_key = current_day.isoformat()
+        label = f"{current_day.month}/{current_day.day}"
+        is_future = period == "this_month" and current_day > today
+        holiday_label = holiday_map.get(current_day)
+
+        cumulative_won += daily_revenue.get(day_key, 0.0)
+        if _is_working_day(current_day, holiday_map):
+            cumulative_goal += quota_per_business_day
+
+        revenue_goal_pct = round(cumulative_goal / total_quota * 100, 1) if total_quota else 0.0
+        revenue_actual_pct = round(cumulative_won / total_quota * 100, 1) if total_quota else 0.0
+
+        trend_points.append({
+            "label": label,
+            "date": day_key,
+            "is_future": is_future,
+            "is_holiday": bool(holiday_label),
+            "holiday_name": holiday_label,
+            "revenue_goal_raw": round(cumulative_goal),
+            "revenue_actual_raw": round(cumulative_won),
+            "revenue_goal_pct": revenue_goal_pct,
+            "revenue_actual_pct": revenue_actual_pct,
+        })
+        current_day += timedelta(days=1)
+
+    # Totals for KPI cards and bridge
+    total_won = sum(daily_revenue.values())
+    bdays_elapsed = _working_days_between(start, min(today, end), holiday_map)
+    expected_revenue_to_date = quota_per_business_day * bdays_elapsed
+
+    totals = {
+        "won_amt": total_won,
+        "quota_amt": total_quota,
+        "attain_pct": round(total_won / total_quota * 100, 1) if total_quota else None,
+        "delta_amt": total_won - total_quota,
+        "total_won_n": len(won_deals),
+        "acv": total_won / len(won_deals) if won_deals else 0,
+        "expected_revenue_to_date": expected_revenue_to_date,
+        "revenue_gap_to_expected": total_won - expected_revenue_to_date,
+    }
+
+    return {
+        "rows": [],
+        "trend_points": trend_points,
+        "totals": totals,
+        "period": period,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
+
+
+@ttl_cache
 def compute_forecast(period: str) -> dict:
     start, end = get_date_range(period)
     quota_start, quota_end = _quota_window(period, start, end)
