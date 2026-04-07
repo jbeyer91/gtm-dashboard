@@ -186,6 +186,17 @@
   {% set _ = findings.append({"icon": "up", "text": (overperformers | join(", ")) ~ " " ~ ("are" if overperformers|length > 1 else "is") ~ " below team average but beating their own expected rate — gap may be structural, not behavioral."}) %}
 {% endif %}
 
+{# Finding 4: Misleading connect rate — office-line flag #}
+{% set misleading_reps = [] %}
+{% for row in data.diagnostic_table.rows %}
+  {% if row.misleading_connect_flag %}
+    {% set misleading_reps = misleading_reps + [row.rep] %}
+  {% endif %}
+{% endfor %}
+{% if misleading_reps %}
+  {% set _ = findings.append({"icon": "warn", "text": (misleading_reps | join(", ")) ~ " " ~ ("have" if misleading_reps|length > 1 else "has") ~ " an <strong>inflated connect rate</strong> — high connects from company/office lines (>10% co-object dials) but conversations don't follow. These connects are likely front-desk pickups, not prospect conversations."}) %}
+{% endif %}
+
 {% if findings %}
 <div class="rounded-xl bg-slate-50 border border-slate-200 px-5 py-4 mb-5">
   <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">Key Findings</p>
@@ -420,13 +431,25 @@
         {% set primary_hint = coaching_hints.get(row.primary_driver, "") %}
         {% set secondary_hint = coaching_hints.get(row.secondary_driver, "") %}
         <tr class="hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer" onclick="updateParam('rep', '{{ row.owner_id }}')">
-          <td class="px-4 py-3 font-medium text-slate-800">{{ row.rep }}</td>
+          <td class="px-4 py-3 font-medium text-slate-800">
+            {{ row.rep }}
+            {% if row.misleading_connect_flag %}
+            <span class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700"
+                  title="High connect rate driven by office/front-desk lines — {{ '%.0f'|format(row.company_object_rate) }}% of dials from company object, conversation rate well below team avg">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01"/></svg>
+              Office Line
+            </span>
+            {% endif %}
+          </td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold {% if row.delta_vs_team_avg > 0 %}text-emerald-600{% elif row.delta_vs_team_avg < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
             {% if row.delta_vs_team_avg > 0 %}+{% endif %}{{ "%.1f"|format(row.delta_vs_team_avg) }} pts
           </td>
           <td class="px-4 py-3">
             <p class="text-sm font-medium text-slate-800">{{ row.primary_driver }}</p>
             {% if primary_hint %}<p class="text-xs text-slate-400 mt-0.5">{{ primary_hint }}</p>{% endif %}
+            {% if row.misleading_connect_flag %}
+            <p class="text-xs text-amber-600 mt-1">Switch to direct/mobile numbers from contact records. {{ "%.0f"|format(row.company_object_rate) }}% of dials are from company objects.</p>
+            {% endif %}
           </td>
           <td class="px-4 py-3">
             <p class="text-sm text-slate-600">{{ row.secondary_driver }}</p>
