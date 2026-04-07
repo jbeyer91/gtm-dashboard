@@ -1014,6 +1014,35 @@ def _build_title_breakdown(current_calls: list[dict], benchmark_calls: list[dict
     return result
 
 
+def _build_phone_type_breakdown(current_calls: list[dict], benchmark_calls: list[dict]) -> list[dict]:
+    """Breakdown of dials by phone type: Mobile / Direct line / Company Object / Unknown.
+
+    'Company Object' captures calls with no contact association (rep dialled from the
+    company record) — the clearest signal of front-desk / reception-line dialling.
+    Mobile and Direct line come from the ClearOut-enriched cop_line_type field.
+    """
+    current_total = len(current_calls) or 1
+    benchmark_total = len(benchmark_calls) or 1
+
+    def _bucket(call: dict) -> str:
+        if call.get("is_from_company_object"):
+            return "Company Object"
+        lt = call.get("line_type", "Unknown")
+        return lt  # "Mobile" | "Direct line" | "Unknown"
+
+    buckets = ["Mobile", "Direct line", "Company Object", "Unknown"]
+    result = []
+    for bucket in buckets:
+        rep_count = sum(1 for c in current_calls if _bucket(c) == bucket)
+        team_count = sum(1 for c in benchmark_calls if _bucket(c) == bucket)
+        result.append({
+            "bucket": bucket,
+            "rep": round(rep_count / current_total * 100, 1),
+            "team": round(team_count / benchmark_total * 100, 1),
+        })
+    return result
+
+
 def _build_driver_cards(current_stats: dict, benchmark_stats: dict, current_calls: list[dict] | None = None, benchmark_calls: list[dict] | None = None) -> list[dict]:
     dial_mix_rows = []
     for label in (
@@ -1084,6 +1113,7 @@ def _build_driver_cards(current_stats: dict, benchmark_stats: dict, current_call
             "rows": dial_mix_rows,
             "icp_breakdown": _build_icp_breakdown(current_calls, benchmark_calls) if current_calls is not None else [],
             "title_breakdown": _build_title_breakdown(current_calls, benchmark_calls) if current_calls is not None else [],
+            "phone_type_breakdown": _build_phone_type_breakdown(current_calls, benchmark_calls) if current_calls is not None else [],
         },
         {
             "title": "Dialing Behavior",
