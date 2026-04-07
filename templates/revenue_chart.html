@@ -49,7 +49,7 @@
             <span class="text-lg font-semibold text-slate-900 tabular-nums">{{ fmt_money(t.expected_revenue_to_date) }}</span>
           </div>
         </div>
-        <p class="mt-2.5 text-xs text-slate-400">Based on business days elapsed this period</p>
+        <p class="mt-2.5 text-xs text-slate-400">Based on 9-month historical close pattern</p>
       </div>
 
       <div class="min-w-0">
@@ -84,13 +84,13 @@
   <div class="mb-2">
     <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Progress Toward Revenue Goal</p>
     <h2 class="text-base font-semibold text-gray-800 mt-1">Progress Toward Revenue Goal</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Cumulative closed-won revenue as a percentage of quota, compared to a linear goal pace.</p>
+    <p class="text-xs text-gray-400 mt-0.5">Cumulative closed-won revenue as a percentage of quota, compared to the typical close pattern from the last 9 months.</p>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
     <div class="flex flex-wrap items-center gap-x-5 gap-y-3 mb-4 text-xs text-gray-500">
       <div class="inline-flex items-center gap-2">
         <span class="w-6 border-t-2 border-amber-500" style="border-top-style:dotted;"></span>
-        <span>Revenue Goal Pace</span>
+        <span>Typical Revenue Pace</span>
       </div>
       <div class="inline-flex items-center gap-2">
         <span class="w-6 border-t-[2.5px] border-emerald-500"></span>
@@ -107,7 +107,7 @@
 (function () {
   var trendPoints = {{ data.trend_points | tojson }};
   var labels = trendPoints.map(function (p) { return p.label; });
-  var goalPct = trendPoints.map(function (p) { return p.revenue_goal_pct; });
+  var typicalPct = trendPoints.map(function (p) { return p.revenue_typical_pct; });
   var actualPct = trendPoints.map(function (p) { return p.is_future ? null : p.revenue_actual_pct; });
 
   new Chart(document.getElementById('revenueChart'), {
@@ -116,8 +116,8 @@
       labels: labels,
       datasets: [
         {
-          label: 'Revenue Goal Pace',
-          data: goalPct,
+          label: 'Typical Revenue Pace',
+          data: typicalPct,
           borderColor: 'rgba(245, 158, 11, 0.9)',
           borderDash: [2, 6],
           borderWidth: 2,
@@ -151,8 +151,8 @@
           callbacks: {
             label: function(ctx) {
               var point = trendPoints[ctx.dataIndex];
-              if (ctx.dataset.label === 'Revenue Goal Pace') {
-                return ' Goal Pace: ' + ctx.parsed.y.toFixed(1) + '% · $' + point.revenue_goal_raw.toLocaleString();
+              if (ctx.dataset.label === 'Typical Revenue Pace') {
+                return ' Typical Pace: ' + ctx.parsed.y.toFixed(1) + '% · $' + point.revenue_typical_raw.toLocaleString();
               }
               return ' Actual MTD: ' + ctx.parsed.y.toFixed(1) + '% · $' + point.revenue_actual_raw.toLocaleString();
             },
@@ -160,9 +160,9 @@
               if (!items.length) return '';
               var point = trendPoints[items[0].dataIndex];
               if (point.is_holiday && point.holiday_name) {
-                return point.holiday_name + ' · goal pace does not advance';
+                return point.holiday_name + ' · typical pace does not advance';
               }
-              return 'Goal pace spreads quota linearly across business days.';
+              return 'Typical pace is based on the last 9 completed calendar months.';
             }
           }
         }
