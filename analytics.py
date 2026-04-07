@@ -1142,15 +1142,9 @@ def compute_connect_rate_drivers(
     team: str = "all",
     rep: str = "all",
     segment: str = "all",
-    comparison_mode: str = "connect_pct",
-    table_sort: str = "worst_delta_vs_team",
 ) -> dict:
     from zoneinfo import ZoneInfo
 
-    if comparison_mode not in _COMPARISON_MODES:
-        comparison_mode = "connect_pct"
-    if table_sort not in _CONNECT_DRIVER_SORTS:
-        table_sort = "worst_delta_vs_team"
     rep = "all"
 
     ct = ZoneInfo("America/Chicago")
@@ -1252,8 +1246,8 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
-            "team_comparison": {"mode": comparison_mode, "modes": [], "rows": []},
-            "diagnostic_table": {"sort": table_sort, "sorts": [], "rows": [], "team_avg_row": None},
+            "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
+            "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},
         }
 
@@ -1316,8 +1310,8 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
-            "team_comparison": {"mode": comparison_mode, "modes": [], "rows": []},
-            "diagnostic_table": {"sort": table_sort, "sorts": [], "rows": [], "team_avg_row": None},
+            "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
+            "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},
         }
     benchmark_calls = prepared_calls if team != "all" else visible_calls
@@ -1410,14 +1404,8 @@ def compute_connect_rate_drivers(
             "selected": False,
         })
 
-    if table_sort == "worst_delta_vs_team":
-        rep_rows.sort(key=lambda row: (row["delta_vs_team_avg"], row["rep"]))
-    elif table_sort == "worst_vs_expected":
-        rep_rows.sort(key=lambda row: (row["actual_vs_expected"], row["rep"]))
-    elif table_sort == "lowest_gap_explained":
-        rep_rows.sort(key=lambda row: (row["gap_explained_pct"], row["rep"]))
-    else:
-        rep_rows.sort(key=lambda row: (-row["actual_connect_pct"], row["rep"]))
+    # Canonical default sort; presentation layer (route) may re-sort before rendering.
+    rep_rows.sort(key=lambda row: (row["delta_vs_team_avg"], row["rep"]))
 
     period_label = {
         "today": "Today",
@@ -1547,7 +1535,7 @@ def compute_connect_rate_drivers(
         },
         "driver_cards": driver_cards,
         "team_comparison": {
-            "mode": comparison_mode,
+            "mode": "connect_pct",
             "modes": [
                 {"value": "connect_pct", "label": "Connect %"},
                 {"value": "delta_vs_team", "label": "Delta vs Team"},
@@ -1557,7 +1545,7 @@ def compute_connect_rate_drivers(
             "rows": comparison_rows,
         },
         "diagnostic_table": {
-            "sort": table_sort,
+            "sort": "worst_delta_vs_team",
             "sorts": [
                 {"value": "worst_delta_vs_team", "label": "worst Delta vs Team"},
                 {"value": "worst_vs_expected", "label": "worst Vs Expected"},

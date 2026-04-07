@@ -1,5 +1,4 @@
 """Blueprint: /calls/connect-analysis — connect-rate diagnostics drill-down."""
-import inspect
 import logging
 from functools import wraps
 
@@ -309,7 +308,7 @@ def connect_rate_drivers():
     comparison_mode = request.args.get("comparison_mode", "connect_pct")
     table_sort = request.args.get("table_sort", "worst_delta_vs_team")
 
-    if not is_cached(analytics.compute_connect_rate_drivers, period):
+    if not is_cached(analytics.compute_connect_rate_drivers, period, team, rep, segment):
         from app import NAV
         return render_template(
             "connect_rate_drivers.html",
@@ -326,30 +325,21 @@ def connect_rate_drivers():
         ), 202
 
     try:
-        sig = inspect.signature(analytics.compute_connect_rate_drivers)
-        if "comparison_mode" in sig.parameters and "table_sort" in sig.parameters:
-            # This view accepts presentation params that the scheduler does not prewarm,
-            # so a cold request must compute live instead of waiting on a cache key
-            # that may never be built by the background sync.
-            data = analytics.compute_connect_rate_drivers(
-                period,
-                team,
-                rep,
-                segment,
-                comparison_mode,
-                table_sort,
-            )
-        else:
-            legacy_data = analytics.compute_connect_rate_drivers(period, team, rep, segment)
-            data = _normalize_connect_rate_driver_payload(
-                legacy_data,
-                period,
-                team,
-                rep,
-                segment,
-                comparison_mode,
-                table_sort,
-            )
+        data = analytics.compute_connect_rate_drivers(period, team, rep, segment)
+
+        # Apply presentation parameters post-hoc — these don't affect the cached
+        # data computation so they're handled here rather than in the function.
+        data["team_comparison"]["mode"] = comparison_mode
+
+        if table_sort != "worst_delta_vs_team":
+            rows = data["diagnostic_table"]["rows"]
+            if table_sort == "worst_vs_expected":
+                rows.sort(key=lambda r: (r["actual_vs_expected"], r["rep"]))
+            elif table_sort == "lowest_gap_explained":
+                rows.sort(key=lambda r: (r["gap_explained_pct"], r["rep"]))
+            elif table_sort == "highest_connect":
+                rows.sort(key=lambda r: (-r["actual_connect_pct"], r["rep"]))
+        data["diagnostic_table"]["sort"] = table_sort
     except Exception as e:
         log.exception("connect_rate_drivers error")
         from app import NAV
