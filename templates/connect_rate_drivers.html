@@ -468,9 +468,14 @@
         {# Coaching hint for primary driver #}
         {% set primary_hint = coaching_hints.get(row.primary_driver, "") %}
         {% set secondary_hint = coaching_hints.get(row.secondary_driver, "") %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer" onclick="updateParam('rep', '{{ row.owner_id }}')">
+        <tr class="hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer select-none"
+            onclick="toggleRepDetail('rep-detail-{{ loop.index }}')"
+            aria-expanded="false">
           <td class="px-4 py-3 font-medium text-slate-800">
-            {{ row.rep }}
+            <span class="inline-flex items-center gap-1">
+              <svg id="chevron-{{ loop.index }}" class="w-3.5 h-3.5 text-slate-300 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              {{ row.rep }}
+            </span>
             {% if row.misleading_connect_flag %}
             <span class="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700"
                   title="High connect rate driven by office/front-desk lines — {{ '%.0f'|format(row.company_object_rate) }}% of dials from company object, conversation rate well below team avg">
@@ -506,6 +511,135 @@
             {% endif %}
           </td>
         </tr>
+        {# ── Per-rep drill-down expansion ─────────────────────────────────── #}
+        <tr id="rep-detail-{{ loop.index }}" class="hidden bg-slate-50/70 border-b border-slate-100">
+          <td colspan="8" class="px-4 py-5">
+            {# Gap attribution strip #}
+            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">
+              Gap vs Team Avg — {{ "%.1f"|format(row.delta_vs_team_avg) if row.delta_vs_team_avg != 0 else "0.0" }} pts total
+            </p>
+            <div class="flex flex-wrap gap-3 mb-5">
+              {% for driver_name, pts in row.driver_points.items() %}
+              {% set is_primary = (driver_name == row.primary_driver) %}
+              {% set dot_color = "bg-red-400" if pts < -0.2 else ("bg-emerald-400" if pts > 0.2 else "bg-slate-300") %}
+              <div class="flex items-center gap-2 bg-white rounded-lg border border-slate-200 px-3 py-2 {% if is_primary %}ring-2 ring-blue-200{% endif %}">
+                <span class="w-2 h-2 rounded-full shrink-0 {{ dot_color }}"></span>
+                <span class="text-xs font-medium text-slate-700">{{ driver_name }}</span>
+                <span class="text-xs font-semibold tabular-nums {% if pts < -0.2 %}text-red-500{% elif pts > 0.2 %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                  {% if pts > 0 %}+{% endif %}{{ "%.1f"|format(pts) }} pts
+                </span>
+                {% if is_primary %}<span class="text-[10px] text-blue-500 font-semibold uppercase tracking-wide ml-1">primary</span>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {# Driver cards for this rep #}
+            {% if row.driver_cards %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {% for card in row.driver_cards %}
+              {% set card_pts = row.driver_points.get(card.title, 0) %}
+              <div class="bg-white rounded-xl border border-slate-200 p-4">
+                {# Card header #}
+                <div class="flex items-start justify-between mb-3">
+                  <div>
+                    <p class="text-sm font-semibold text-slate-800">{{ card.title }}</p>
+                    <p class="text-xs text-slate-400 mt-0.5">
+                      {% if card.title == row.primary_driver %}Primary driver
+                      {% elif card.title == row.secondary_driver %}Secondary driver
+                      {% else %}Contributing factor{% endif %}
+                    </p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-xs font-semibold tabular-nums {% if card_pts < -0.2 %}text-red-500{% elif card_pts > 0.2 %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                      {% if card_pts > 0 %}+{% endif %}{{ "%.1f"|format(card_pts) }} pts
+                    </p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Index {{ card.index_value }}</p>
+                  </div>
+                </div>
+                {# Metric rows #}
+                <div class="space-y-1.5 text-xs">
+                  {% for mrow in card.rows %}
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-slate-500 truncate">{{ mrow.label }}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <span class="tabular-nums font-medium text-slate-700">{{ mrow.display.rep if mrow.display else "—" }}</span>
+                      <span class="tabular-nums text-slate-400">vs {{ mrow.display.team if mrow.display else "—" }}</span>
+                      <span class="tabular-nums font-semibold w-10 text-right {% if mrow.delta > 0.5 %}text-emerald-600{% elif mrow.delta < -0.5 %}text-red-500{% else %}text-slate-400{% endif %}">
+                        {% if mrow.delta > 0 %}+{% endif %}{{ "%.1f"|format(mrow.delta) }}
+                      </span>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                {# ICP breakdown (Dial Mix only) #}
+                {% if card.icp_breakdown is defined and card.icp_breakdown %}
+                <div class="mt-4 pt-3 border-t border-slate-100">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">ICP Rank</p>
+                  <div class="space-y-1">
+                    {% for brow in card.icp_breakdown %}
+                    {% set rv = brow.rep or 0 %}
+                    {% set tv = brow.team or 0 %}
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-slate-500 w-16 shrink-0">{{ brow.rank }}</span>
+                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                        <div class="absolute inset-y-0 left-0 bg-indigo-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                      </div>
+                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+                {# Phone type breakdown (Dial Mix only) #}
+                {% if card.phone_type_breakdown is defined and card.phone_type_breakdown %}
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Phone Type</p>
+                  <div class="space-y-1">
+                    {% for brow in card.phone_type_breakdown %}
+                    {% set rv = brow.rep or 0 %}
+                    {% set tv = brow.team or 0 %}
+                    {% if brow.bucket == "Mobile" %}{% set bcolor = "bg-teal-400" %}
+                    {% elif brow.bucket == "Direct line" %}{% set bcolor = "bg-sky-400" %}
+                    {% elif brow.bucket == "Company Object" %}{% set bcolor = "bg-amber-400" %}
+                    {% else %}{% set bcolor = "bg-slate-300" %}{% endif %}
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] {% if brow.bucket == 'Company Object' and rv > tv + 3 %}text-amber-600 font-semibold{% else %}text-slate-500{% endif %} w-24 shrink-0">{{ brow.bucket }}</span>
+                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                        <div class="absolute inset-y-0 left-0 {{ bcolor }} rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                      </div>
+                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+                {# Title breakdown (Dial Mix only) #}
+                {% if card.title_breakdown is defined and card.title_breakdown %}
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Title Segment</p>
+                  <div class="space-y-1">
+                    {% for brow in card.title_breakdown %}
+                    {% set rv = brow.rep or 0 %}
+                    {% set tv = brow.team or 0 %}
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-slate-500 w-32 shrink-0 truncate">{{ brow.bucket }}</span>
+                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                        <div class="absolute inset-y-0 left-0 bg-violet-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                      </div>
+                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
       {% if data.diagnostic_table.team_avg_row %}
@@ -527,6 +661,16 @@
 </section>
 
 <script>
+function toggleRepDetail(id) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  const isHidden = row.classList.toggle('hidden');
+  // Rotate chevron on the summary row
+  const idx = id.replace('rep-detail-', '');
+  const chevron = document.getElementById('chevron-' + idx);
+  if (chevron) chevron.style.transform = isHidden ? '' : 'rotate(90deg)';
+}
+
 function updateParam(key, value) {
   const url = new URL(window.location.href);
   if (value === null || value === undefined || value === '') {
