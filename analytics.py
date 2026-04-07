@@ -2254,6 +2254,167 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
 
 
 @ttl_cache
+def compute_revenue_chart(period: str) -> dict:
+    """Show cumulative revenue won vs a historically-paced goal curve.
+
+    The goal pace is derived from the last 9 completed months of closed-won
+    revenue, capturing the real pattern of when deals close (e.g. month-end
+    spikes) rather than assuming a flat linear distribution.
+    """
+    start, end = get_date_range(period)
+    quota_start, quota_end = _quota_window(period, start, end)
+    today = datetime.now(tz=timezone.utc).date()
+
+    holiday_map = _holiday_map_between(start, end)
+    quotas = get_quotas(quota_start, quota_end)
+    total_quota = sum(quotas.values())
+
+    won_deals = get_deals(start, end, "closedate")
+    won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
+
+    # Daily revenue keyed by close date string (YYYY-MM-DD)
+    daily_revenue: dict = defaultdict(float)
+    for d in won_deals:
+        close_str = (d["properties"].get("closedate") or "")[:10]
+        if not close_str:
+            continue
+        daily_revenue[close_str] += _parse_amount(d["properties"].get("amount"))
+
+    # ------------------------------------------------------------------ #
+    # Build historical typical daily share from last 9 completed months   #
+    # ------------------------------------------------------------------ #
+    hist_month_start = _shift_month(_month_start(start), -9)
+    hist_month_end = _month_end(_shift_month(_month_start(start), -1))
+
+    revenue_share_by_pattern: dict = {}
+    revenue_share_by_index: dict = {}
+
+    if hist_month_end >= hist_month_start:
+        hist_start_dt = datetime.combine(hist_month_start, datetime.min.time(), tzinfo=timezone.utc)
+        hist_end_dt = datetime.combine(hist_month_end, datetime.max.time(), tzinfo=timezone.utc)
+        hist_deals = get_deals(hist_start_dt, hist_end_dt, "closedate")
+        hist_deals = [d for d in hist_deals if d["properties"].get("hs_is_closed_won") == "true"]
+
+        hist_daily_revenue: dict = defaultdict(float)
+        for d in hist_deals:
+            close_str = (d["properties"].get("closedate") or "")[:10]
+            if close_str:
+                hist_daily_revenue[close_str] += _parse_amount(d["properties"].get("amount"))
+
+        samples_by_pattern: dict = defaultdict(list)
+        samples_by_index: dict = defaultdict(list)
+
+        cursor = hist_month_start
+        while cursor <= hist_month_end:
+            m_start = _month_start(cursor)
+            m_end = _month_end(cursor)
+            m_holidays = _holiday_map_between(m_start, m_end)
+            m_workdays = [
+                m_start + timedelta(days=i)
+                for i in range((m_end - m_start).days + 1)
+                if _is_working_day(m_start + timedelta(days=i), m_holidays)
+            ]
+            m_total = sum(hist_daily_revenue.get(d.isoformat(), 0.0) for d in m_workdays)
+            if m_total:
+                for idx, workday in enumerate(m_workdays, start=1):
+                    day_rev = hist_daily_revenue.get(workday.isoformat(), 0.0)
+                    share = day_rev / m_total
+                    pattern_key = (((workday.day - 1) // 7) + 1, workday.weekday())
+                    samples_by_pattern[pattern_key].append(share)
+                    samples_by_index[idx].append(share)
+            cursor = _shift_month(cursor, 1)
+
+        revenue_share_by_pattern = {k: median(v) for k, v in samples_by_pattern.items() if v}
+        revenue_share_by_index = {k: median(v) for k, v in samples_by_index.items() if v}
+
+    # Map shares onto the current period's working days
+    if period == "this_month":
+        goal_end = _month_end(start)
+    else:
+        goal_end = end
+
+    trend_end = goal_end if period == "this_month" else end
+    current_period_workdays = [
+        start + timedelta(days=i)
+        for i in range((trend_end - start).days + 1)
+        if _is_working_day(start + timedelta(days=i), holiday_map)
+    ]
+
+    typical_daily_shares = []
+    for idx, workday in enumerate(current_period_workdays, start=1):
+        pattern_key = (((workday.day - 1) // 7) + 1, workday.weekday())
+        typical_daily_shares.append(
+            revenue_share_by_pattern.get(pattern_key, revenue_share_by_index.get(idx, 0.0))
+        )
+
+    # Normalize so shares sum to exactly 1.0 across the full period
+    share_total = sum(typical_daily_shares)
+    if share_total > 0:
+        typical_daily_shares = [s / share_total for s in typical_daily_shares]
+
+    # ------------------------------------------------------------------ #
+    # Build trend_points — one entry per calendar day                     #
+    # ------------------------------------------------------------------ #
+    current_day = start
+    cumulative_won = 0.0
+    cumulative_typical = 0.0
+    workday_idx = 0
+    trend_points = []
+
+    while current_day <= trend_end:
+        day_key = current_day.isoformat()
+        label = f"{current_day.month}/{current_day.day}"
+        is_future = period == "this_month" and current_day > today
+        holiday_label = holiday_map.get(current_day)
+
+        cumulative_won += daily_revenue.get(day_key, 0.0)
+        if _is_working_day(current_day, holiday_map) and workday_idx < len(typical_daily_shares):
+            cumulative_typical += typical_daily_shares[workday_idx] * total_quota
+            workday_idx += 1
+
+        typical_pct = round(cumulative_typical / total_quota * 100, 1) if total_quota else 0.0
+        actual_pct = round(cumulative_won / total_quota * 100, 1) if total_quota else 0.0
+
+        trend_points.append({
+            "label": label,
+            "date": day_key,
+            "is_future": is_future,
+            "is_holiday": bool(holiday_label),
+            "holiday_name": holiday_label,
+            "revenue_typical_raw": round(cumulative_typical),
+            "revenue_actual_raw": round(cumulative_won),
+            "revenue_typical_pct": typical_pct,
+            "revenue_actual_pct": actual_pct,
+        })
+        current_day += timedelta(days=1)
+
+    # Expected revenue to date based on historical typical pace
+    elapsed_workday_count = _working_days_between(start, min(today, end), holiday_map)
+    expected_revenue_to_date = sum(typical_daily_shares[:elapsed_workday_count]) * total_quota
+
+    total_won = sum(daily_revenue.values())
+    totals = {
+        "won_amt": total_won,
+        "quota_amt": total_quota,
+        "attain_pct": round(total_won / total_quota * 100, 1) if total_quota else None,
+        "delta_amt": total_won - total_quota,
+        "total_won_n": len(won_deals),
+        "acv": total_won / len(won_deals) if won_deals else 0,
+        "expected_revenue_to_date": expected_revenue_to_date,
+        "revenue_gap_to_expected": total_won - expected_revenue_to_date,
+    }
+
+    return {
+        "rows": [],
+        "trend_points": trend_points,
+        "totals": totals,
+        "period": period,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
+
+
+@ttl_cache
 def compute_forecast(period: str) -> dict:
     start, end = get_date_range(period)
     quota_start, quota_end = _quota_window(period, start, end)
