@@ -31,9 +31,9 @@
 
   {# Pace bar — white fill on gradient; pace status in copy only #}
   {% set attain_clamped = [t.attain_pct, 100]|min %}
-  {% if t.attain_pct >= pace_pct + 2 %}
+  {% if t.attain_pct >= revenue_pace_pct + 2 %}
     {% set pace_word = "ahead of pace" %}
-  {% elif t.attain_pct >= pace_pct - 2 %}
+  {% elif t.attain_pct >= revenue_pace_pct - 2 %}
     {% set pace_word = "on pace" %}
   {% else %}
     {% set pace_word = "behind pace" %}
@@ -49,11 +49,11 @@
   <div class="relative w-full h-2.5 rounded-full" style="background: rgba(255,255,255,0.15);">
     <div class="h-2.5 rounded-full" style="width: {{ attain_clamped }}%; background: rgba(255,255,255,0.88);"></div>
     <div class="absolute top-0 h-2.5 w-0.5 rounded"
-         style="left: {{ pace_pct }}%; transform: translateX(-50%); background: rgba(255,255,255,0.5);"
-         title="Pace target: {{ fmt_money((t.quota_amt * pace_pct / 100)|int) }}"></div>
+         style="left: {{ revenue_pace_pct }}%; transform: translateX(-50%); background: rgba(255,255,255,0.5);"
+         title="Pace target: {{ fmt_money((t.quota_amt * revenue_pace_pct / 100)|int) }}"></div>
   </div>
   <p class="text-xs mt-1.5" style="color: rgba(255,255,255,0.5);">
-    {{ bdays_elapsed }} of {{ bdays_total }} business days elapsed · pace target {{ fmt_money((t.quota_amt * pace_pct / 100)|int) }}
+    {{ bdays_elapsed }} of {{ bdays_total }} business days elapsed · pace target {{ fmt_money((t.quota_amt * revenue_pace_pct / 100)|int) }}
   </p>
 
 </div>

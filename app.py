@@ -554,8 +554,22 @@ def home():
     bdays_elapsed = _count_bdays(first_of_month, today)
     pace_pct      = round(bdays_elapsed / bdays_total * 100, 1) if bdays_total else 0
 
+    # Revenue pace based on 9-month historical close pattern (from revenue chart cache).
+    # Falls back to linear pace_pct if the cache isn't warm yet.
+    revenue_pace_pct = pace_pct
+    try:
+        rev_data = get_cached(analytics.compute_revenue_chart, "this_month")
+        if rev_data:
+            for pt in reversed(rev_data["trend_points"]):
+                if not pt["is_future"]:
+                    revenue_pace_pct = pt["revenue_typical_pct"]
+                    break
+    except Exception:
+        pass
+
     return render_template("home.html", data=data, t=t, month_label=month_label,
-                           pace_pct=pace_pct, bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
+                           pace_pct=pace_pct, revenue_pace_pct=revenue_pace_pct,
+                           bdays_elapsed=bdays_elapsed, bdays_total=bdays_total,
                            n_reps=n_reps, team=team, teams=TEAMS,
                            win_rate=win_rate, acv=acv, home_metrics_warming=home_metrics_warming,
                            active="home", nav=NAV)
