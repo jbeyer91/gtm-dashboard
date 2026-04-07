@@ -139,28 +139,95 @@
   </div>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4 mb-6">
-  {% for kpi in data.kpis %}
+{# ── Key Findings ─────────────────────────────────────────────────────── #}
+{% if data.diagnostic_table.rows %}
+{% set findings = [] %}
+
+{# Finding 1: most common primary driver among reps with a meaningful gap #}
+{% set driver_counts = {} %}
+{% for row in data.diagnostic_table.rows %}
+  {% if row.delta_vs_team_avg|abs > 0.5 and row.primary_driver not in ("", "Unexplained") %}
+    {% set cur = driver_counts.get(row.primary_driver, 0) + 1 %}
+    {% set _ = driver_counts.update({row.primary_driver: cur}) %}
+  {% endif %}
+{% endfor %}
+{% set top_driver_name = "" %}
+{% set top_driver_count = 0 %}
+{% for d, c in driver_counts.items() %}
+  {% if c > top_driver_count %}
+    {% set top_driver_name = d %}
+    {% set top_driver_count = c %}
+  {% endif %}
+{% endfor %}
+{% if top_driver_count >= 2 %}
+  {% set _ = findings.append({"icon": "warn", "text": top_driver_count|string ~ " reps share <strong>" ~ top_driver_name ~ "</strong> as the primary driver of their connect rate gap."}) %}
+{% endif %}
+
+{# Finding 2: team-level biggest drag from gap decomposition #}
+{% set team_drag = namespace(label="", points=0) %}
+{% for bucket in data.gap_decomposition.buckets %}
+  {% if bucket.points < team_drag.points %}
+    {% set team_drag.label = bucket.label %}
+    {% set team_drag.points = bucket.points %}
+  {% endif %}
+{% endfor %}
+{% if team_drag.points < -0.3 %}
+  {% set _ = findings.append({"icon": "down", "text": "<strong>" ~ team_drag.label ~ "</strong> is dragging the team's connect rate by " ~ "%.1f"|format(team_drag.points) ~ " pts vs benchmark."}) %}
+{% endif %}
+
+{# Finding 3: reps beating their expected rate despite a negative delta #}
+{% set overperformers = [] %}
+{% for row in data.diagnostic_table.rows %}
+  {% if row.delta_vs_team_avg < -0.5 and row.actual_vs_expected > 1.5 %}
+    {% set overperformers = overperformers + [row.rep] %}
+  {% endif %}
+{% endfor %}
+{% if overperformers %}
+  {% set _ = findings.append({"icon": "up", "text": (overperformers | join(", ")) ~ " " ~ ("are" if overperformers|length > 1 else "is") ~ " below team average but beating their own expected rate — gap may be structural, not behavioral."}) %}
+{% endif %}
+
+{% if findings %}
+<div class="rounded-xl bg-slate-50 border border-slate-200 px-5 py-4 mb-5">
+  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">Key Findings</p>
+  <ul class="space-y-2">
+    {% for f in findings %}
+    <li class="flex items-start gap-2 text-sm text-slate-700">
+      {% if f.icon == "warn" %}
+      <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A1 1 0 003.65 18h16.7a1 1 0 00.86-1.5l-7.5-13a1 1 0 00-1.72 0z"/></svg>
+      {% elif f.icon == "down" %}
+      <svg class="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
+      {% else %}
+      <svg class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+      {% endif %}
+      <span>{{ f.text | safe }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+  {% for kpi in data.kpis[:3] %}
   {{ kpi_card(kpi) }}
   {% endfor %}
 </div>
-
-<section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm text-slate-600">
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Same Number Across Contacts</p>
-      <p class="mt-2">{{ data.notes.shared_number_definition }}</p>
-    </div>
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Conversation Rate</p>
-      <p class="mt-2">{{ data.notes.conversation_rate_definition }}</p>
-    </div>
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Phone Source</p>
-      <p class="mt-2">{{ data.notes.clearout_phone_source }}</p>
-    </div>
+{% if data.kpis|length > 3 %}
+<details class="mb-6 group">
+  <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 transition-colors duration-150 py-2 select-none list-none flex items-center gap-1">
+    <svg class="w-3 h-3 transition-transform duration-200 group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    More diagnostics
+  </summary>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+    {% for kpi in data.kpis[3:] %}
+    {{ kpi_card(kpi) }}
+    {% endfor %}
   </div>
-</section>
+</details>
+{% else %}
+<div class="mb-6"></div>
+{% endif %}
+
 
 {% if data.state.partial_explanation %}
 <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-6 flex items-start gap-3">
@@ -170,7 +237,7 @@
   <div>
     <p class="text-sm font-semibold text-amber-800">Partial explanation</p>
     <p class="text-sm text-amber-700 mt-1">
-      Gap Explained % and/or Field Coverage % suggest a mixed-signal read, so primary-driver certainty is softened.
+      We can only partially explain this connect rate gap — treat driver labels as directional, not definitive. Low field coverage or a small sample may be the cause; check the Data Quality column in the table below.
     </p>
   </div>
 </div>
@@ -191,22 +258,27 @@
       <p class="mt-1">Expected {{ "%.1f"|format(data.gap_decomposition.expected_connect_pct) }}%</p>
     </div>
   </div>
-  <div class="grid grid-cols-1 xl:grid-cols-[1.6fr_0.8fr] gap-6">
-    <div style="position:relative;height:280px;">
-      <canvas id="gapDecompositionChart"></canvas>
-    </div>
-    <div class="space-y-3">
-      {% for bucket in data.gap_decomposition.buckets %}
-      <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <div class="flex items-center justify-between gap-3">
-          <p class="text-sm font-medium text-slate-700">{{ bucket.label }}</p>
-          <p class="text-sm font-semibold tabular-nums {% if bucket.points > 0 %}text-emerald-600{% elif bucket.points < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
-            {% if bucket.points > 0 %}+{% endif %}{{ "%.1f"|format(bucket.points) }} pts
-          </p>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
+  {# Plain-English headline: find the biggest-magnitude bucket #}
+  {% set biggest = namespace(label="", points=0) %}
+  {% for bucket in data.gap_decomposition.buckets %}
+    {% if bucket.points|abs > biggest.points|abs %}
+      {% set biggest.label = bucket.label %}
+      {% set biggest.points = bucket.points %}
+    {% endif %}
+  {% endfor %}
+  {% if biggest.label %}
+  <p class="text-sm text-slate-500 mb-4">
+    {% if biggest.points < 0 %}
+      <span class="font-semibold text-red-500">{{ biggest.label }}</span> is the biggest drag — {{ "%.1f"|format(biggest.points) }} pts below what this team's dial mix/behavior/timing would predict.
+    {% elif biggest.points > 0 %}
+      <span class="font-semibold text-emerald-600">{{ biggest.label }}</span> is the biggest tailwind — +{{ "%.1f"|format(biggest.points) }} pts above the team benchmark.
+    {% else %}
+      Drivers are roughly neutral — no single factor explains the gap.
+    {% endif %}
+  </p>
+  {% endif %}
+  <div style="position:relative;height:280px;">
+    <canvas id="gapDecompositionChart"></canvas>
   </div>
 </section>
 
@@ -310,48 +382,68 @@
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
+      {# Coaching hint map for driver labels #}
+      {% set coaching_hints = {
+        "Dial Mix": "Target higher-ICP contacts; reduce shared-number dials",
+        "Dialing Behavior": "Dial more unique numbers; reduce repeat-dialing same contact",
+        "Timing": "Shift dials into strong windows (top connect-rate hours)"
+      } %}
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
         <tr>
           <th class="px-4 py-3 text-left font-semibold">Rep</th>
-          <th class="px-4 py-3 text-right font-semibold">Connect %</th>
           <th class="px-4 py-3 text-right font-semibold">Delta vs Team</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="Team Avg Connect % × (Dial Mix Index/100) × (Reach Efficiency Index/100) × (Timing Quality Index/100)" title="Team Avg Connect % × (Dial Mix Index/100) × (Reach Efficiency Index/100) × (Timing Quality Index/100)">Expected %</th>
-          <th class="px-4 py-3 text-right font-semibold" title="Actual connect % minus the expected connect % based on dial mix, efficiency, and timing">Vs Expected</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="% of the connect rate gap explained by measurable drivers (dial mix, efficiency, timing). Over 100% = drivers over-predict; under 100% = partial explanation." title="% of the connect rate gap explained by measurable drivers (dial mix, efficiency, timing). Over 100% = drivers over-predict; under 100% = partial explanation.">Gap Explained %</th>
-          <th class="px-4 py-3 text-right font-semibold">Shared # %</th>
-          <th class="px-4 py-3 text-right font-semibold">Convo %</th>
-          <th class="px-4 py-3 text-right font-semibold">Low ICP %</th>
-          <th class="px-4 py-3 text-right font-semibold">No ICP Data %</th>
-          <th class="px-4 py-3 text-right font-semibold"
-              data-tip="% of dials logged from the company record instead of a contact — these bypass contact-level data and inflate No ICP Data %">
-            Co-Object %
-          </th>
           <th class="px-4 py-3 text-left font-semibold">Primary Driver</th>
           <th class="px-4 py-3 text-left font-semibold">Secondary Driver</th>
+          <th class="px-4 py-3 text-right font-semibold">Connect %</th>
+          <th class="px-4 py-3 text-right font-semibold">Convo %</th>
+          <th class="px-4 py-3 text-right font-semibold"
+              title="Same normalized phone appearing on multiple contact records — rep may be cycling through the same number">
+            Shared # %
+          </th>
+          <th class="px-4 py-3 text-right font-semibold"
+              title="Gap Explained % — how much of the connect-rate gap is attributed to measurable drivers&#10;Co-Object % — dials logged from company record (inflate No ICP Data)&#10;No ICP Data % — contacts without ICP rank&#10;Low ICP % — D / Least Priority contacts">
+            Data Quality ⓘ
+          </th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for row in data.diagnostic_table.rows %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+        {# Determine data quality signal #}
+        {% set dq_issues = [] %}
+        {% if row.gap_explained_pct < 80 %}{% set dq_issues = dq_issues + ["Gap explained " ~ "%.0f"|format(row.gap_explained_pct) ~ "%"] %}{% endif %}
+        {% if row.company_object_rate > 10 %}{% set dq_issues = dq_issues + ["Co-object " ~ "%.0f"|format(row.company_object_rate) ~ "%"] %}{% endif %}
+        {% if row.no_icp_data_rate > 30 %}{% set dq_issues = dq_issues + ["No ICP data " ~ "%.0f"|format(row.no_icp_data_rate) ~ "%"] %}{% endif %}
+        {% if row.low_icp_rate > 40 %}{% set dq_issues = dq_issues + ["Low ICP " ~ "%.0f"|format(row.low_icp_rate) ~ "%"] %}{% endif %}
+        {% set dq_color = "text-red-500" if dq_issues|length >= 2 else ("text-amber-500" if dq_issues|length == 1 else "text-emerald-500") %}
+        {% set dq_label = "Poor" if dq_issues|length >= 2 else ("Fair" if dq_issues|length == 1 else "Good") %}
+        {# Coaching hint for primary driver #}
+        {% set primary_hint = coaching_hints.get(row.primary_driver, "") %}
+        {% set secondary_hint = coaching_hints.get(row.secondary_driver, "") %}
+        <tr class="hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer" onclick="updateParam('rep', '{{ row.owner_id }}')">
           <td class="px-4 py-3 font-medium text-slate-800">{{ row.rep }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.actual_connect_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums {% if row.delta_vs_team_avg > 0 %}text-emerald-600{% elif row.delta_vs_team_avg < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
+          <td class="px-4 py-3 text-right tabular-nums font-semibold {% if row.delta_vs_team_avg > 0 %}text-emerald-600{% elif row.delta_vs_team_avg < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
             {% if row.delta_vs_team_avg > 0 %}+{% endif %}{{ "%.1f"|format(row.delta_vs_team_avg) }} pts
           </td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.expected_connect_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums {% if row.actual_vs_expected > 0 %}text-emerald-600{% elif row.actual_vs_expected < 0 %}text-red-500{% else %}text-slate-500{% endif %}">
-            {% if row.actual_vs_expected > 0 %}+{% endif %}{{ "%.1f"|format(row.actual_vs_expected) }} pts
+          <td class="px-4 py-3">
+            <p class="text-sm font-medium text-slate-800">{{ row.primary_driver }}</p>
+            {% if primary_hint %}<p class="text-xs text-slate-400 mt-0.5">{{ primary_hint }}</p>{% endif %}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.0f"|format(row.gap_explained_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.shared_number_rate) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.conversation_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.low_icp_rate) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(row.no_icp_data_rate) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums {% if row.company_object_rate > 10 %}text-amber-600 font-medium{% else %}text-slate-600{% endif %}">
-            {{ "%.1f"|format(row.company_object_rate) }}%
+          <td class="px-4 py-3">
+            <p class="text-sm text-slate-600">{{ row.secondary_driver }}</p>
+            {% if secondary_hint %}<p class="text-xs text-slate-400 mt-0.5">{{ secondary_hint }}</p>{% endif %}
           </td>
-          <td class="px-4 py-3 text-slate-700">{{ row.primary_driver }}</td>
-          <td class="px-4 py-3 text-slate-500">{{ row.secondary_driver }}</td>
+          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.actual_connect_pct) }}%</td>
+          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.conversation_pct) }}%</td>
+          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ "%.1f"|format(row.shared_number_rate) }}%</td>
+          <td class="px-4 py-3 text-right">
+            <span class="text-sm font-medium {{ dq_color }}"
+                  title="{{ dq_issues | join(' · ') if dq_issues else 'No data quality flags' }}">
+              {{ dq_label }}
+            </span>
+            {% if dq_issues %}
+            <p class="text-xs text-slate-400 mt-0.5">{{ dq_issues | join(' · ') }}</p>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -360,18 +452,12 @@
       <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
         <tr>
           <td class="px-4 py-3 text-xs uppercase tracking-wider">{{ team_row.rep }}</td>
+          <td class="px-4 py-3 text-right tabular-nums text-slate-500">0.0 pts</td>
+          <td class="px-4 py-3 text-slate-500" colspan="2">Baseline</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.actual_connect_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-500">0.0 pts</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.expected_connect_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-500">0.0 pts</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.0f"|format(team_row.gap_explained_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.shared_number_rate) }}%</td>
           <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.conversation_pct) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.low_icp_rate) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.no_icp_data_rate) }}%</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.company_object_rate) }}%</td>
-          <td class="px-4 py-3 text-slate-500">Baseline</td>
-          <td class="px-4 py-3 text-slate-500">Baseline</td>
+          <td class="px-4 py-3 text-right tabular-nums">{{ "%.1f"|format(team_row.shared_number_rate) }}%</td>
+          <td class="px-4 py-3 text-slate-500">—</td>
         </tr>
       </tfoot>
       {% endif %}
@@ -532,7 +618,7 @@ function updateParam(key, value) {
       },
       scales: {
         x: {
-          min: 0,
+          min: mode === 'connect_pct' ? 0 : undefined,
           suggestedMax: (function() {
             var finiteVals = actualValues.filter(function(v) { return isFinite(v) && v > 0; });
             return finiteVals.length ? Math.max.apply(null, finiteVals) * 1.15 : 0.3;
