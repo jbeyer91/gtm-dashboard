@@ -120,7 +120,6 @@ INBOUND_PERIODS = [
 SOURCES = ["All", "Cold outreach", "Inbound", "Referral", "Conference"]
 
 NAV = [
-    {"type": "link",  "endpoint": "home",               "label": "Home"},
     {"type": "group", "label": "Scorecard", "children": [
         {"endpoint": "scorecard",         "label": "This Month"},
         {"endpoint": "scorecard_history", "label": "Scorecard History"},
@@ -130,7 +129,6 @@ NAV = [
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
         {"endpoint": "forecast",        "label": "Forecast"},
-        {"endpoint": "revenue_chart",   "label": "Revenue Chart"},
     ]},
     {"type": "group", "label": "Pipeline", "children": [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
@@ -141,9 +139,10 @@ NAV = [
         {"endpoint": "call_stats",                    "label": "Summary"},
     ]},
     {"type": "group", "label": "Analytics", "children": [
-        {"endpoint": "calls_drilldown.calls_drilldown", "label": "Connect Analysis"},
-        {"endpoint": "calls_drilldown.connect_rate_drivers", "label": "Rate Drivers"},
-        {"endpoint": "calls_drilldown.dial_pipeline", "label": "Dials to Pipeline"},
+        {"endpoint": "revenue_chart",                       "label": "Revenue Chart"},
+        {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
+        {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Rate Drivers"},
+        {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
