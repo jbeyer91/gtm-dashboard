@@ -68,7 +68,8 @@ DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 _VIEWS = [
     analytics.compute_call_stats,
     analytics.compute_connect_diagnostics,
-    analytics.compute_connect_rate_drivers,
+    # compute_connect_rate_drivers is warmed separately below with explicit positional
+    # args so the cache key matches what the route calls (period, "all", "all", "all").
     analytics.compute_dial_pipeline,
     analytics.compute_scorecard,
     analytics.compute_pipeline_coverage,
@@ -222,6 +223,14 @@ def _sync_body():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        try:
+            # Warm with explicit positional defaults to match the route's cache key:
+            # compute_connect_rate_drivers(period, "all", "all", "all")
+            analytics.compute_connect_rate_drivers(period, "all", "all", "all", _force=True)
+            total += 1
+        except Exception as exc:
+            log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
+            failed += 1
         _evict_raw_from_memory()              # drop large raw lists; they're on disk
         gc.collect()                          # release temporaries before next period
 
@@ -235,6 +244,12 @@ def _sync_body():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        try:
+            analytics.compute_connect_rate_drivers(period, "all", "all", "all", _force=True)
+            total += 1
+        except Exception as exc:
+            log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
+            failed += 1
         _evict_raw_from_memory()
         gc.collect()
 
@@ -243,7 +258,6 @@ def _sync_body():
         for fn in (
             analytics.compute_call_stats,
             analytics.compute_connect_diagnostics,
-            analytics.compute_connect_rate_drivers,
         ):
             try:
                 fn(period, _force=True)
@@ -251,6 +265,12 @@ def _sync_body():
             except Exception as exc:
                 log.warning("  ✗ %s(%s): %s", fn.__name__, period, exc)
                 failed += 1
+        try:
+            analytics.compute_connect_rate_drivers(period, "all", "all", "all", _force=True)
+            total += 1
+        except Exception as exc:
+            log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
+            failed += 1
 
     # Step 4b: this_week / last_week for deal-page views.
     # Raw API data is refreshed first so compute functions receive fresh data
