@@ -1336,6 +1336,16 @@ def compute_connect_rate_drivers(
         }
         rep_rows.append(row)
 
+    # Flag reps with misleading connect rate (office-line / front-desk pattern)
+    team_convo_pct = current_team_stats["conversation_pct"]
+    for row in rep_rows:
+        is_misleading = (
+            row["company_object_rate"] > 10.0
+            and row["actual_connect_pct"] > current_team_stats["connect_pct"]
+            and (team_convo_pct - row["conversation_pct"]) > 5.0
+        )
+        row["misleading_connect_flag"] = is_misleading
+
     selected_calls = [call for call in prepared_calls if _call_meets_scope(call, team, "all", owner_team_map)]
     selected_stats = _build_connect_driver_aggregate(selected_calls, strong_hours, weak_hours) if selected_calls else current_team_stats
     selected_benchmark_calls = benchmark_calls
@@ -1459,6 +1469,7 @@ def compute_connect_rate_drivers(
         "low_icp_rate": current_team_stats["metrics"]["Low ICP Rate"],
         "no_icp_data_rate": current_team_stats["metrics"]["No ICP Data Rate"],
         "company_object_rate": current_team_stats["metrics"].get("Company-Object Dial Rate", 0.0),
+        "misleading_connect_flag": False,
     }
 
     return {
