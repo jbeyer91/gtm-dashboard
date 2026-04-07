@@ -77,6 +77,7 @@ _VIEWS = [
     analytics.compute_deals_lost,
     analytics.compute_deal_advancement,
     analytics.compute_inbound_funnel,
+    analytics.compute_revenue_chart,
 ]
 
 # Subset of _VIEWS relevant for weekly deal periods (pipeline_coverage and
