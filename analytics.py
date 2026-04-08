@@ -1468,6 +1468,7 @@ def compute_connect_rate_drivers(
             },
             "driver_cards": _build_driver_cards(owner_stats, current_team_stats, owner_calls, visible_calls),
             "stats": owner_stats,
+            "segment_connect_rates": _build_segment_connect_rates(owner_calls),
         }
         rep_rows.append(row)
 
