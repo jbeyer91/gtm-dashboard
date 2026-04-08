@@ -75,7 +75,13 @@
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps connect above or below team average</p>
 </div>
-<p class="text-xs text-slate-400 mb-4">Computing driver data — this page refreshes automatically.</p>
+<div class="flex flex-col items-center gap-3 py-8 mb-4">
+  <div class="w-12 h-12 rounded-full border-[3px] border-violet-500 loader-spin" style="border-top-color:transparent;"></div>
+  <div class="text-center">
+    <p class="text-sm font-semibold text-gray-700">Computing connect rate drivers…</p>
+    <p class="text-xs text-gray-400 mt-1">This page will refresh automatically in a few seconds.</p>
+  </div>
+</div>
 
 {{ period_filter(period, periods, {"team": team, "rep": rep, "segment": segment, "comparison_mode": comparison_mode, "table_sort": table_sort}) }}
 
