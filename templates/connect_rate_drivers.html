@@ -419,6 +419,47 @@
   {% endfor %}
 </section>
 
+{# ── Connect Rate by Segment ────────────────────────────────────────── #}
+{% if data.segment_connect_rates %}
+<section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <div class="mb-5">
+    <h2 class="text-base font-semibold text-gray-800">Connect Rate by Segment</h2>
+    <p class="text-xs text-gray-400 mt-0.5">What connect rate does each segment actually produce?</p>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+    {% for table in data.segment_connect_rates %}
+    <div>
+      <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">{{ table.title }}</p>
+      {% set max_pct = table.rows | map(attribute='connect_pct') | max %}
+      <div class="space-y-2">
+        {% for row in table.rows %}
+        {% set bar_width = (row.connect_pct / max_pct * 100) if max_pct > 0 else 0 %}
+        {# Highlight the top-performing row in teal, rest in indigo #}
+        {% if row.connect_pct == max_pct and max_pct > 0 %}
+          {% set bar_color = "bg-teal-400" %}
+        {% else %}
+          {% set bar_color = "bg-indigo-400" %}
+        {% endif %}
+        <div>
+          <div class="flex items-center justify-between mb-0.5">
+            <span class="text-xs font-medium text-slate-600 truncate mr-2">{{ row.label }}</span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-xs font-semibold tabular-nums text-slate-800">{{ "%.1f"|format(row.connect_pct) }}%</span>
+              <span class="text-[10px] tabular-nums text-slate-400 {% if row.dials < 5 %}italic{% endif %}">{{ row.dials }} dials</span>
+            </div>
+          </div>
+          <div class="h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+            <div class="absolute inset-y-0 left-0 {{ bar_color }} rounded-full transition-all duration-300" style="width:{{ "%.1f"|format(bar_width) }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-4">
     <div>
