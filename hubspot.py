@@ -1126,6 +1126,10 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
                 )
             cop_line_type    = (c["properties"].get("cop_line_type") or "").strip()
             clearout_line    = (c["properties"].get("clearoutphone_line_type") or "").strip()
+            # Tag reason when ICP rank is missing
+            if not company_icp_rank:
+                has_company = bool(contact_to_companies.get(contact_id))
+                company_icp_rank = "" if has_company else "__no_company__"
             result[str(c["id"])] = {
                 # Use cop_line_type; fall back to clearoutphone_line_type if blank
                 "cop_line_type":         cop_line_type or clearout_line,
@@ -1217,7 +1221,7 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
         enriched.append({
             **call,
             "_line_type":             cp.get("cop_line_type") or "Unknown",
-            "_icp_rank":              cp.get("company_icp_rank") or company_icp or "—",
+            "_icp_rank":              cp.get("company_icp_rank") or company_icp or ("__co_not_scored__" if from_company_object else "—"),
             "_contact_id":            contact_id,
             "_from_company_object":   from_company_object,
             "_email":                 cp.get("email") or "",

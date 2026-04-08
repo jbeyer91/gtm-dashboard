@@ -527,8 +527,12 @@ def _icp_sort_key(rank: str) -> tuple:
 
 def _normalize_icp_rank(raw: str) -> str:
     """Map HubSpot internal icp_rank enum value to display label."""
-    v = (raw or "").strip().lower()
-    return _ICP_INTERNAL_TO_LABEL.get(v) or (raw.strip() if raw and raw.strip() else "—")
+    v = (raw or "").strip()
+    if v == "__no_company__":
+        return "No Company Association"
+    if v == "__co_not_scored__":
+        return "Company Not Scored"
+    return _ICP_INTERNAL_TO_LABEL.get(v.lower()) or (v if v else "—")
 
 
 def _normalize_line_type(raw: str) -> str:
@@ -1083,7 +1087,8 @@ def _build_segment_connect_rates(calls: list[dict]) -> dict:
         {
             "title": "ICP Rank",
             "rows": _segment_table(calls, lambda c: c["icp_rank"],
-                                   ["A+", "A", "B", "C", "D", "Least Priority", "—"]),
+                                   ["A+", "A", "B", "C", "D", "Least Priority",
+                                    "No Company Association", "Company Not Scored", "—"]),
         },
         {
             "title": "Title Segment",
@@ -1125,8 +1130,9 @@ def _build_segment_connect_rates(calls: list[dict]) -> dict:
     no_title_co = sum(1 for c in calls if c.get("is_from_company_object") and c["title_segment"] == "No Title Available")
     unknown_phone = sum(1 for c in calls if _phone_bucket(c) == "Unknown")
     unknown_phone_co = sum(1 for c in calls if c.get("is_from_company_object") and c.get("line_type", "Unknown") == "Unknown")
-    no_icp = sum(1 for c in calls if c["icp_rank"] == "—")
-    no_icp_co = sum(1 for c in calls if c.get("is_from_company_object") and c["icp_rank"] == "—")
+    _NO_ICP_LABELS = {"—", "No Company Association", "Company Not Scored"}
+    no_icp = sum(1 for c in calls if c["icp_rank"] in _NO_ICP_LABELS)
+    no_icp_co = sum(1 for c in calls if c.get("is_from_company_object") and c["icp_rank"] in _NO_ICP_LABELS)
 
     data_gaps = {
         "total_dials": total,
@@ -1316,7 +1322,7 @@ def compute_connect_rate_drivers(
             "title_segment": _classify_title(jobtitle),
             "is_icp_ab": icp_rank in {"A+", "A", "B", "C"},
             "is_low_icp": icp_rank in {"D", "Least Priority"},
-            "is_no_icp_data": icp_rank == "—",
+            "is_no_icp_data": icp_rank in {"—", "No Company Association", "Company Not Scored"},
             "is_from_company_object": call.get("_from_company_object", False),
             "is_conversation": bool(is_connect and duration_ms >= 60000),
             "has_phone_and_email": bool(normalized_phone and email),
