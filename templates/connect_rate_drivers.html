@@ -672,73 +672,77 @@
                   </div>
                   {% endfor %}
                 </div>
-                {# ICP breakdown (Dial Mix only) #}
-                {% if card.icp_breakdown is defined and card.icp_breakdown %}
-                <div class="mt-4 pt-3 border-t border-slate-100">
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">ICP Rank</p>
-                  <div class="space-y-1">
-                    {% for brow in card.icp_breakdown %}
-                    {% set rv = brow.rep or 0 %}
-                    {% set tv = brow.team or 0 %}
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-slate-500 w-16 shrink-0">{{ brow.rank }}</span>
-                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
-                        <div class="absolute inset-y-0 left-0 bg-indigo-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
-                      </div>
-                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
-                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </div>
-                {% endif %}
-                {# Phone type breakdown (Dial Mix only) #}
-                {% if card.phone_type_breakdown is defined and card.phone_type_breakdown %}
-                <div class="mt-3 pt-3 border-t border-slate-100">
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Phone Type</p>
-                  <div class="space-y-1">
-                    {% for brow in card.phone_type_breakdown %}
-                    {% set rv = brow.rep or 0 %}
-                    {% set tv = brow.team or 0 %}
-                    {% if brow.bucket == "Mobile" %}{% set bcolor = "bg-teal-400" %}
-                    {% elif brow.bucket == "Direct line" %}{% set bcolor = "bg-sky-400" %}
-                    {% elif brow.bucket == "Company Object" %}{% set bcolor = "bg-amber-400" %}
-                    {% else %}{% set bcolor = "bg-slate-300" %}{% endif %}
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] {% if brow.bucket == 'Company Object' and rv > tv + 3 %}text-amber-600 font-semibold{% else %}text-slate-500{% endif %} w-24 shrink-0">{{ brow.bucket }}</span>
-                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
-                        <div class="absolute inset-y-0 left-0 {{ bcolor }} rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
-                      </div>
-                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
-                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </div>
-                {% endif %}
-                {# Title breakdown (Dial Mix only) #}
-                {% if card.title_breakdown is defined and card.title_breakdown %}
-                <div class="mt-3 pt-3 border-t border-slate-100">
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Title Segment</p>
-                  <div class="space-y-1">
-                    {% for brow in card.title_breakdown %}
-                    {% set rv = brow.rep or 0 %}
-                    {% set tv = brow.team or 0 %}
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-slate-500 w-32 shrink-0 truncate">{{ brow.bucket }}</span>
-                      <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
-                        <div class="absolute inset-y-0 left-0 bg-violet-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
-                      </div>
-                      <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
-                      <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </div>
-                {% endif %}
               </div>
               {% endfor %}
             </div>
+            {# Dial Mix breakdowns — extracted so all 3 cards are equal height #}
+            {% set dm = row.driver_cards[0] %}
+            {% if dm.icp_breakdown is defined and dm.icp_breakdown %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {# ICP Rank #}
+              <div class="bg-white rounded-xl border border-slate-200 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">ICP Rank</p>
+                <div class="space-y-1">
+                  {% for brow in dm.icp_breakdown %}
+                  {% set rv = brow.rep or 0 %}
+                  {% set tv = brow.team or 0 %}
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-slate-500 w-16 shrink-0">{{ brow.rank }}</span>
+                    <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                      <div class="absolute inset-y-0 left-0 bg-indigo-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                    </div>
+                    <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                    <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              {# Phone Type #}
+              {% if dm.phone_type_breakdown is defined and dm.phone_type_breakdown %}
+              <div class="bg-white rounded-xl border border-slate-200 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Phone Type</p>
+                <div class="space-y-1">
+                  {% for brow in dm.phone_type_breakdown %}
+                  {% set rv = brow.rep or 0 %}
+                  {% set tv = brow.team or 0 %}
+                  {% if brow.bucket == "Mobile" %}{% set bcolor = "bg-teal-400" %}
+                  {% elif brow.bucket == "Direct line" %}{% set bcolor = "bg-sky-400" %}
+                  {% elif brow.bucket == "Company Object" %}{% set bcolor = "bg-amber-400" %}
+                  {% else %}{% set bcolor = "bg-slate-300" %}{% endif %}
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] {% if brow.bucket == 'Company Object' and rv > tv + 3 %}text-amber-600 font-semibold{% else %}text-slate-500{% endif %} w-24 shrink-0">{{ brow.bucket }}</span>
+                    <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                      <div class="absolute inset-y-0 left-0 {{ bcolor }} rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                    </div>
+                    <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                    <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+              {# Title Segment #}
+              {% if dm.title_breakdown is defined and dm.title_breakdown %}
+              <div class="bg-white rounded-xl border border-slate-200 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 mb-2">Title Segment</p>
+                <div class="space-y-1">
+                  {% for brow in dm.title_breakdown %}
+                  {% set rv = brow.rep or 0 %}
+                  {% set tv = brow.team or 0 %}
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-slate-500 w-32 shrink-0 truncate">{{ brow.bucket }}</span>
+                    <div class="flex-1 h-1.5 bg-slate-100 rounded-full relative overflow-hidden">
+                      <div class="absolute inset-y-0 left-0 bg-violet-400 rounded-full" style="width:{{ [rv, 100]|min }}%"></div>
+                    </div>
+                    <span class="text-[11px] tabular-nums text-slate-700 w-8 text-right">{{ "%.0f"|format(rv) }}%</span>
+                    <span class="text-[11px] tabular-nums text-slate-400 w-12 text-right">t:{{ "%.0f"|format(tv) }}%</span>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
             {% endif %}
 
             {# ── Per-rep Connect Rate by Segment ────────────────────────────── #}
