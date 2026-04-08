@@ -23,6 +23,7 @@ import threading
 import hubspot
 import analytics
 from analytics import _coverage_end
+from hubspot import TEAM_FILTER
 
 log = logging.getLogger(__name__)
 
@@ -231,6 +232,13 @@ def _sync_body():
         except Exception as exc:
             log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
             failed += 1
+        for _team in TEAM_FILTER:
+            try:
+                analytics.compute_connect_rate_drivers(period, _team, "all", "all", _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ compute_connect_rate_drivers(%s, %s): %s", period, _team, exc)
+                failed += 1
         _evict_raw_from_memory()              # drop large raw lists; they're on disk
         gc.collect()                          # release temporaries before next period
 
@@ -250,6 +258,13 @@ def _sync_body():
         except Exception as exc:
             log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
             failed += 1
+        for _team in TEAM_FILTER:
+            try:
+                analytics.compute_connect_rate_drivers(period, _team, "all", "all", _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ compute_connect_rate_drivers(%s, %s): %s", period, _team, exc)
+                failed += 1
         _evict_raw_from_memory()
         gc.collect()
 
@@ -271,6 +286,13 @@ def _sync_body():
         except Exception as exc:
             log.warning("  ✗ compute_connect_rate_drivers(%s): %s", period, exc)
             failed += 1
+        for _team in TEAM_FILTER:
+            try:
+                analytics.compute_connect_rate_drivers(period, _team, "all", "all", _force=True)
+                total += 1
+            except Exception as exc:
+                log.warning("  ✗ compute_connect_rate_drivers(%s, %s): %s", period, _team, exc)
+                failed += 1
 
     # Step 4b: this_week / last_week for deal-page views.
     # Raw API data is refreshed first so compute functions receive fresh data
