@@ -50,10 +50,34 @@
 <div class="flex flex-col items-center justify-center py-24 gap-5">
   <div class="w-12 h-12 rounded-full border-[3px] border-sky-500 loader-spin" style="border-top-color:transparent;"></div>
   <div class="text-center">
-    <p class="text-sm font-semibold text-gray-700">Computing dial pipeline view…</p>
+    <p id="loading-msg" class="text-sm font-semibold text-gray-700" style="transition:opacity .35s ease">Computing dial pipeline…</p>
     <p class="text-xs text-gray-400 mt-1">This page is being warmed for the first time. It will refresh automatically.</p>
   </div>
 </div>
+<script>
+(function(){
+  var msgs = [
+    "Computing dial pipeline…",
+    "Tracing dials to dollars…",
+    "Mapping calls to pipeline…",
+    "Following the money trail from first ring…",
+    "Connecting the dots from dials to revenue…",
+    "Doing the math on your prospecting…",
+    "So many dials, so much pipeline…",
+    "Almost there…"
+  ];
+  var el = document.getElementById('loading-msg');
+  var i = 0;
+  setInterval(function(){
+    el.style.opacity = '0';
+    setTimeout(function(){
+      i = (i + 1) % msgs.length;
+      el.textContent = msgs[i];
+      el.style.opacity = '1';
+    }, 350);
+  }, 2800);
+})();
+</script>
 {% else %}
 
 {% set t = data.totals %}

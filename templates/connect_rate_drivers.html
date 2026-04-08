@@ -75,7 +75,37 @@
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps connect above or below team average</p>
 </div>
-<p class="text-xs text-slate-400 mb-4">Computing driver data — this page refreshes automatically.</p>
+<div class="flex flex-col items-center gap-3 py-8 mb-4">
+  <div class="w-12 h-12 rounded-full border-[3px] border-violet-500 loader-spin" style="border-top-color:transparent;"></div>
+  <div class="text-center">
+    <p id="loading-msg" class="text-sm font-semibold text-gray-700" style="transition:opacity .35s ease">Computing connect rate drivers…</p>
+    <p class="text-xs text-gray-400 mt-1">This page will refresh automatically in a few seconds.</p>
+  </div>
+</div>
+<script>
+(function(){
+  var msgs = [
+    "Computing connect rate drivers…",
+    "Figuring out why some reps get through…",
+    "Analyzing timing, recycling, and first attempts…",
+    "Doing the stats homework so you don't have to…",
+    "Looking for patterns in the noise…",
+    "Finding the levers that move connect rate…",
+    "Running regressions (we're nerds like that)…",
+    "Almost ready to tell you who to clone…"
+  ];
+  var el = document.getElementById('loading-msg');
+  var i = 0;
+  setInterval(function(){
+    el.style.opacity = '0';
+    setTimeout(function(){
+      i = (i + 1) % msgs.length;
+      el.textContent = msgs[i];
+      el.style.opacity = '1';
+    }, 350);
+  }, 2800);
+})();
+</script>
 
 {{ period_filter(period, periods, {"team": team, "rep": rep, "segment": segment, "comparison_mode": comparison_mode, "table_sort": table_sort}) }}
 
