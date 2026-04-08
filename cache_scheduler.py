@@ -166,7 +166,7 @@ def _refresh_period_data(period: str):
             fn(start, end, _force=True, **kwargs)
         except Exception as exc:
             log.warning("  ✗ %s(%s, ...): %s", fn.__name__, period, exc)
-        import time; time.sleep(1.5)  # avoid HubSpot rate limit between fetches
+        import time; time.sleep(0.5)  # avoid HubSpot rate limit between fetches
 
     # Warm open-deals cache with the extended boundary
     try:
