@@ -1138,6 +1138,22 @@ def get_contacts_for_drilldown(contact_ids: list) -> dict:
                 "mobilephone":      (c["properties"].get("mobilephone") or "").strip(),
                 "jobtitle":         (c["properties"].get("jobtitle") or "").strip(),
             }
+
+    # ── Backfill cop_line_type from sibling contacts sharing the same phone ──
+    phone_to_line_type: dict[str, str] = {}
+    for cid, props in result.items():
+        if props["cop_line_type"]:
+            for ph in (props["phone"], props["mobilephone"]):
+                if ph:
+                    phone_to_line_type.setdefault(ph, props["cop_line_type"])
+
+    for cid, props in result.items():
+        if not props["cop_line_type"]:
+            for ph in (props["phone"], props["mobilephone"]):
+                if ph and ph in phone_to_line_type:
+                    props["cop_line_type"] = phone_to_line_type[ph]
+                    break
+
     return result
 
 
