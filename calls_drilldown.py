@@ -1,5 +1,6 @@
 """Blueprint: /calls/connect-analysis — connect-rate diagnostics drill-down."""
 import logging
+import threading
 from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, session
@@ -10,6 +11,12 @@ from cache_utils import is_cached
 log = logging.getLogger(__name__)
 
 bp = Blueprint("calls_drilldown", __name__)
+
+# Tracks (period, team, rep, segment) tuples for which a background
+# compute_connect_rate_drivers call is already in-flight, to avoid spawning
+# duplicate threads when the 12-second meta-refresh fires repeatedly.
+_crd_warming: set = set()
+_crd_warming_lock = threading.Lock()
 
 CALL_STATS_PERIODS = [
     ("today",        "Today"),
@@ -309,6 +316,22 @@ def connect_rate_drivers():
     table_sort = request.args.get("table_sort", "worst_delta_vs_team")
 
     if not is_cached(analytics.compute_connect_rate_drivers, period, team, rep, segment):
+        _warm_key = (period, team, rep, segment)
+        with _crd_warming_lock:
+            _already = _warm_key in _crd_warming
+            if not _already:
+                _crd_warming.add(_warm_key)
+        if not _already:
+            def _bg(p=period, t=team, r=rep, s=segment, k=_warm_key):
+                try:
+                    analytics.compute_connect_rate_drivers(p, t, r, s)
+                    log.info("bg connect_rate_drivers(%s, %s) complete", p, t)
+                except Exception as exc:
+                    log.warning("bg connect_rate_drivers(%s, %s) failed: %s", p, t, exc)
+                finally:
+                    with _crd_warming_lock:
+                        _crd_warming.discard(k)
+            threading.Thread(target=_bg, daemon=True).start()
         from app import NAV
         return render_template(
             "connect_rate_drivers.html",
