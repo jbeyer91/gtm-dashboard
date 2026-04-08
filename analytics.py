@@ -1115,8 +1115,9 @@ def _build_segment_connect_rates(calls: list[dict]) -> dict:
         {
             "title": "Phone Confidence",
             "rows": _segment_table(calls,
-                                   lambda c: "High Confidence" if c["is_high_conf_phone"] else "Low / Unknown",
-                                   ["High Confidence", "Low / Unknown"]),
+                                   lambda c: "High Confidence" if c["is_high_conf_phone"]
+                                             else ("Low Confidence" if c["normalized_phone"] else "No Phone Data"),
+                                   ["High Confidence", "Low Confidence", "No Phone Data"]),
         },
     ]
 
