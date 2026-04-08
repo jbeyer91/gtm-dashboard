@@ -18,6 +18,14 @@ bp = Blueprint("calls_drilldown", __name__)
 _crd_warming: set = set()
 _crd_warming_lock = threading.Lock()
 
+# Dedup set for compute_connect_diagnostics background warming.
+_cd_warming: set = set()
+_cd_warming_lock = threading.Lock()
+
+# Dedup set for compute_dial_pipeline background warming.
+_dp_warming: set = set()
+_dp_warming_lock = threading.Lock()
+
 CALL_STATS_PERIODS = [
     ("today",        "Today"),
     ("this_week",    "This Week"),
@@ -240,6 +248,22 @@ def calls_drilldown():
         period = "this_month"
 
     if not is_cached(analytics.compute_connect_diagnostics, period):
+        _warm_key = (period,)
+        with _cd_warming_lock:
+            _already = _warm_key in _cd_warming
+            if not _already:
+                _cd_warming.add(_warm_key)
+        if not _already:
+            def _bg(p=period, k=_warm_key):
+                try:
+                    analytics.compute_connect_diagnostics(p)
+                    log.info("bg compute_connect_diagnostics(%s) complete", p)
+                except Exception as exc:
+                    log.warning("bg compute_connect_diagnostics(%s) failed: %s", p, exc)
+                finally:
+                    with _cd_warming_lock:
+                        _cd_warming.discard(k)
+            threading.Thread(target=_bg, daemon=True).start()
         from app import NAV
         return render_template(
             "calls_drilldown.html",
@@ -274,6 +298,22 @@ def dial_pipeline():
         period = "last_month"
 
     if not is_cached(analytics.compute_dial_pipeline, period):
+        _warm_key = (period,)
+        with _dp_warming_lock:
+            _already = _warm_key in _dp_warming
+            if not _already:
+                _dp_warming.add(_warm_key)
+        if not _already:
+            def _bg(p=period, k=_warm_key):
+                try:
+                    analytics.compute_dial_pipeline(p)
+                    log.info("bg compute_dial_pipeline(%s) complete", p)
+                except Exception as exc:
+                    log.warning("bg compute_dial_pipeline(%s) failed: %s", p, exc)
+                finally:
+                    with _dp_warming_lock:
+                        _dp_warming.discard(k)
+            threading.Thread(target=_bg, daemon=True).start()
         from app import NAV
         return render_template(
             "dial_pipeline.html",
