@@ -152,7 +152,7 @@
 <div id="page-loader" style="display:none;background:rgba(248,250,252,0.88);backdrop-filter:blur(3px);"
      class="fixed inset-0 z-[999] flex flex-col items-center justify-center gap-3">
   <div class="w-11 h-11 rounded-full border-[3px] border-blue-600 loader-spin" style="border-top-color:transparent;"></div>
-  <p class="text-sm text-gray-500 font-semibold tracking-wide">Loading data…</p>
+  <p id="page-loader-msg" class="text-sm text-gray-500 font-semibold tracking-wide" style="transition:opacity .3s ease">Loading data…</p>
 </div>
 
 <!-- ── Left sidebar (icon rail) ───────────────────────────────────────────────── -->
@@ -390,17 +390,50 @@
 
   // ── Page-load spinner ───────────────────────────────────────────────────────
   var loader = document.getElementById('page-loader');
+  var loaderMsg = document.getElementById('page-loader-msg');
+  var loaderMsgs = [
+    "Loading data…",
+    "Fetching the good stuff…",
+    "Pulling from HubSpot…",
+    "Crunching the numbers…",
+    "Almost there…",
+    "Worth the wait, we promise…",
+    "Running the math…",
+    "Loading at the speed of sales…"
+  ];
+  var loaderMsgIdx = 0, loaderInterval = null;
+  function startLoaderMsgs() {
+    loaderMsgIdx = 0;
+    loaderMsg.textContent = loaderMsgs[0];
+    loaderInterval = setInterval(function() {
+      loaderMsg.style.opacity = '0';
+      setTimeout(function() {
+        loaderMsgIdx = (loaderMsgIdx + 1) % loaderMsgs.length;
+        loaderMsg.textContent = loaderMsgs[loaderMsgIdx];
+        loaderMsg.style.opacity = '1';
+      }, 300);
+    }, 2500);
+  }
+  function showLoader() {
+    loader.style.display = 'flex';
+    startLoaderMsgs();
+  }
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[href]');
     if (link && !link.hasAttribute('download')) {
       var href = link.getAttribute('href');
       if (href && !href.startsWith('#') && !href.startsWith('http') && !href.startsWith('mailto')) {
-        loader.style.display = 'flex';
+        showLoader();
       }
     }
   });
-  document.addEventListener('submit', function() { loader.style.display = 'flex'; });
-  window.addEventListener('pageshow', function(e) { if (e.persisted) loader.style.display = 'none'; });
+  document.addEventListener('submit', function() { showLoader(); });
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) {
+      loader.style.display = 'none';
+      if (loaderInterval) { clearInterval(loaderInterval); loaderInterval = null; }
+    }
+  });
 </script>
 <script>
 (function () {
