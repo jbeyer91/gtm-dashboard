@@ -68,11 +68,11 @@ DEAL_WEEK_PERIODS = ["this_week", "last_week"]
 # after this_month data is ready, not at the end of the full sync cycle.
 _VIEWS = [
     analytics.compute_call_stats,
+    analytics.compute_scorecard,          # 2nd: unblocks /, /scorecard ASAP (depends on call_stats)
     analytics.compute_connect_diagnostics,
     # compute_connect_rate_drivers is warmed separately below with explicit positional
     # args so the cache key matches what the route calls (period, "all", "all", "all").
     analytics.compute_dial_pipeline,
-    analytics.compute_scorecard,
     analytics.compute_pipeline_coverage,
     analytics.compute_pipeline_generated,
     analytics.compute_deals_won,
