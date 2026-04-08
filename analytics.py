@@ -1043,6 +1043,81 @@ def _build_phone_type_breakdown(current_calls: list[dict], benchmark_calls: list
     return result
 
 
+def _build_segment_connect_rates(calls: list[dict]) -> list[dict]:
+    """Build connect-rate-by-segment tables for each key dimension.
+
+    Returns a list of segment groups, each with a title and rows showing
+    dials, connects, and connect rate for every bucket in that dimension.
+    """
+
+    def _segment_table(calls, key_fn, label_order):
+        buckets: dict[str, dict] = {}
+        for c in calls:
+            k = key_fn(c)
+            if k not in buckets:
+                buckets[k] = {"dials": 0, "connects": 0}
+            buckets[k]["dials"] += 1
+            if c["is_connect"]:
+                buckets[k]["connects"] += 1
+
+        rows = []
+        for label in label_order:
+            b = buckets.get(label)
+            if not b or b["dials"] == 0:
+                continue
+            rows.append({
+                "label": label,
+                "dials": b["dials"],
+                "connects": b["connects"],
+                "connect_pct": round(b["connects"] / b["dials"] * 100, 1),
+            })
+        return rows
+
+    def _phone_bucket(call):
+        if call.get("is_from_company_object"):
+            return "Company Object"
+        return call.get("line_type", "Unknown")
+
+    tables = [
+        {
+            "title": "ICP Rank",
+            "rows": _segment_table(calls, lambda c: c["icp_rank"],
+                                   ["A+", "A", "B", "C", "D", "Least Priority", "—"]),
+        },
+        {
+            "title": "Title Segment",
+            "rows": _segment_table(calls, lambda c: c["title_segment"],
+                                   TITLE_SEGMENT_ORDER),
+        },
+        {
+            "title": "Phone Type",
+            "rows": _segment_table(calls, _phone_bucket,
+                                   ["Mobile", "Direct line", "Company Object", "Unknown"]),
+        },
+        {
+            "title": "Dial Approach",
+            "rows": _segment_table(calls,
+                                   lambda c: "First Attempt" if c["is_first_attempt"] else "Repeat Dial",
+                                   ["First Attempt", "Repeat Dial"]),
+        },
+        {
+            "title": "Source",
+            "rows": _segment_table(calls,
+                                   lambda c: "Company Object" if c.get("is_from_company_object") else "Contact",
+                                   ["Contact", "Company Object"]),
+        },
+        {
+            "title": "Phone Confidence",
+            "rows": _segment_table(calls,
+                                   lambda c: "High Confidence" if c["is_high_conf_phone"] else "Low / Unknown",
+                                   ["High Confidence", "Low / Unknown"]),
+        },
+    ]
+
+    # Drop tables where every row has fewer than 5 dials
+    return [t for t in tables if t["rows"] and any(r["dials"] >= 5 for r in t["rows"])]
+
+
 def _build_driver_cards(current_stats: dict, benchmark_stats: dict, current_calls: list[dict] | None = None, benchmark_calls: list[dict] | None = None) -> list[dict]:
     dial_mix_rows = []
     for label in (
@@ -1246,6 +1321,7 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
+            "segment_connect_rates": [],
             "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
             "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},
@@ -1310,6 +1386,7 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
+            "segment_connect_rates": [],
             "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
             "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},
@@ -1534,6 +1611,7 @@ def compute_connect_rate_drivers(
             ],
         },
         "driver_cards": driver_cards,
+        "segment_connect_rates": _build_segment_connect_rates(selected_calls),
         "team_comparison": {
             "mode": "connect_pct",
             "modes": [
