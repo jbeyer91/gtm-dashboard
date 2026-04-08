@@ -1043,11 +1043,12 @@ def _build_phone_type_breakdown(current_calls: list[dict], benchmark_calls: list
     return result
 
 
-def _build_segment_connect_rates(calls: list[dict]) -> list[dict]:
+def _build_segment_connect_rates(calls: list[dict]) -> dict:
     """Build connect-rate-by-segment tables for each key dimension.
 
-    Returns a list of segment groups, each with a title and rows showing
-    dials, connects, and connect rate for every bucket in that dimension.
+    Returns a dict with:
+      tables  – list of segment groups (title + rows with dials/connects/connect_pct)
+      data_gaps – breakdown of unknown/blank segments and their root cause
     """
 
     def _segment_table(calls, key_fn, label_order):
@@ -1115,7 +1116,33 @@ def _build_segment_connect_rates(calls: list[dict]) -> list[dict]:
     ]
 
     # Drop tables where every row has fewer than 5 dials
-    return [t for t in tables if t["rows"] and any(r["dials"] >= 5 for r in t["rows"])]
+    tables = [t for t in tables if t["rows"] and any(r["dials"] >= 5 for r in t["rows"])]
+
+    # ── Data gap breakdown ──────────────────────────────────────────────
+    total = len(calls)
+    co_dials = sum(1 for c in calls if c.get("is_from_company_object"))
+    no_title = sum(1 for c in calls if c["title_segment"] == "No Title Available")
+    no_title_co = sum(1 for c in calls if c.get("is_from_company_object") and c["title_segment"] == "No Title Available")
+    unknown_phone = sum(1 for c in calls if _phone_bucket(c) == "Unknown")
+    unknown_phone_co = sum(1 for c in calls if c.get("is_from_company_object") and c.get("line_type", "Unknown") == "Unknown")
+    no_icp = sum(1 for c in calls if c["icp_rank"] == "—")
+    no_icp_co = sum(1 for c in calls if c.get("is_from_company_object") and c["icp_rank"] == "—")
+
+    data_gaps = {
+        "total_dials": total,
+        "company_object_dials": co_dials,
+        "no_title_total": no_title,
+        "no_title_from_company_obj": no_title_co,
+        "no_title_from_contacts": no_title - no_title_co,
+        "unknown_phone_total": unknown_phone,
+        "unknown_phone_from_company_obj": unknown_phone_co,
+        "unknown_phone_from_contacts": unknown_phone - unknown_phone_co,
+        "no_icp_total": no_icp,
+        "no_icp_from_company_obj": no_icp_co,
+        "no_icp_from_contacts": no_icp - no_icp_co,
+    }
+
+    return {"tables": tables, "data_gaps": data_gaps}
 
 
 def _build_driver_cards(current_stats: dict, benchmark_stats: dict, current_calls: list[dict] | None = None, benchmark_calls: list[dict] | None = None) -> list[dict]:
@@ -1321,7 +1348,7 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
-            "segment_connect_rates": [],
+            "segment_connect_rates": {"tables": [], "data_gaps": {}},
             "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
             "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},
@@ -1386,7 +1413,7 @@ def compute_connect_rate_drivers(
             "kpis": [],
             "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
             "driver_cards": [],
-            "segment_connect_rates": [],
+            "segment_connect_rates": {"tables": [], "data_gaps": {}},
             "team_comparison": {"mode": "connect_pct", "modes": [], "rows": []},
             "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
             "rep_detail": {"selected_owner_id": None, "available": False},

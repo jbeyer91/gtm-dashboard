@@ -420,14 +420,14 @@
 </section>
 
 {# ── Connect Rate by Segment ────────────────────────────────────────── #}
-{% if data.segment_connect_rates %}
+{% if data.segment_connect_rates.tables %}
 <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
   <div class="mb-5">
     <h2 class="text-base font-semibold text-gray-800">Connect Rate by Segment</h2>
     <p class="text-xs text-gray-400 mt-0.5">What connect rate does each segment actually produce?</p>
   </div>
   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-    {% for table in data.segment_connect_rates %}
+    {% for table in data.segment_connect_rates.tables %}
     <div>
       <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">{{ table.title }}</p>
       {% set max_pct = table.rows | map(attribute='connect_pct') | max %}
@@ -457,6 +457,28 @@
     </div>
     {% endfor %}
   </div>
+
+  {# ── Data Gaps footnote ─────────────────────────────────────────────── #}
+  {% set gaps = data.segment_connect_rates.data_gaps %}
+  {% if gaps and gaps.total_dials %}
+  {% set co_pct = (gaps.company_object_dials / gaps.total_dials * 100) | round(0) | int %}
+  <div class="mt-5 pt-4 border-t border-slate-100">
+    <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Data Gaps</p>
+    <div class="text-xs text-slate-500 space-y-1.5">
+      {% if gaps.company_object_dials %}
+      <p>
+        <span class="font-semibold text-amber-600">{{ gaps.company_object_dials }}</span> of {{ gaps.total_dials }} dials ({{ co_pct }}%) are from <strong class="text-slate-600">company records with no contact</strong> — these have no title, phone type, or enrichment data and likely connect to front desks, not prospects.
+      </p>
+      {% endif %}
+      {% if gaps.no_title_from_contacts or gaps.unknown_phone_from_contacts or gaps.no_icp_from_contacts %}
+      <p>
+        Among contact-based dials:
+        {% if gaps.no_title_from_contacts %}<span class="font-medium text-slate-600">{{ gaps.no_title_from_contacts }}</span> missing job title{% endif %}{% if gaps.no_title_from_contacts and (gaps.unknown_phone_from_contacts or gaps.no_icp_from_contacts) %} · {% endif %}{% if gaps.unknown_phone_from_contacts %}<span class="font-medium text-slate-600">{{ gaps.unknown_phone_from_contacts }}</span> missing phone enrichment{% endif %}{% if gaps.unknown_phone_from_contacts and gaps.no_icp_from_contacts %} · {% endif %}{% if gaps.no_icp_from_contacts %}<span class="font-medium text-slate-600">{{ gaps.no_icp_from_contacts }}</span> missing ICP rank{% endif %}.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 </section>
 {% endif %}
 
