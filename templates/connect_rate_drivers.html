@@ -323,7 +323,7 @@
   </div>
 </section>
 
-<section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-8 items-start">
+<section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5 items-start">
   {% for card in data.driver_cards %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
     <div>
@@ -335,13 +335,24 @@
       {{ variance_row(row, is_aggregate=data.view.is_aggregate_view, scope_label=(data.view.team|title if data.view.team != 'all' else 'All')) }}
       {% endfor %}
     </div>
+  </div>
+  {% endfor %}
+</section>
 
-    {# ICP Rank breakdown (Dial Mix card only) #}
-    {% if card.icp_breakdown is defined and card.icp_breakdown %}
-    <div class="mt-5 pt-4 border-t border-slate-100">
+{# ── Dial Mix Breakdowns (ICP, Title, Phone Type) ─────────────────── #}
+{% set dial_mix = data.driver_cards[0] %}
+{% if dial_mix.icp_breakdown is defined and dial_mix.icp_breakdown %}
+<section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+  <div class="mb-5">
+    <h3 class="text-base font-semibold text-slate-800">Dial Mix Breakdown</h3>
+    <p class="text-xs text-slate-400 mt-0.5">Where are dials going versus the team average?</p>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {# ICP Rank #}
+    <div>
       <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">ICP Rank — % of Dials</p>
       <div class="space-y-1.5">
-        {% for row in card.icp_breakdown %}
+        {% for row in dial_mix.icp_breakdown %}
         {% set rep_val = row.rep or 0 %}
         {% set team_val = row.team or 0 %}
         <div class="flex items-center gap-2">
@@ -355,14 +366,13 @@
         {% endfor %}
       </div>
     </div>
-    {% endif %}
 
-    {# Title Segment breakdown (Dial Mix card only) #}
-    {% if card.title_breakdown is defined and card.title_breakdown %}
-    <div class="mt-5 pt-4 border-t border-slate-100">
+    {# Title Segment #}
+    {% if dial_mix.title_breakdown is defined and dial_mix.title_breakdown %}
+    <div>
       <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3">Title Segment — % of Dials</p>
       <div class="space-y-1.5">
-        {% for row in card.title_breakdown %}
+        {% for row in dial_mix.title_breakdown %}
         {% set rep_val = row.rep or 0 %}
         {% set team_val = row.team or 0 %}
         <div class="flex items-center gap-2">
@@ -378,18 +388,17 @@
     </div>
     {% endif %}
 
-    {# Phone Type breakdown (Dial Mix card only) #}
-    {% if card.phone_type_breakdown is defined and card.phone_type_breakdown %}
-    <div class="mt-5 pt-4 border-t border-slate-100">
+    {# Phone Line Type #}
+    {% if dial_mix.phone_type_breakdown is defined and dial_mix.phone_type_breakdown %}
+    <div>
       <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-3"
          title="Mobile = personal/cell line · Direct line = office/fixed/VoIP · Company Object = dialled from company record with no contact (front desk risk) · Unknown = no enrichment data">
         Phone Line Type — % of Dials ⓘ
       </p>
       <div class="space-y-1.5">
-        {% for row in card.phone_type_breakdown %}
+        {% for row in dial_mix.phone_type_breakdown %}
         {% set rep_val = row.rep or 0 %}
         {% set team_val = row.team or 0 %}
-        {# Color coding: Mobile = teal (good), Direct line = sky, Company Object = amber (risk), Unknown = slate #}
         {% if row.bucket == "Mobile" %}
           {% set bar_color = "bg-teal-400" %}
           {% set label_color = "text-slate-700" %}
@@ -416,8 +425,8 @@
     </div>
     {% endif %}
   </div>
-  {% endfor %}
 </section>
+{% endif %}
 
 {# ── Connect Rate by Segment ────────────────────────────────────────── #}
 {% if data.segment_connect_rates.tables %}
