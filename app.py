@@ -15,11 +15,37 @@ from flask import (
 )
 from authlib.integrations.flask_client import OAuth
 import csv, io
+import threading
 import analytics
 import calls_drilldown as calls_drilldown_bp
 import monthly_store
 from cache_utils import clear_cache, get_cached, last_refreshed_str, last_refreshed_ts, is_cached
 from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
+
+# On-demand scorecard warming: when a user hits a cold cache, spawn a background
+# thread to compute the scorecard immediately instead of waiting for the scheduler.
+_scorecard_warming = False
+_scorecard_warming_lock = threading.Lock()
+
+
+def _maybe_warm_scorecard():
+    """Spawn a background thread to compute the scorecard if not already warming."""
+    global _scorecard_warming
+    with _scorecard_warming_lock:
+        already = _scorecard_warming
+        if not already:
+            _scorecard_warming = True
+    if not already:
+        def _bg_warm():
+            global _scorecard_warming
+            try:
+                analytics.compute_scorecard("this_month")
+            except Exception as exc:
+                log.warning("bg scorecard warm failed: %s", exc)
+            finally:
+                with _scorecard_warming_lock:
+                    _scorecard_warming = False
+        threading.Thread(target=_bg_warm, daemon=True).start()
 
 ALLOWED_DOMAIN = "belfrysoftware.com"
 ADMIN_EMAIL_ALLOWLIST = frozenset(
@@ -478,6 +504,7 @@ def home():
     team = request.args.get("team", "all")
     data = get_cached(analytics.compute_scorecard, "this_month")
     if data is None:
+        _maybe_warm_scorecard()
         return render_template("loading.html", nav=NAV, active="home"), 202
     try:
         data = _filter_by_team(data, team)
@@ -581,6 +608,7 @@ def scorecard():
     import calendar
     data = get_cached(analytics.compute_scorecard, "this_month")
     if data is None:
+        _maybe_warm_scorecard()
         return render_template("loading.html", nav=NAV, active="scorecard"), 202
     try:
         t     = data["team"]
@@ -674,6 +702,7 @@ def scorecard_history():
     from datetime import date
     data = get_cached(analytics.compute_scorecard, "this_month")
     if data is None:
+        _maybe_warm_scorecard()
         return render_template("loading.html", nav=NAV, active="scorecard_history"), 202
     try:
         owner_id = session.get("owner_id", "")

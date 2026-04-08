@@ -45,6 +45,10 @@ HEADERS = {
 # well under gunicorn's 30s worker timeout.
 _TIMEOUT = (5, 20)
 
+# Reusable HTTP session for connection pooling across HubSpot API calls.
+_session = requests.Session()
+_session.headers.update(HEADERS)
+
 PIPELINES = {
     "31544320": "New Business Pipeline",
     "32114559": "Renewal Pipeline",
@@ -208,9 +212,8 @@ def get_lifecyclestage_value(label: str) -> str:
     """
     fallback = label.lower().replace(" ", "")
     try:
-        resp = requests.get(
+        resp = _session.get(
             f"{BASE_URL}/crm/v3/properties/contacts/lifecyclestage",
-            headers=HEADERS,
             timeout=_TIMEOUT,
         )
         if not resp.ok:
@@ -241,9 +244,8 @@ def get_team_owner_ids() -> frozenset:
     Falls back to an empty frozenset (= no restriction) if the API call
     fails so the dashboard degrades gracefully rather than going blank.
     """
-    resp = requests.get(
+    resp = _session.get(
         f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
-        headers=HEADERS,
         timeout=_TIMEOUT,
     )
     if not resp.ok:
@@ -265,9 +267,8 @@ def get_team_owner_ids() -> frozenset:
 @ttl_cache
 def get_owner_team_map() -> dict:
     """Return {owner_id: team_name} for every allowed (non-manager) rep."""
-    resp = requests.get(
+    resp = _session.get(
         f"{BASE_URL}/crm/v3/owners?limit=200&includeTeams=true",
-        headers=HEADERS,
         timeout=_TIMEOUT,
     )
     if not resp.ok:
@@ -449,9 +450,8 @@ def _search_all(object_type: str, payload: dict, max_records: int = 10000) -> li
             payload["after"] = after
         # Retry up to 3 times on 429 rate-limit responses
         for attempt in range(4):
-            resp = requests.post(
+            resp = _session.post(
                 f"{BASE_URL}/crm/v3/objects/{object_type}/search",
-                headers=HEADERS,
                 json=payload,
                 timeout=_TIMEOUT,
             )
@@ -488,7 +488,7 @@ def get_lost_reason_labels() -> dict:
     keys → labels before classifying lost reasons.
     Returns {} if the property is free-text (no options) or on any error.
     """
-    resp = requests.get(f"{BASE_URL}/crm/v3/properties/deals/hs_closed_lost_reason", headers=HEADERS, timeout=_TIMEOUT)
+    resp = _session.get(f"{BASE_URL}/crm/v3/properties/deals/hs_closed_lost_reason", timeout=_TIMEOUT)
     if not resp.ok:
         return {}
     return {opt["value"]: opt["label"] for opt in resp.json().get("options", [])}
@@ -496,7 +496,7 @@ def get_lost_reason_labels() -> dict:
 
 @ttl_cache
 def get_owners() -> dict:
-    resp = requests.get(f"{BASE_URL}/crm/v3/owners?limit=200", headers=HEADERS, timeout=_TIMEOUT)
+    resp = _session.get(f"{BASE_URL}/crm/v3/owners?limit=200", timeout=_TIMEOUT)
     resp.raise_for_status()
     owners = {}
     for o in resp.json().get("results", []):
@@ -557,9 +557,8 @@ def get_quotas(start: datetime, end: datetime) -> dict:
         "limit": 200,
     }
     try:
-        resp = requests.post(
+        resp = _session.post(
             f"{BASE_URL}/crm/v3/objects/goal_targets/search",
-            headers=HEADERS,
             json=payload,
             timeout=_TIMEOUT,
         )
@@ -769,7 +768,7 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
         url = f"{BASE_URL}/crm/v3/lists/{list_id}/memberships?limit=100"
         if after:
             url += f"&after={after}"
-        resp = requests.get(url, headers=HEADERS, timeout=_TIMEOUT)
+        resp = _session.get(url, timeout=_TIMEOUT)
         if not resp.ok:
             logger.warning("List %s memberships error: %s", list_id, resp.text)
             break
@@ -787,9 +786,8 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
     contacts = []
     for i in range(0, len(member_ids), 100):
         batch = member_ids[i : i + 100]
-        resp = requests.post(
+        resp = _session.post(
             f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
-            headers=HEADERS,
             json={"inputs": [{"id": cid} for cid in batch], "properties": props},
             timeout=_TIMEOUT,
         )
@@ -813,7 +811,7 @@ def _post_with_retry(url: str, json_payload: dict, label: str):
     checking ``resp.ok``; non-429 errors are returned immediately without retry.
     """
     for attempt in range(4):
-        resp = requests.post(url, headers=HEADERS, json=json_payload, timeout=_TIMEOUT)
+        resp = _session.post(url, json=json_payload, timeout=_TIMEOUT)
         if resp.status_code == 429:
             wait = 2 ** attempt  # 1s, 2s, 4s, 8s
             log.warning(
