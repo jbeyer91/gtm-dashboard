@@ -2415,10 +2415,13 @@ def compute_revenue_chart(period: str) -> dict:
 
     holiday_map = _holiday_map_between(start, end)
     quotas = get_quotas(quota_start, quota_end)
+    quotas = {oid: amt for oid, amt in quotas.items() if _owner_allowed(oid)}
     total_quota = sum(quotas.values())
 
     won_deals = get_deals(start_dt, end_dt, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
+    won_deals = [d for d in won_deals
+                 if _owner_allowed(d["properties"].get("hubspot_owner_id", ""))]
 
     # Daily revenue keyed by close date string (YYYY-MM-DD)
     daily_revenue: dict = defaultdict(float)
