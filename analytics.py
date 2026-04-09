@@ -994,6 +994,8 @@ def _build_icp_breakdown(current_calls: list[dict], benchmark_calls: list[dict])
 
 
 def _build_title_breakdown(current_calls: list[dict], benchmark_calls: list[dict]) -> list[dict]:
+    current_calls = [c for c in current_calls if not c.get("is_from_company_object")]
+    benchmark_calls = [c for c in benchmark_calls if not c.get("is_from_company_object")]
     current_total = len(current_calls) or 1
     benchmark_total = len(benchmark_calls) or 1
     raw = []
@@ -1092,8 +1094,10 @@ def _build_segment_connect_rates(calls: list[dict]) -> dict:
         },
         {
             "title": "Title Segment",
-            "rows": _segment_table(calls, lambda c: c["title_segment"],
-                                   TITLE_SEGMENT_ORDER),
+            "rows": _segment_table(
+                [c for c in calls if not c.get("is_from_company_object")],
+                lambda c: c["title_segment"],
+                TITLE_SEGMENT_ORDER),
         },
         {
             "title": "Phone Type",
