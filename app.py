@@ -169,6 +169,7 @@ NAV = [
         {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
         {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Rate Drivers"},
         {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
+        {"endpoint": "speed_to_lead",                       "label": "Speed to Lead"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
@@ -1060,6 +1061,18 @@ def abm():
     return render_template("abm.html", data=data, deltas=deltas,
                            period=period, periods=DEAL_PERIODS, prior_label=prior_label,
                            nav=NAV, active="abm")
+
+
+@app.route("/speed-to-lead")
+@login_required
+def speed_to_lead():
+    period = request.args.get("period", "last_30")
+    try:
+        data = analytics.compute_speed_to_lead(period)
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="speed_to_lead")
+    return render_template("speed_to_lead.html", data=data, periods=PERIODS,
+                           period=period, nav=NAV, active="speed_to_lead")
 
 
 @app.route("/book-coverage")
