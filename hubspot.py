@@ -34,6 +34,7 @@ def _parse_hs_datetime(raw: str) -> datetime:
     return dt
 
 HUBSPOT_TOKEN = os.environ.get("HUBSPOT_TOKEN", "")
+HUBSPOT_PORTAL_ID = os.environ.get("HUBSPOT_PORTAL_ID", "")
 BASE_URL = "https://api.hubapi.com"
 
 HEADERS = {
@@ -802,6 +803,74 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
             except ValueError:
                 pass
     return contacts
+
+
+def get_rh_contacts(start: datetime, end: datetime) -> list:
+    """Fetch contacts with rh_meeting_created_at in [start, end].
+
+    Returns raw list of HubSpot contact objects; filtering of not_booked /
+    disqualified is done in the analytics layer so callers see full context.
+    """
+    start_ts = int(start.timestamp() * 1000)
+    end_ts = int(end.timestamp() * 1000)
+    payload = {
+        "filterGroups": [
+            {
+                "filters": [
+                    {"propertyName": "rh_meeting_created_at", "operator": "GTE", "value": str(start_ts)},
+                    {"propertyName": "rh_meeting_created_at", "operator": "LTE", "value": str(end_ts)},
+                ]
+            }
+        ],
+        "properties": [
+            "firstname", "lastname", "hubspot_owner_id",
+            "rh_meeting_created_at", "rh_meeting_status",
+            "rh_meeting_type", "rh_router_name", "rh_disqualified",
+        ],
+    }
+    return _search_all("contacts", payload)
+
+
+def get_calls_for_contacts(contact_ids: list) -> dict:
+    """Fetch call engagements associated with the given contact IDs.
+
+    Returns {contact_id: [call_obj, ...]} where each call_obj is the raw
+    HubSpot object dict with id and properties keys.
+    """
+    if not contact_ids:
+        return {}
+
+    # Step 1: contact → [call_id, ...]
+    contact_to_call_ids = _batch_associations("contacts", "calls", contact_ids)
+
+    # Step 2: collect all unique call IDs
+    all_call_ids = list({cid for ids in contact_to_call_ids.values() for cid in ids})
+    if not all_call_ids:
+        return {}
+
+    # Step 3: batch-read call properties (100 per request)
+    call_props = ["hs_timestamp", "hubspot_owner_id", "hs_call_direction"]
+    call_map = {}  # call_id → call_obj
+    for i in range(0, len(all_call_ids), 100):
+        batch = all_call_ids[i:i + 100]
+        resp = _post_with_retry(
+            f"{BASE_URL}/crm/v3/objects/calls/batch/read",
+            {"inputs": [{"id": cid} for cid in batch], "properties": call_props},
+            "calls batch/read for speed-to-lead",
+        )
+        if not resp.ok:
+            log.warning("calls batch/read error %s: %s", resp.status_code, resp.text[:300])
+            continue
+        for obj in resp.json().get("results", []):
+            call_map[str(obj["id"])] = obj
+
+    # Step 4: reconstruct {contact_id: [call_obj, ...]}
+    result = {}
+    for contact_id, call_ids in contact_to_call_ids.items():
+        calls = [call_map[cid] for cid in call_ids if cid in call_map]
+        if calls:
+            result[contact_id] = calls
+    return result
 
 
 def _post_with_retry(url: str, json_payload: dict, label: str):

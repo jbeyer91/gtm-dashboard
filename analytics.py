@@ -15,6 +15,7 @@ from hubspot import (
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
     get_target_account_companies, _search_all,
     get_calls_enriched,
+    get_rh_contacts, get_calls_for_contacts, HUBSPOT_PORTAL_ID,
 )
 
 # ── Business model constants ──────────────────────────────────────────────────
@@ -3401,3 +3402,196 @@ def compute_abm_coverage(period: str = "this_month") -> dict:
     }
 
     return {"rows": rows, "totals": totals, "period": period}
+
+
+# ── Speed to Lead ─────────────────────────────────────────────────────────────
+
+def _fmt_stl(seconds: int) -> str:
+    """Format a speed-to-lead duration in seconds as a human-readable string."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        m, s = divmod(seconds, 60)
+        return f"{m}m {s}s"
+    h, remainder = divmod(seconds, 3600)
+    m = remainder // 60
+    return f"{h}h {m}m"
+
+
+def compute_speed_to_lead(period: str) -> dict:
+    """Compute speed-to-lead metrics for all RevenueHero inbound leads in the period.
+
+    Returns a dict with:
+      rows      — lead-level list, sorted by booking_dt descending
+      rep_rows  — per-rep aggregates, sorted by lead_count descending
+      summary   — overall summary metrics
+      period, start, end
+    """
+    start, end = get_date_range(period)
+    owners = apply_manual_owner_overrides(get_owners())
+
+    # 1. Fetch contacts booked in this period
+    raw_contacts = get_rh_contacts(start, end)
+
+    # 2. Filter out not_booked and disqualified
+    contacts = []
+    for c in raw_contacts:
+        props = c.get("properties", {})
+        if props.get("rh_meeting_status") == "not_booked":
+            continue
+        if (props.get("rh_disqualified") or "").lower() == "true":
+            continue
+        contacts.append(c)
+
+    contact_ids = [c["id"] for c in contacts]
+
+    # 3. Fetch calls associated with these contacts
+    contact_calls = get_calls_for_contacts(contact_ids)
+
+    # 4. Build lead-level rows
+    rows = []
+    for c in contacts:
+        cid = c["id"]
+        props = c.get("properties", {})
+
+        first_name = props.get("firstname") or ""
+        last_name = props.get("lastname") or ""
+        contact_name = f"{first_name} {last_name}".strip() or cid
+
+        if HUBSPOT_PORTAL_ID:
+            contact_url = f"https://app.hubspot.com/contacts/{HUBSPOT_PORTAL_ID}/contact/{cid}"
+        else:
+            contact_url = ""
+
+        # Parse booking datetime
+        raw_booking = props.get("rh_meeting_created_at") or ""
+        try:
+            booking_dt = _parse_hs_datetime(raw_booking)
+        except ValueError:
+            continue  # skip contacts with unparseable booking time
+        booking_ms = int(booking_dt.timestamp() * 1000)
+
+        # Find first qualifying outbound call after booking
+        first_call = None
+        first_call_ms = None
+        for call in contact_calls.get(cid, []):
+            call_props = call.get("properties", {})
+            direction = (call_props.get("hs_call_direction") or "").upper()
+            if direction != "OUTBOUND":
+                continue
+            raw_ts = call_props.get("hs_timestamp") or ""
+            try:
+                raw_ts_str = str(raw_ts).strip()
+                if raw_ts_str.lstrip("-").isdigit():
+                    call_ms = int(raw_ts_str)
+                else:
+                    call_ms = int(_parse_hs_datetime(raw_ts_str).timestamp() * 1000)
+            except (ValueError, AttributeError):
+                continue
+            if call_ms <= booking_ms:
+                continue
+            if first_call_ms is None or call_ms < first_call_ms:
+                first_call = call
+                first_call_ms = call_ms
+
+        # Compute STL
+        if first_call:
+            raw_call_ts = first_call["properties"].get("hs_timestamp") or ""
+            try:
+                first_dial_dt = _parse_hs_datetime(str(raw_call_ts).strip())
+                stl_seconds = max(0, int((first_dial_dt - booking_dt).total_seconds()))
+                stl_display = _fmt_stl(stl_seconds)
+                first_dial_str = first_dial_dt.strftime("%Y-%m-%d %H:%M UTC")
+            except ValueError:
+                stl_seconds = None
+                stl_display = "—"
+                first_dial_str = ""
+        else:
+            stl_seconds = None
+            stl_display = "—"
+            first_dial_str = ""
+
+        # Rep resolution from contact owner
+        owner_id = props.get("hubspot_owner_id") or ""
+        owner = owners.get(owner_id)
+        rep_name = (owner.get("last_name") or owner.get("name") or owner_id) if owner else owner_id
+
+        rows.append({
+            "contact_id":     cid,
+            "contact_name":   contact_name,
+            "contact_url":    contact_url,
+            "booking_dt":     booking_dt.strftime("%Y-%m-%d %H:%M UTC"),
+            "booking_ts":     booking_dt.timestamp(),   # for sorting
+            "first_dial_dt":  first_dial_str,
+            "stl_seconds":    stl_seconds,
+            "stl_display":    stl_display,
+            "owner_id":       owner_id,
+            "rep_name":       rep_name,
+            "meeting_status": props.get("rh_meeting_status") or "",
+        })
+
+    # Sort lead rows newest booking first
+    rows.sort(key=lambda r: r["booking_ts"], reverse=True)
+
+    # 5. Aggregate by rep
+    rep_data = defaultdict(lambda: {
+        "lead_count": 0,
+        "stl_values": [],
+        "within_5min": 0,
+        "within_1hr": 0,
+        "never_dialed": 0,
+    })
+    for r in rows:
+        oid = r["owner_id"]
+        rep_data[oid]["rep_name"] = r["rep_name"]
+        rep_data[oid]["lead_count"] += 1
+        s = r["stl_seconds"]
+        if s is None:
+            rep_data[oid]["never_dialed"] += 1
+        else:
+            rep_data[oid]["stl_values"].append(s)
+            if s <= 300:
+                rep_data[oid]["within_5min"] += 1
+            if s <= 3600:
+                rep_data[oid]["within_1hr"] += 1
+
+    rep_rows = []
+    for oid, d in rep_data.items():
+        n = d["lead_count"]
+        stl_vals = d["stl_values"]
+        med = int(median(stl_vals)) if stl_vals else None
+        rep_rows.append({
+            "owner_id":           oid,
+            "rep_name":           d["rep_name"],
+            "lead_count":         n,
+            "median_stl_display": _fmt_stl(med) if med is not None else "—",
+            "pct_within_5min":    _pct(d["within_5min"], n),
+            "pct_within_1hr":     _pct(d["within_1hr"], n),
+            "pct_never_dialed":   _pct(d["never_dialed"], n),
+        })
+    rep_rows.sort(key=lambda r: r["lead_count"], reverse=True)
+
+    # 6. Overall summary
+    total_n = len(rows)
+    all_stl = [r["stl_seconds"] for r in rows if r["stl_seconds"] is not None]
+    never_n = sum(1 for r in rows if r["stl_seconds"] is None)
+    within_5min_n = sum(1 for s in all_stl if s <= 300)
+    within_1hr_n = sum(1 for s in all_stl if s <= 3600)
+    overall_med = int(median(all_stl)) if all_stl else None
+
+    summary = {
+        "lead_count":         total_n,
+        "median_stl_display": _fmt_stl(overall_med) if overall_med is not None else "—",
+        "pct_within_5min":    _pct(within_5min_n, total_n),
+        "pct_within_1hr":     _pct(within_1hr_n, total_n),
+        "pct_never_dialed":   _pct(never_n, total_n),
+    }
+
+    return {
+        "rows":     rows,
+        "rep_rows": rep_rows,
+        "summary":  summary,
+        "period":   period,
+        "start":    start.isoformat(),
+        "end":      end.isoformat(),
+    }
