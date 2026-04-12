@@ -15,13 +15,15 @@
 {# ── Period filter ── #}
 {{ period_filter(period, periods, {}) }}
 
-{# ── Business-hours note ── #}
-<div class="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 mb-6 flex items-start gap-2.5">
+{# ── Info notes ── #}
+<div class="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 mb-3 flex items-start gap-2.5">
   <svg class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z"/>
   </svg>
   <p class="text-xs text-blue-700">
-    <strong>Business-hours adjusted.</strong> Speed to lead is measured from the later of: the actual booking time <em>or</em> the next business-hours open (Mon–Fri, 9 am–5 pm CT). Leads booked evenings, weekends, or holidays show a <span class="font-semibold">moon</span> icon — their clock starts at next-day open.
+    <strong>Business-hours adjusted.</strong> Speed to lead is measured from the later of: the actual booking time <em>or</em> the next business-hours open (Mon–Fri, 9 am–5 pm CT). Leads booked evenings or weekends show a 🌙 icon — their clock starts at next-day open.
+    <span class="mx-1 text-blue-300">·</span>
+    <strong>Disqualified leads</strong> are shown in the table below but excluded from all summary metrics and rep averages.
   </p>
 </div>
 
@@ -95,7 +97,7 @@
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for row in data.rows %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100"
+        <tr class="hover:bg-blue-50/60 transition-colors duration-100 {{ 'opacity-50' if row.disqualified else '' }}"
             data-stl="{{ row.stl_seconds if row.stl_seconds is not none else 999999999 }}">
           <td class="px-4 py-3 font-medium">
             {% if row.contact_url %}
@@ -113,7 +115,7 @@
           </td>
           <td class="px-4 py-3 tabular-nums text-gray-600">{{ row.first_dial_dt or "—" }}</td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if row.stl_seconds is none %}text-gray-400
+            {% if row.disqualified or row.stl_seconds is none %}text-gray-400
             {% elif row.stl_seconds <= 300 %}text-green-600
             {% elif row.stl_seconds <= 3600 %}text-yellow-600
             {% else %}text-red-500{% endif %}">
@@ -121,14 +123,22 @@
           </td>
           <td class="px-4 py-3 text-gray-700">{{ row.rep_name or "—" }}</td>
           <td class="px-4 py-3">
-            {% set status = row.meeting_status %}
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-              {% if status == 'completed' %}bg-green-100 text-green-700
-              {% elif status == 'upcoming' %}bg-blue-100 text-blue-700
-              {% elif status in ['cancelled', 'no_show'] %}bg-red-100 text-red-600
-              {% else %}bg-gray-100 text-gray-500{% endif %}">
-              {{ status | replace('_', ' ') | title if status else '—' }}
-            </span>
+            <div class="flex flex-wrap gap-1">
+              {% set status = row.meeting_status %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                {% if status == 'completed' %}bg-green-100 text-green-700
+                {% elif status == 'upcoming' %}bg-blue-100 text-blue-700
+                {% elif status in ['cancelled', 'no_show'] %}bg-red-100 text-red-600
+                {% else %}bg-gray-100 text-gray-500{% endif %}">
+                {{ status | replace('_', ' ') | title if status else '—' }}
+              </span>
+              {% if row.disqualified %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"
+                    title="Excluded from metrics">
+                Disqualified
+              </span>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}

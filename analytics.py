@@ -3469,13 +3469,12 @@ def compute_speed_to_lead(period: str) -> dict:
     # 1. Fetch contacts booked in this period
     raw_contacts = get_rh_contacts(start, end)
 
-    # 2. Filter out not_booked and disqualified
+    # 2. Filter out not_booked; keep disqualified but flag them so they're
+    #    visible in the table without skewing the metrics.
     contacts = []
     for c in raw_contacts:
         props = c.get("properties", {})
         if props.get("rh_meeting_status") == "not_booked":
-            continue
-        if (props.get("rh_disqualified") or "").lower() == "true":
             continue
         contacts.append(c)
 
@@ -3559,6 +3558,8 @@ def compute_speed_to_lead(period: str) -> dict:
         owner = owners.get(owner_id)
         rep_name = (owner.get("last_name") or owner.get("name") or owner_id) if owner else owner_id
 
+        disqualified = (props.get("rh_disqualified") or "").lower() == "true"
+
         rows.append({
             "contact_id":     cid,
             "contact_name":   contact_name,
@@ -3572,12 +3573,16 @@ def compute_speed_to_lead(period: str) -> dict:
             "owner_id":       owner_id,
             "rep_name":       rep_name,
             "meeting_status": props.get("rh_meeting_status") or "",
+            "disqualified":   disqualified,
         })
 
     # Sort lead rows newest booking first
     rows.sort(key=lambda r: r["booking_ts"], reverse=True)
 
-    # 5. Aggregate by rep
+    # 5. Aggregate by rep — disqualified leads are shown in the table but
+    #    excluded from all metrics so they don't skew response-time numbers.
+    qualified_rows = [r for r in rows if not r["disqualified"]]
+
     rep_data = defaultdict(lambda: {
         "lead_count": 0,
         "stl_values": [],
@@ -3585,7 +3590,7 @@ def compute_speed_to_lead(period: str) -> dict:
         "within_1hr": 0,
         "never_dialed": 0,
     })
-    for r in rows:
+    for r in qualified_rows:
         oid = r["owner_id"]
         rep_data[oid]["rep_name"] = r["rep_name"]
         rep_data[oid]["lead_count"] += 1
@@ -3615,10 +3620,10 @@ def compute_speed_to_lead(period: str) -> dict:
         })
     rep_rows.sort(key=lambda r: r["lead_count"], reverse=True)
 
-    # 6. Overall summary
-    total_n = len(rows)
-    all_stl = [r["stl_seconds"] for r in rows if r["stl_seconds"] is not None]
-    never_n = sum(1 for r in rows if r["stl_seconds"] is None)
+    # 6. Overall summary — also excludes disqualified
+    total_n = len(qualified_rows)
+    all_stl = [r["stl_seconds"] for r in qualified_rows if r["stl_seconds"] is not None]
+    never_n = sum(1 for r in qualified_rows if r["stl_seconds"] is None)
     within_5min_n = sum(1 for s in all_stl if s <= 300)
     within_1hr_n = sum(1 for s in all_stl if s <= 3600)
     overall_med = int(median(all_stl)) if all_stl else None
