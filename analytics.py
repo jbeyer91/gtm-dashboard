@@ -3418,6 +3418,42 @@ def _fmt_stl(seconds: int) -> str:
     return f"{h}h {m}m"
 
 
+def _next_business_open(dt_utc: datetime) -> datetime:
+    """Return the UTC datetime when business hours next open after dt_utc.
+
+    Business hours: Mon–Fri, 9 am–5 pm America/Chicago.
+    If dt_utc already falls within those hours, returns dt_utc unchanged.
+    Otherwise returns the opening moment of the next qualifying window so
+    that after-hours / weekend leads are not penalised in speed-to-lead.
+    """
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/Chicago")
+    dt_local = dt_utc.astimezone(tz)
+    weekday = dt_local.weekday()  # 0=Mon … 6=Sun
+    hour = dt_local.hour
+
+    in_hours = (0 <= weekday <= 4) and (9 <= hour < 17)
+    if in_hours:
+        return dt_utc
+
+    # Determine how many calendar days to advance to the next opening
+    if 0 <= weekday <= 4 and hour < 9:
+        days_ahead = 0          # same weekday, before 9 am
+    elif weekday == 4:          # Friday at/after 5 pm → Monday
+        days_ahead = 3
+    elif weekday == 5:          # Saturday → Monday
+        days_ahead = 2
+    elif weekday == 6:          # Sunday → Monday
+        days_ahead = 1
+    else:                       # Mon–Thu at/after 5 pm → tomorrow
+        days_ahead = 1
+
+    next_open_local = (dt_local + timedelta(days=days_ahead)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
+    return next_open_local.astimezone(timezone.utc)
+
+
 def compute_speed_to_lead(period: str) -> dict:
     """Compute speed-to-lead metrics for all RevenueHero inbound leads in the period.
 
@@ -3471,7 +3507,13 @@ def compute_speed_to_lead(period: str) -> dict:
             continue  # skip contacts with unparseable booking time
         booking_ms = int(booking_dt.timestamp() * 1000)
 
-        # Find first qualifying outbound call after booking
+        # Business-hours adjustment: if booking landed outside Mon–Fri 9am–5pm CT,
+        # the rep's "clock" starts at the next business open — not at the booking time.
+        effective_booking_dt = _next_business_open(booking_dt)
+        off_hours = effective_booking_dt > booking_dt
+
+        # Find first qualifying outbound call after booking (use actual booking time
+        # so a proactive weekend call still counts, just earns a very short STL)
         first_call = None
         first_call_ms = None
         for call in contact_calls.get(cid, []):
@@ -3494,12 +3536,13 @@ def compute_speed_to_lead(period: str) -> dict:
                 first_call = call
                 first_call_ms = call_ms
 
-        # Compute STL
+        # Compute STL relative to effective_booking_dt so off-hours leads
+        # don't inflate the metric. A call before the effective open counts as 0s.
         if first_call:
             raw_call_ts = first_call["properties"].get("hs_timestamp") or ""
             try:
                 first_dial_dt = _parse_hs_datetime(str(raw_call_ts).strip())
-                stl_seconds = max(0, int((first_dial_dt - booking_dt).total_seconds()))
+                stl_seconds = max(0, int((first_dial_dt - effective_booking_dt).total_seconds()))
                 stl_display = _fmt_stl(stl_seconds)
                 first_dial_str = first_dial_dt.strftime("%Y-%m-%d %H:%M UTC")
             except ValueError:
@@ -3522,6 +3565,7 @@ def compute_speed_to_lead(period: str) -> dict:
             "contact_url":    contact_url,
             "booking_dt":     booking_dt.strftime("%Y-%m-%d %H:%M UTC"),
             "booking_ts":     booking_dt.timestamp(),   # for sorting
+            "off_hours":      off_hours,                # booked outside business hours
             "first_dial_dt":  first_dial_str,
             "stl_seconds":    stl_seconds,
             "stl_display":    stl_display,

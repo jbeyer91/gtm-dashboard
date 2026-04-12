@@ -15,13 +15,23 @@
 {# ── Period filter ── #}
 {{ period_filter(period, periods, {}) }}
 
+{# ── Business-hours note ── #}
+<div class="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 mb-6 flex items-start gap-2.5">
+  <svg class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z"/>
+  </svg>
+  <p class="text-xs text-blue-700">
+    <strong>Business-hours adjusted.</strong> Speed to lead is measured from the later of: the actual booking time <em>or</em> the next business-hours open (Mon–Fri, 9 am–5 pm CT). Leads booked evenings, weekends, or holidays show a <span class="font-semibold">moon</span> icon — their clock starts at next-day open.
+  </p>
+</div>
+
 {% set s = data.summary %}
 
 {# ── Summary cards ── #}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   {{ stat_card("Inbound Leads", s.lead_count, tip="Contacts with rh_meeting_created_at in the selected period, excluding not_booked and disqualified.") }}
-  {{ stat_card("Median Speed to Lead", s.median_stl_display, tip="Median time from demo booking to first outbound call, across all leads that were dialed.") }}
-  {{ stat_card("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min), tip="% of all inbound leads reached with an outbound call within 5 minutes of booking.") }}
+  {{ stat_card("Median Speed to Lead", s.median_stl_display, tip="Median time from effective lead-open to first outbound call, across all leads that were dialed. Adjusted for business hours.") }}
+  {{ stat_card("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min), tip="% of all inbound leads reached with an outbound call within 5 business-hours minutes of the lead opening.") }}
   {{ stat_card("Never Dialed", fmt_pct(s.pct_never_dialed), tip="% of all inbound leads with no outbound call logged after the booking timestamp.", invert=true) }}
 </div>
 
@@ -35,9 +45,9 @@
         <tr>
           <th class="px-4 py-3 text-left font-semibold">Rep</th>
           <th class="px-4 py-3 text-right font-semibold">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" title="Median time from booking to first outbound call">Median STL</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 5 minutes of booking">≤ 5 min</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 1 hour of booking">≤ 1 hr</th>
+          <th class="px-4 py-3 text-right font-semibold" title="Median time from business-hours open to first outbound call">Median STL</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 5 minutes of lead opening">≤ 5 min</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 1 hour of lead opening">≤ 1 hr</th>
           <th class="px-4 py-3 text-right font-semibold" title="% of leads with no outbound call after booking">Never Dialed</th>
         </tr>
       </thead>
@@ -78,7 +88,7 @@
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(0)">Contact <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(1)">Booking Time <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(2)">First Dial <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" title="Time from booking to first outbound call">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
+          <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" title="Time from business-hours open to first outbound call (adjusted for after-hours bookings)">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(4)">Rep <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(5)">Status <span class="sort-icon text-gray-300">↕</span></th>
         </tr>
@@ -95,7 +105,12 @@
               {{ row.contact_name }}
             {% endif %}
           </td>
-          <td class="px-4 py-3 tabular-nums text-gray-600">{{ row.booking_dt }}</td>
+          <td class="px-4 py-3 tabular-nums text-gray-600">
+            {{ row.booking_dt }}
+            {% if row.off_hours %}
+              <span title="Booked outside business hours — STL clock started at next 9 am CT" class="ml-1 text-gray-400 text-xs">🌙</span>
+            {% endif %}
+          </td>
           <td class="px-4 py-3 tabular-nums text-gray-600">{{ row.first_dial_dt or "—" }}</td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
             {% if row.stl_seconds is none %}text-gray-400
@@ -138,7 +153,6 @@
     const rows = Array.from(tbody.querySelectorAll('tr'));
     const icons = table.querySelectorAll('.sort-icon');
 
-    // Toggle direction if same column
     if (sortCol === col) {
       sortAsc = !sortAsc;
     } else {
@@ -146,7 +160,6 @@
       sortAsc = true;
     }
 
-    // Reset all icons
     icons.forEach(function (icon) { icon.textContent = '↕'; icon.style.color = '#d1d5db'; });
     icons[col].textContent = sortAsc ? '↑' : '↓';
     icons[col].style.color = '#6b7280';
