@@ -27,7 +27,8 @@
   {% for val, label in teams %}
   <a href="?team={{ val }}{% for k,v in extra_params.items() %}&{{ k }}={{ v }}{% endfor %}"
      class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-150
-            {% if team == val %}bg-green-600 text-white shadow-sm{% else %}bg-white text-gray-600 border border-gray-200 hover:border-green-400 hover:text-green-700{% endif %}">
+            {% if team == val %}text-white shadow-sm{% else %}bg-white text-slate-600 border border-gray-200 hover:border-violet-300 hover:text-violet-700{% endif %}"
+     {% if team == val %}style="background: var(--accent);"{% endif %}>
     {{ label }}
   </a>
   {% endfor %}
@@ -48,30 +49,32 @@
 {% endmacro %}
 
 {% macro stat_card(label, value, sub='', tip='', delta=none, invert=false, delta_fmt='num') %}
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5 hover:shadow-md transition-shadow duration-200">
-  <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2"{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
-  <p class="text-3xl font-bold text-gray-900 leading-none tabular-nums">{{ value }}</p>
-  {% if sub %}<p class="text-xs text-gray-400 mt-2 font-medium">{{ sub }}</p>{% endif %}
+<div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden"
+     style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+  <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+  <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight"{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ value }}</p>
+  <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">{{ label }}</p>
+  {% if sub %}<p class="text-xs text-slate-400 mt-1">{{ sub }}</p>{% endif %}
   {% if delta is not none %}
     {% set absv = delta|abs %}
     {% set pos  = delta > 0 %}
     {% set good = (pos and not invert) or (not pos and invert) %}
-    {% set color  = 'text-green-500' if good else 'text-red-400' %}
+    {% set color  = 'm-good' if good else 'm-bad' %}
     {% set arrow  = '↑' if pos else '↓' %}
     {% if delta == 0 %}
-      <p class="text-xs text-gray-400 mt-1">— vs prior</p>
+      <p class="text-xs text-slate-400 mt-2">— vs prior</p>
     {% elif delta_fmt == 'money' %}
       {% if absv >= 1000000 %}
-        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ (absv / 1000000)|round(1) }}M</p>
+        <p class="text-xs mt-2 font-medium {{ color }}">{{ arrow }} ${{ (absv / 1000000)|round(1) }}M</p>
       {% elif absv >= 1000 %}
-        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ (absv // 1000)|int }}k</p>
+        <p class="text-xs mt-2 font-medium {{ color }}">{{ arrow }} ${{ (absv // 1000)|int }}k</p>
       {% else %}
-        <p class="text-xs mt-1 {{ color }}">{{ arrow }} ${{ absv|int }}</p>
+        <p class="text-xs mt-2 font-medium {{ color }}">{{ arrow }} ${{ absv|int }}</p>
       {% endif %}
     {% elif delta_fmt == 'pct' %}
-      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|round(1) }}%</p>
+      <p class="text-xs mt-2 font-medium {{ color }}">{{ arrow }} {{ absv|round(1) }}%</p>
     {% else %}
-      <p class="text-xs mt-1 {{ color }}">{{ arrow }} {{ absv|int }}</p>
+      <p class="text-xs mt-2 font-medium {{ color }}">{{ arrow }} {{ absv|int }}</p>
     {% endif %}
   {% endif %}
 </div>
