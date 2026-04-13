@@ -101,7 +101,7 @@
                 <tbody class="divide-y divide-slate-200 bg-white">
                   {% for b in row.outcome_buckets %}
                   <tr>
-                    <td class="px-3 py-1.5 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
+                    <td class="px-3 py-1.5 font-medium">{{ b.label }}</td>
                     <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
                     <td class="px-3 py-1.5 text-right tabular-nums font-semibold
                       {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
@@ -222,7 +222,7 @@
       <tbody class="divide-y divide-gray-100">
         {% for b in data.outcome_buckets %}
         <tr class="hover:bg-blue-50/60 transition-colors duration-100">
-          <td class="px-4 py-3 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
+          <td class="px-4 py-3 font-medium">{{ b.label }}</td>
           <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
             {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
