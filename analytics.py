@@ -3687,21 +3687,28 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
         ("> 24 hrs",     lambda s: s is not None and s > 86400),
         ("Never dialed", lambda s: s is None),
     ]
+    _RESOLVED = {"completed", "no_show", "cancelled"}
     outcome_buckets = []
     for label, matches in _BUCKETS:
+        # All qualified leads in this STL bucket (for deal/S2 counts)
         bucket_rows = [r for r in qualified_rows if matches(r["stl_seconds"])]
         n = len(bucket_rows)
         if n == 0:
             continue
-        completed_n = sum(1 for r in bucket_rows if r["meeting_status"] == "completed")
-        no_show_n   = sum(1 for r in bucket_rows if r["meeting_status"] == "no_show")
+        # Show/no-show rates use only resolved meetings so that "upcoming"
+        # meetings (meeting hasn't happened yet) don't dilute the percentages.
+        resolved_rows = [r for r in bucket_rows if r["meeting_status"] in _RESOLVED]
+        r_n = len(resolved_rows)
+        completed_n = sum(1 for r in resolved_rows if r["meeting_status"] == "completed")
+        no_show_n   = sum(1 for r in resolved_rows if r["meeting_status"] == "no_show")
         deal_n      = sum(1 for r in bucket_rows if r["has_deal"])
         s2_n        = sum(1 for r in bucket_rows if r["deal_reached_s2"])
         outcome_buckets.append({
             "label":         label,
             "lead_count":    n,
-            "pct_completed": _pct(completed_n, n),
-            "pct_no_show":   _pct(no_show_n, n),
+            "resolved_count": r_n,
+            "pct_completed": _pct(completed_n, r_n),
+            "pct_no_show":   _pct(no_show_n, r_n),
             "pct_deal":      _pct(deal_n, n),
             "pct_s2":        _pct(s2_n, n),
         })

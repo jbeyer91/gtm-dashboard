@@ -172,9 +172,9 @@
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
         <tr>
           <th class="px-4 py-3 text-left font-semibold">Called Within</th>
-          <th class="px-4 py-3 text-right font-semibold">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of leads where the meeting was marked Completed">Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of leads where the meeting was marked No-Show">No-Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" title="Total leads in this STL bucket">Leads</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked Completed (excludes upcoming meetings)">Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked No-Show (excludes upcoming meetings)">No-Show Rate</th>
           <th class="px-4 py-3 text-right font-semibold" title="% of leads where any NB deal was created in HubSpot">Deal Created</th>
           <th class="px-4 py-3 text-right font-semibold" title="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
         </tr>
@@ -183,7 +183,14 @@
         {% for b in data.outcome_buckets %}
         <tr class="hover:bg-blue-50/60 transition-colors duration-100 {{ 'bg-gray-50/50' if loop.last else '' }}">
           <td class="px-4 py-3 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">
+            {{ b.lead_count }}
+            {% if b.resolved_count < b.lead_count %}
+              <span class="text-gray-400 text-xs" title="{{ b.lead_count - b.resolved_count }} meeting(s) still upcoming — excluded from show/no-show rates">
+                ({{ b.resolved_count }} resolved)
+              </span>
+            {% endif %}
+          </td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
             {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
             {{ fmt_pct(b.pct_completed) }}
