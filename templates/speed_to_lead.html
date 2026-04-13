@@ -7,9 +7,10 @@
 {% for val, lbl in periods %}{% if val == period %}{% set ns_pl.label = lbl %}{% endif %}{% endfor %}
 
 {# ── Header ── #}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
-  <h1 class="text-2xl font-bold text-white tracking-tight">Speed to Lead</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">RevenueHero Inbound Leads · {{ ns_pl.label }}</p>
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+  <p class="text-[11px] font-semibold uppercase tracking-[0.14em] mb-2" style="color: rgba(255,255,255,0.45);">RevenueHero · Inbound</p>
+  <h1 class="text-[26px] font-bold text-white leading-tight tracking-tight">Speed to Lead</h1>
+  <p class="text-sm mt-1.5 font-medium" style="color: rgba(255,255,255,0.6);">{{ ns_pl.label }}</p>
 </div>
 
 {# ── Filters ── #}
@@ -36,28 +37,32 @@
 {# ── By Rep table (expandable) ── #}
 {% if data.rep_rows %}
 <div class="mb-8">
-  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">By Rep
-    <span class="normal-case font-normal text-gray-400 ml-1">· click a row to see leads</span>
-  </h2>
+  <div class="flex items-center gap-2.5 mb-4">
+    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
+    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">By Rep</h2>
+    <span class="text-[11px] text-slate-400 font-normal">· click a row to expand</span>
+  </div>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
     <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
-          <th class="px-4 py-3 text-left font-semibold">Rep</th>
-          <th class="px-4 py-3 text-right font-semibold">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" title="Median time from business-hours open to first outbound call">Median STL</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 5 minutes of lead opening">≤ 5 min</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% dialed within 1 hour of lead opening">≤ 1 hr</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of leads with no outbound call after booking">Never Dialed</th>
+          <th class="px-4 py-3 text-left font-medium">Rep</th>
+          <th class="px-4 py-3 text-right font-medium">Leads</th>
+          <th class="px-4 py-3 text-right font-medium" title="Median time from business-hours open to first outbound call">Median STL</th>
+          <th class="px-4 py-3 text-right font-medium" title="% dialed within 5 minutes of lead opening">≤ 5 min</th>
+          <th class="px-4 py-3 text-right font-medium" title="% dialed within 1 hour of lead opening">≤ 1 hr</th>
+          <th class="px-4 py-3 text-right font-medium" title="% of leads with no outbound call after booking">Never Dialed</th>
         </tr>
       </thead>
       <tbody>
         {% for row in data.rep_rows %}
         {# ── Rep summary row ── #}
-        <tr class="border-t border-gray-100 hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer select-none"
+        <tr class="border-t border-gray-100 hover:bg-slate-50 transition-colors duration-100 cursor-pointer select-none"
             onclick="toggleRepDetail('rep-{{ row.owner_id }}', this)">
           <td class="px-4 py-3 font-medium flex items-center gap-2">
-            <span class="rep-arrow text-gray-400 text-xs">▶</span>
+            <svg class="rep-arrow w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
             {{ row.rep_name or "—" }}
           </td>
           <td class="px-4 py-3 text-right tabular-nums">{{ row.lead_count }}</td>
@@ -87,15 +92,15 @@
             {% if row.outcome_buckets %}
             <div class="px-10 pt-3 pb-2">
               <table class="w-full text-xs rounded-lg overflow-hidden border border-slate-200">
-                <thead class="bg-slate-100 text-gray-400 uppercase tracking-wider">
+                <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase" style="background: #f1f5f9;">
                   <tr>
-                    <th class="px-3 py-1.5 text-left font-semibold">Group</th>
-                    <th class="px-3 py-1.5 text-right font-semibold">Leads</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that showed up">Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that were no-shows">No-Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of leads with any NB deal created">Deal Created</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of leads with a deal at Stage 2+">Reached S2+</th>
+                    <th class="px-3 py-1.5 text-left font-medium">Group</th>
+                    <th class="px-3 py-1.5 text-right font-medium">Leads</th>
+                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that showed up">Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were no-shows">No-Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
+                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with any NB deal created">Deal Created</th>
+                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with a deal at Stage 2+">Reached S2+</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
@@ -131,19 +136,19 @@
 
             {# Lead list #}
             <table class="w-full text-xs">
-              <thead class="text-gray-400 uppercase tracking-wider border-b border-slate-200">
+              <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase">
                 <tr>
-                  <th class="pl-10 pr-3 py-2 text-left font-semibold">Contact</th>
-                  <th class="px-3 py-2 text-left font-semibold">Booking</th>
-                  <th class="px-3 py-2 text-left font-semibold">First Dial</th>
-                  <th class="px-3 py-2 text-right font-semibold">STL</th>
-                  <th class="px-3 py-2 text-left font-semibold">Status</th>
-                  <th class="px-3 py-2 text-left font-semibold">Deal</th>
+                  <th class="pl-10 pr-3 py-2 text-left font-medium">Contact</th>
+                  <th class="px-3 py-2 text-left font-medium">Booking</th>
+                  <th class="px-3 py-2 text-left font-medium">First Dial</th>
+                  <th class="px-3 py-2 text-right font-medium">STL</th>
+                  <th class="px-3 py-2 text-left font-medium">Status</th>
+                  <th class="px-3 py-2 text-left font-medium">Deal</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 {% for lead in data.rows if lead.owner_id == row.owner_id %}
-                <tr class="hover:bg-blue-50/40 {{ 'opacity-50' if lead.disqualified else '' }}">
+                <tr class="hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
                   <td class="pl-10 pr-3 py-2 font-medium">
                     {% if lead.contact_url %}
                       <a href="{{ lead.contact_url }}" target="_blank" rel="noopener"
@@ -165,26 +170,26 @@
                   </td>
                   <td class="px-3 py-2">
                     {% set status = lead.meeting_status %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium
-                      {% if status == 'completed' %}bg-green-100 text-green-700
-                      {% elif status == 'upcoming' %}bg-blue-100 text-blue-700
-                      {% elif status in ['cancelled', 'no_show'] %}bg-red-100 text-red-600
-                      {% else %}bg-gray-100 text-gray-500{% endif %}">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
+                      {% if status == 'completed' %}bg-emerald-50 text-emerald-700
+                      {% elif status == 'upcoming' %}bg-indigo-50 text-indigo-700
+                      {% elif status in ['cancelled', 'no_show'] %}bg-red-50 text-red-700
+                      {% else %}bg-slate-100 text-slate-500{% endif %}">
                       {{ status | replace('_', ' ') | title if status else '—' }}
                     </span>
                     {% if lead.disqualified %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 ml-1">DQ</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 ml-1">DQ</span>
                     {% endif %}
                   </td>
                   <td class="px-3 py-2">
                     {% if lead.deal_label %}
-                      <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium
-                        {% if lead.deal_label == 'Won' %}bg-green-100 text-green-700
-                        {% elif lead.deal_reached_s2 %}bg-purple-100 text-purple-700
-                        {% else %}bg-blue-100 text-blue-600{% endif %}">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
+                        {% if lead.deal_label == 'Won' %}bg-emerald-50 text-emerald-700
+                        {% elif lead.deal_reached_s2 %}bg-violet-50 text-violet-700
+                        {% else %}bg-indigo-50 text-indigo-600{% endif %}">
                         {{ lead.deal_label }}
                       </span>
-                    {% else %}<span class="text-gray-300">—</span>{% endif %}
+                    {% else %}<span class="text-slate-300">—</span>{% endif %}
                   </td>
                 </tr>
                 {% endfor %}
@@ -202,26 +207,27 @@
 {# ── Outcome by dial status ── #}
 {% if data.outcome_buckets %}
 <div class="mb-8">
-  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">Outcome by Dial Status
-    <span class="normal-case font-normal text-gray-400 ml-1 text-xs cursor-help"
-          data-tip="Qualified leads only (disqualified contacts excluded). Show/No-Show/Cancelled rates use only meetings with a known outcome — upcoming meetings are excluded from those three columns. Show + No-Show + Cancelled = 100%.">· ⓘ</span>
-  </h2>
+  <div class="flex items-center gap-2.5 mb-4">
+    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
+    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Outcome by Dial Status</h2>
+    <span class="text-[11px] text-slate-400 cursor-help" data-tip="Qualified leads only (disqualified contacts excluded). Show/No-Show/Cancelled rates use only meetings with a known outcome — upcoming meetings are excluded from those three columns. Show + No-Show + Cancelled = 100%.">ⓘ</span>
+  </div>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
     <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
-          <th class="px-4 py-3 text-left font-semibold">Group</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="Qualified leads (disqualified excluded) in this group">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome (show + no-show + cancelled), % that showed up">Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome, % that were no-shows">No-Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome, % that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
-          <th class="px-4 py-3 text-right font-semibold" data-tip="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
+          <th class="px-4 py-3 text-left font-medium">Group</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="Qualified leads (disqualified excluded) in this group">Leads</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome (show + no-show + cancelled), % that showed up">Show Rate</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were no-shows">No-Show Rate</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
+          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for b in data.outcome_buckets %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+        <tr class="hover:bg-slate-50 transition-colors duration-100">
           <td class="px-4 py-3 font-medium">{{ b.label }}</td>
           <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
@@ -253,24 +259,27 @@
 
 {# ── Lead-level table ── #}
 <div>
-  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">All Leads</h2>
+  <div class="flex items-center gap-2.5 mb-4">
+    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
+    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">All Leads</h2>
+  </div>
   {% if data.rows %}
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
     <table class="w-full text-sm" id="stl-table">
-      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(0)">Contact <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(1)">Booking Time <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(2)">First Dial <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" data-tip="Time from business-hours open to first outbound call. Bookings made outside Mon–Fri 9 am–5 pm CT have their clock start at the next business open (🌙).">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(4)">Rep <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(5)">Status <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(6)">Deal <span class="sort-icon text-gray-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(0)">Contact <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(1)">Booking Time <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(2)">First Dial <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-right font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(3)" data-tip="Time from business-hours open to first outbound call. Bookings made outside Mon–Fri 9 am–5 pm CT have their clock start at the next business open (🌙).">Speed to Lead <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(4)">Rep <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(5)">Status <span class="sort-icon text-slate-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-slate-600" onclick="sortTable(6)">Deal <span class="sort-icon text-slate-300">↕</span></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for row in data.rows %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100 {{ 'opacity-50' if row.disqualified else '' }}"
+        <tr class="hover:bg-slate-50 transition-colors duration-100 {{ 'opacity-50' if row.disqualified else '' }}"
             data-stl="{{ row.stl_seconds if row.stl_seconds is not none else 999999999 }}">
           <td class="px-4 py-3 font-medium">
             {% if row.contact_url %}
@@ -304,15 +313,15 @@
           <td class="px-4 py-3">
             <div class="flex flex-wrap gap-1">
               {% set status = row.meeting_status %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                {% if status == 'completed' %}bg-green-100 text-green-700
-                {% elif status == 'upcoming' %}bg-blue-100 text-blue-700
-                {% elif status in ['cancelled', 'no_show'] %}bg-red-100 text-red-600
-                {% else %}bg-gray-100 text-gray-500{% endif %}">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
+                {% if status == 'completed' %}bg-emerald-50 text-emerald-700
+                {% elif status == 'upcoming' %}bg-indigo-50 text-indigo-700
+                {% elif status in ['cancelled', 'no_show'] %}bg-red-50 text-red-700
+                {% else %}bg-slate-100 text-slate-500{% endif %}">
                 {{ status | replace('_', ' ') | title if status else '—' }}
               </span>
               {% if row.disqualified %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700"
                     title="Excluded from metrics">
                 Disqualified
               </span>
@@ -321,14 +330,14 @@
           </td>
           <td class="px-4 py-3">
             {% if row.deal_label %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                {% if row.deal_label == 'Won' %}bg-green-100 text-green-700
-                {% elif row.deal_reached_s2 %}bg-purple-100 text-purple-700
-                {% else %}bg-blue-100 text-blue-600{% endif %}">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
+                {% if row.deal_label == 'Won' %}bg-emerald-50 text-emerald-700
+                {% elif row.deal_reached_s2 %}bg-violet-50 text-violet-700
+                {% else %}bg-indigo-50 text-indigo-600{% endif %}">
                 {{ row.deal_label }}
               </span>
             {% else %}
-              <span class="text-gray-300 text-xs">—</span>
+              <span class="text-slate-300 text-xs">—</span>
             {% endif %}
           </td>
         </tr>
@@ -350,7 +359,7 @@ window.toggleRepDetail = function (rowId, triggerRow) {
   const arrow = triggerRow.querySelector('.rep-arrow');
   const isHidden = detailRow.classList.contains('hidden');
   detailRow.classList.toggle('hidden', !isHidden);
-  if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+  if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
 };
 
 (function () {

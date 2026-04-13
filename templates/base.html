@@ -5,10 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GTM Operating Model{% block title %}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 27'><path fill='%23A78BFA' d='M12 1L2 5.5V13c0 5.8 4.3 11.2 10 12.5C17.7 24.2 22 18.8 22 13V5.5L12 1z'/><circle cx='12' cy='13' r='4' fill='%231B3569'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } }
+    }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+    /* ── Design tokens ─────────────────────────────────────────────────────────── */
+    :root {
+      --accent:        #6366f1;
+      --accent-light:  #eef2ff;
+      --good:          #059669;
+      --warn:          #d97706;
+      --bad:           #dc2626;
+      --surface-sub:   #f8fafc;
+      --border-muted:  #f1f5f9;
+    }
+    .m-good { color: var(--good); }
+    .m-warn { color: var(--warn); }
+    .m-bad  { color: var(--bad); }
 
     /* ── Icon rail ─────────────────────────────────────────────────────────────── */
     #sidebar {
@@ -146,7 +168,7 @@
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body class="bg-gray-50 text-gray-900 min-h-screen font-sans">
 
 <!-- Page-load overlay -->
 <div id="page-loader" style="display:none;background:rgba(248,250,252,0.88);backdrop-filter:blur(3px);"
