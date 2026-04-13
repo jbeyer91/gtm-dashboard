@@ -39,6 +39,8 @@
 {% set pct_5to1hr = [s.pct_within_1hr - s.pct_within_5min, 0]|max %}
 {% set pct_gt1hr  = [100 - s.pct_within_1hr - s.pct_never_dialed, 0]|max %}
 {% set pct_nd     = s.pct_never_dialed %}
+{% set ns_c = namespace(lt5=0, lt60=0, gt60=0, nd=0) %}
+{% for row in data.rows %}{% if not row.disqualified %}{% if row.stl_seconds is none %}{% set ns_c.nd = ns_c.nd + 1 %}{% elif row.stl_seconds <= 300 %}{% set ns_c.lt5 = ns_c.lt5 + 1 %}{% elif row.stl_seconds <= 3600 %}{% set ns_c.lt60 = ns_c.lt60 + 1 %}{% else %}{% set ns_c.gt60 = ns_c.gt60 + 1 %}{% endif %}{% endif %}{% endfor %}
 
 {# ── Charts ── #}
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -51,27 +53,27 @@
     </div>
     <p class="text-xs text-slate-400 mb-5 pl-3.5">Share of leads by how quickly they were called</p>
     <div class="flex h-3 rounded-full overflow-hidden" style="background: #f1f5f9;">
-      {% if pct_lt5 > 0 %}<div class="h-full" style="width:{{ pct_lt5|round(1) }}%;background:#059669;" title="≤ 5 min: {{ pct_lt5|round(1) }}%"></div>{% endif %}
-      {% if pct_5to1hr > 0 %}<div class="h-full" style="width:{{ pct_5to1hr|round(1) }}%;background:#6366f1;" title="5 min – 1 hr: {{ pct_5to1hr|round(1) }}%"></div>{% endif %}
-      {% if pct_gt1hr > 0 %}<div class="h-full" style="width:{{ pct_gt1hr|round(1) }}%;background:#d97706;" title="> 1 hr: {{ pct_gt1hr|round(1) }}%"></div>{% endif %}
-      {% if pct_nd > 0 %}<div class="h-full" style="width:{{ pct_nd|round(1) }}%;background:#dc2626;" title="Never Dialed: {{ pct_nd|round(1) }}%"></div>{% endif %}
+      {% if pct_lt5 > 0 %}<div class="h-full cursor-help" style="width:{{ pct_lt5|round(1) }}%;background:#059669;" data-tip="≤ 5 min · {{ ns_c.lt5 }} leads ({{ pct_lt5|round(1) }}%)"></div>{% endif %}
+      {% if pct_5to1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_5to1hr|round(1) }}%;background:#6366f1;" data-tip="5 min – 1 hr · {{ ns_c.lt60 }} leads ({{ pct_5to1hr|round(1) }}%)"></div>{% endif %}
+      {% if pct_gt1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_gt1hr|round(1) }}%;background:#d97706;" data-tip="> 1 hr · {{ ns_c.gt60 }} leads ({{ pct_gt1hr|round(1) }}%)"></div>{% endif %}
+      {% if pct_nd > 0 %}<div class="h-full cursor-help" style="width:{{ pct_nd|round(1) }}%;background:#dc2626;" data-tip="Never dialed · {{ ns_c.nd }} leads ({{ pct_nd|round(1) }}%)"></div>{% endif %}
     </div>
     <div class="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-5">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#059669;"></span><span class="text-xs text-slate-500">≤ 5 min</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ pct_lt5|round(1) }}%</span>
+        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt5 }} <span class="font-normal text-slate-400">· {{ pct_lt5|round(1) }}%</span></span>
       </div>
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#6366f1;"></span><span class="text-xs text-slate-500">5 min – 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ pct_5to1hr|round(1) }}%</span>
+        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt60 }} <span class="font-normal text-slate-400">· {{ pct_5to1hr|round(1) }}%</span></span>
       </div>
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#d97706;"></span><span class="text-xs text-slate-500">> 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ pct_gt1hr|round(1) }}%</span>
+        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.gt60 }} <span class="font-normal text-slate-400">· {{ pct_gt1hr|round(1) }}%</span></span>
       </div>
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#dc2626;"></span><span class="text-xs text-slate-500">Never dialed</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ pct_nd|round(1) }}%</span>
+        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.nd }} <span class="font-normal text-slate-400">· {{ pct_nd|round(1) }}%</span></span>
       </div>
     </div>
   </div>
@@ -330,14 +332,18 @@ window.toggleRepDetail = function (rowId, triggerRow) {
   const canvas = document.getElementById('repStlChart');
   if (!canvas) return;
 
-  const labels   = [{% for row in data.rep_rows %}"{{ row.rep_name or 'Unknown' }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  const seconds  = [{% for row in data.rep_rows %}{{ row.median_stl_seconds if row.median_stl_seconds is not none else 'null' }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const displays = [{% for row in data.rep_rows %}"{{ row.median_stl_display or '—' }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  const labels      = [{% for row in data.rep_rows %}"{{ row.rep_name or 'Unknown' }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  const hasDials    = [{% for row in data.rep_rows %}{{ 'true' if row.median_stl_seconds is not none else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const seconds     = [{% for row in data.rep_rows %}{{ row.median_stl_seconds if row.median_stl_seconds is not none else '0' }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const displays    = [{% for row in data.rep_rows %}"{{ row.median_stl_display or '—' }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  const leadCounts  = [{% for row in data.rep_rows %}{{ row.lead_count }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const pct5min     = [{% for row in data.rep_rows %}{{ row.pct_within_5min|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const pctNd       = [{% for row in data.rep_rows %}{{ row.pct_never_dialed|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
 
-  const colors = seconds.map(function (s) {
-    if (s === null) return '#cbd5e1';
-    if (s <= 900)  return '#059669';
-    if (s <= 3600) return '#d97706';
+  const colors = seconds.map(function (s, i) {
+    if (!hasDials[i]) return '#cbd5e1';
+    if (s <= 900)     return '#059669';
+    if (s <= 3600)    return '#d97706';
     return '#dc2626';
   });
 
@@ -350,6 +356,7 @@ window.toggleRepDetail = function (rowId, triggerRow) {
         backgroundColor: colors,
         borderRadius: 4,
         borderSkipped: false,
+        minBarLength: 5,
       }]
     },
     options: {
@@ -360,13 +367,24 @@ window.toggleRepDetail = function (rowId, triggerRow) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: function (ctx) { return '  ' + (displays[ctx.dataIndex] || '—'); }
+            title: function (items) { return labels[items[0].dataIndex]; },
+            label: function (ctx) {
+              var i = ctx.dataIndex;
+              if (!hasDials[i]) return ['  No dialed leads', '  ' + leadCounts[i] + ' total leads'];
+              return [
+                '  Median STL:  ' + displays[i],
+                '  Leads:  ' + leadCounts[i],
+                '  ≤ 5 min:  ' + pct5min[i] + '%',
+                '  Never dialed:  ' + pctNd[i] + '%',
+              ];
+            }
           },
           backgroundColor: '#1e293b',
           titleColor: '#94a3b8',
           bodyColor: '#f8fafc',
-          padding: 10,
+          padding: 12,
           cornerRadius: 6,
+          displayColors: false,
         }
       },
       scales: {
