@@ -874,6 +874,45 @@ def get_calls_for_contacts(contact_ids: list) -> dict:
     return result
 
 
+def get_deals_for_contacts(contact_ids: list) -> dict:
+    """Fetch NB pipeline deals associated with the given contact IDs.
+
+    Returns {contact_id: [deal_obj, ...]} — only deals in the NB pipeline
+    (31544320) are included so we don't pollute STL metrics with renewal
+    or expansion deals.
+    """
+    if not contact_ids:
+        return {}
+
+    contact_to_deal_ids = _batch_associations("contacts", "deals", contact_ids)
+    all_deal_ids = list({did for ids in contact_to_deal_ids.values() for did in ids})
+    if not all_deal_ids:
+        return {}
+
+    deal_map = {}
+    for i in range(0, len(all_deal_ids), 100):
+        batch = all_deal_ids[i:i + 100]
+        resp = _post_with_retry(
+            f"{BASE_URL}/crm/v3/objects/deals/batch/read",
+            {"inputs": [{"id": did} for did in batch], "properties": ["dealstage", "pipeline"]},
+            "deals batch/read for speed-to-lead",
+        )
+        if not resp.ok:
+            log.warning("deals batch/read error %s: %s", resp.status_code, resp.text[:300])
+            continue
+        for obj in resp.json().get("results", []):
+            # Only keep NB pipeline deals
+            if obj.get("properties", {}).get("pipeline") == "31544320":
+                deal_map[str(obj["id"])] = obj
+
+    result = {}
+    for contact_id, deal_ids in contact_to_deal_ids.items():
+        deals = [deal_map[did] for did in deal_ids if did in deal_map]
+        if deals:
+            result[contact_id] = deals
+    return result
+
+
 def _post_with_retry(url: str, json_payload: dict, label: str):
     """POST to HubSpot with up to 4 attempts, retrying on 429 rate-limit responses.
 

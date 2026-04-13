@@ -90,6 +90,51 @@
 </div>
 {% endif %}
 
+{# ── Outcome impact by response speed ── #}
+{% if data.outcome_buckets %}
+<div class="mb-8">
+  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">Outcome by Response Speed</h2>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+        <tr>
+          <th class="px-4 py-3 text-left font-semibold">Called Within</th>
+          <th class="px-4 py-3 text-right font-semibold">Leads</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of leads where the meeting was marked Completed">Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of leads where the meeting was marked No-Show">No-Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of leads where any NB deal was created in HubSpot">Deal Created</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for b in data.outcome_buckets %}
+        <tr class="hover:bg-blue-50/60 transition-colors duration-100 {{ 'bg-gray-50/50' if loop.last else '' }}">
+          <td class="px-4 py-3 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold
+            {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
+            {{ fmt_pct(b.pct_completed) }}
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums
+            {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
+            {{ fmt_pct(b.pct_no_show) }}
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold
+            {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
+            {{ fmt_pct(b.pct_deal) }}
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums font-semibold
+            {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
+            {{ fmt_pct(b.pct_s2) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ── Lead-level table ── #}
 <div>
   <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">All Leads</h2>
@@ -104,6 +149,7 @@
           <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" title="Time from business-hours open to first outbound call (adjusted for after-hours bookings)">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(4)">Rep <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(5)">Status <span class="sort-icon text-gray-300">↕</span></th>
+          <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(6)">Deal <span class="sort-icon text-gray-300">↕</span></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -156,6 +202,18 @@
               </span>
               {% endif %}
             </div>
+          </td>
+          <td class="px-4 py-3">
+            {% if row.deal_label %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                {% if row.deal_label == 'Won' %}bg-green-100 text-green-700
+                {% elif row.deal_reached_s2 %}bg-purple-100 text-purple-700
+                {% else %}bg-blue-100 text-blue-600{% endif %}">
+                {{ row.deal_label }}
+              </span>
+            {% else %}
+              <span class="text-gray-300 text-xs">—</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
