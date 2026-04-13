@@ -3616,8 +3616,12 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
 
     # Filter by team if requested — apply before all aggregations so summary
     # and outcome buckets reflect only the selected team's leads.
-    if team != "all":
-        team_map = get_owner_team_map()
+    # "all" still restricts to known-team reps (Veterans + Rising) so managers
+    # and unassigned owners are never included.
+    team_map = get_owner_team_map()
+    if team == "all":
+        rows = [r for r in rows if team_map.get(r["owner_id"]) in ("Veterans", "Rising")]
+    else:
         rows = [r for r in rows if team_map.get(r["owner_id"]) == team]
 
     # 5. Aggregate by rep — disqualified leads are shown in the table but
