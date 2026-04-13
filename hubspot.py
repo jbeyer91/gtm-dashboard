@@ -825,7 +825,8 @@ def get_rh_contacts(start: datetime, end: datetime) -> list:
         "properties": [
             "firstname", "lastname", "hubspot_owner_id",
             "rh_meeting_created_at", "rh_meeting_status",
-            "rh_meeting_type", "rh_router_name", "rh_disqualified",
+            "rh_meeting_type", "rh_router_name",
+            "lifecyclestage", "hs_lead_status",
         ],
     }
     return _search_all("contacts", payload)

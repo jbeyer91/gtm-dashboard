@@ -3558,7 +3558,10 @@ def compute_speed_to_lead(period: str) -> dict:
         owner = owners.get(owner_id)
         rep_name = (owner.get("last_name") or owner.get("name") or owner_id) if owner else owner_id
 
-        disqualified = (props.get("rh_disqualified") or "").lower() == "true"
+        disqualified = (
+            (props.get("lifecyclestage") or "").lower() == "disqualified"
+            or (props.get("hs_lead_status") or "").lower() == "disqualified"
+        )
 
         rows.append({
             "contact_id":     cid,
@@ -3610,13 +3613,14 @@ def compute_speed_to_lead(period: str) -> dict:
         stl_vals = d["stl_values"]
         med = int(median(stl_vals)) if stl_vals else None
         rep_rows.append({
-            "owner_id":           oid,
-            "rep_name":           d["rep_name"],
-            "lead_count":         n,
-            "median_stl_display": _fmt_stl(med) if med is not None else "—",
-            "pct_within_5min":    _pct(d["within_5min"], n),
-            "pct_within_1hr":     _pct(d["within_1hr"], n),
-            "pct_never_dialed":   _pct(d["never_dialed"], n),
+            "owner_id":            oid,
+            "rep_name":            d["rep_name"],
+            "lead_count":          n,
+            "median_stl_seconds":  med,  # None if no dials
+            "median_stl_display":  _fmt_stl(med) if med is not None else "—",
+            "pct_within_5min":     _pct(d["within_5min"], n),
+            "pct_within_1hr":      _pct(d["within_1hr"], n),
+            "pct_never_dialed":    _pct(d["never_dialed"], n),
         })
     rep_rows.sort(key=lambda r: r["lead_count"], reverse=True)
 
@@ -3629,11 +3633,12 @@ def compute_speed_to_lead(period: str) -> dict:
     overall_med = int(median(all_stl)) if all_stl else None
 
     summary = {
-        "lead_count":         total_n,
-        "median_stl_display": _fmt_stl(overall_med) if overall_med is not None else "—",
-        "pct_within_5min":    _pct(within_5min_n, total_n),
-        "pct_within_1hr":     _pct(within_1hr_n, total_n),
-        "pct_never_dialed":   _pct(never_n, total_n),
+        "lead_count":          total_n,
+        "median_stl_seconds":  overall_med,  # raw seconds for delta computation
+        "median_stl_display":  _fmt_stl(overall_med) if overall_med is not None else "—",
+        "pct_within_5min":     _pct(within_5min_n, total_n),
+        "pct_within_1hr":      _pct(within_1hr_n, total_n),
+        "pct_never_dialed":    _pct(never_n, total_n),
     }
 
     return {

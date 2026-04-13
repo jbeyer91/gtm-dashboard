@@ -1069,10 +1069,19 @@ def speed_to_lead():
     period = request.args.get("period", "last_30")
     try:
         data = analytics.compute_speed_to_lead(period)
+        prior_data, prior_label = _prior(period, analytics.compute_speed_to_lead)
+        s  = data["summary"]
+        ps = (prior_data or {}).get("summary")
+        deltas = {
+            "lead_count":      _d(s, ps, "lead_count"),
+            "pct_within_5min": _d(s, ps, "pct_within_5min"),
+            "pct_never_dialed": _d(s, ps, "pct_never_dialed"),
+        }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="speed_to_lead")
     return render_template("speed_to_lead.html", data=data, periods=PERIODS,
-                           period=period, nav=NAV, active="speed_to_lead")
+                           period=period, prior_label=prior_label, deltas=deltas,
+                           nav=NAV, active="speed_to_lead")
 
 
 @app.route("/book-coverage")
