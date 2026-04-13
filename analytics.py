@@ -3454,13 +3454,14 @@ def _next_business_open(dt_utc: datetime) -> datetime:
     return next_open_local.astimezone(timezone.utc)
 
 
-def compute_speed_to_lead(period: str) -> dict:
+def compute_speed_to_lead(period: str, team: str = "all") -> dict:
     """Compute speed-to-lead metrics for all RevenueHero inbound leads in the period.
 
     Returns a dict with:
-      rows      — lead-level list, sorted by booking_dt descending
-      rep_rows  — per-rep aggregates, sorted by lead_count descending
-      summary   — overall summary metrics
+      rows           — lead-level list, sorted by booking_dt descending
+      rep_rows       — per-rep aggregates, sorted by lead_count descending
+      summary        — overall summary metrics
+      outcome_buckets — show/deal rates by STL bucket
       period, start, end
     """
     start, end = get_date_range(period)
@@ -3612,6 +3613,12 @@ def compute_speed_to_lead(period: str) -> dict:
 
     # Sort lead rows newest booking first
     rows.sort(key=lambda r: r["booking_ts"], reverse=True)
+
+    # Filter by team if requested — apply before all aggregations so summary
+    # and outcome buckets reflect only the selected team's leads.
+    if team != "all":
+        team_map = get_owner_team_map()
+        rows = [r for r in rows if team_map.get(r["owner_id"]) == team]
 
     # 5. Aggregate by rep — disqualified leads are shown in the table but
     #    excluded from all metrics so they don't skew response-time numbers.
