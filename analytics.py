@@ -3650,6 +3650,7 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
         n = d["lead_count"]
         stl_vals = d["stl_values"]
         med = int(median(stl_vals)) if stl_vals else None
+        rep_qualified = [r for r in qualified_rows if r["owner_id"] == oid]
         rep_rows.append({
             "owner_id":            oid,
             "rep_name":            d["rep_name"],
@@ -3659,6 +3660,7 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
             "pct_within_5min":     _pct(d["within_5min"], n),
             "pct_within_1hr":      _pct(d["within_1hr"], n),
             "pct_never_dialed":    _pct(d["never_dialed"], n),
+            "outcome_buckets":     _dial_outcome_buckets(rep_qualified),
         })
     rep_rows.sort(key=lambda r: r["lead_count"], reverse=True)
 
@@ -3681,29 +3683,34 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
 
     # 7. STL bucket outcome table — show rate + deal conversion by response speed
     _RESOLVED = {"completed", "no_show", "cancelled"}
-    outcome_buckets = []
-    for label, group_rows in [
-        ("Dialed",       [r for r in qualified_rows if r["stl_seconds"] is not None]),
-        ("Never dialed", [r for r in qualified_rows if r["stl_seconds"] is None]),
-    ]:
-        n = len(group_rows)
-        if n == 0:
-            continue
-        resolved_rows = [r for r in group_rows if r["meeting_status"] in _RESOLVED]
-        r_n = len(resolved_rows)
-        completed_n = sum(1 for r in resolved_rows if r["meeting_status"] == "completed")
-        no_show_n   = sum(1 for r in resolved_rows if r["meeting_status"] == "no_show")
-        deal_n      = sum(1 for r in group_rows if r["has_deal"])
-        s2_n        = sum(1 for r in group_rows if r["deal_reached_s2"])
-        outcome_buckets.append({
-            "label":          label,
-            "lead_count":     n,
-            "resolved_count": r_n,
-            "pct_completed":  _pct(completed_n, r_n),
-            "pct_no_show":    _pct(no_show_n, r_n),
-            "pct_deal":       _pct(deal_n, n),
-            "pct_s2":         _pct(s2_n, n),
-        })
+
+    def _dial_outcome_buckets(source_rows):
+        buckets = []
+        for label, group in [
+            ("Dialed",       [r for r in source_rows if r["stl_seconds"] is not None]),
+            ("Never dialed", [r for r in source_rows if r["stl_seconds"] is None]),
+        ]:
+            n = len(group)
+            if n == 0:
+                continue
+            resolved = [r for r in group if r["meeting_status"] in _RESOLVED]
+            r_n = len(resolved)
+            completed_n = sum(1 for r in resolved if r["meeting_status"] == "completed")
+            no_show_n   = sum(1 for r in resolved if r["meeting_status"] == "no_show")
+            deal_n      = sum(1 for r in group if r["has_deal"])
+            s2_n        = sum(1 for r in group if r["deal_reached_s2"])
+            buckets.append({
+                "label":          label,
+                "lead_count":     n,
+                "resolved_count": r_n,
+                "pct_completed":  _pct(completed_n, r_n),
+                "pct_no_show":    _pct(no_show_n, r_n),
+                "pct_deal":       _pct(deal_n, n),
+                "pct_s2":         _pct(s2_n, n),
+            })
+        return buckets
+
+    outcome_buckets = _dial_outcome_buckets(qualified_rows)
 
     return {
         "rows":            rows,

@@ -94,6 +94,55 @@
         {# ── Rep drill-down detail row ── #}
         <tr id="rep-{{ row.owner_id }}" class="hidden">
           <td colspan="6" class="px-0 py-0 bg-slate-50 border-t border-b border-slate-100">
+
+            {# Outcome mini-table #}
+            {% if row.outcome_buckets %}
+            <div class="px-10 pt-3 pb-2">
+              <table class="w-full text-xs rounded-lg overflow-hidden border border-slate-200">
+                <thead class="bg-slate-100 text-gray-400 uppercase tracking-wider">
+                  <tr>
+                    <th class="px-3 py-1.5 text-left font-semibold">Group</th>
+                    <th class="px-3 py-1.5 text-right font-semibold">Leads</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" title="% of resolved meetings marked Completed">Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" title="% of resolved meetings marked No-Show">No-Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" title="% of leads with any NB deal created">Deal Created</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" title="% of leads with a deal at Stage 2+">Reached S2+</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 bg-white">
+                  {% for b in row.outcome_buckets %}
+                  <tr>
+                    <td class="px-3 py-1.5 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
+                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">
+                      {{ b.lead_count }}
+                      {% if b.resolved_count < b.lead_count %}
+                        <span class="text-gray-400" title="{{ b.lead_count - b.resolved_count }} upcoming">({{ b.resolved_count }}r)</span>
+                      {% endif %}
+                    </td>
+                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
+                      {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
+                      {{ fmt_pct(b.pct_completed) }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right tabular-nums
+                      {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
+                      {{ fmt_pct(b.pct_no_show) }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
+                      {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
+                      {{ fmt_pct(b.pct_deal) }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
+                      {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
+                      {{ fmt_pct(b.pct_s2) }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% endif %}
+
+            {# Lead list #}
             <table class="w-full text-xs">
               <thead class="text-gray-400 uppercase tracking-wider border-b border-slate-200">
                 <tr>
