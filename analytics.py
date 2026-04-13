@@ -3558,7 +3558,10 @@ def compute_speed_to_lead(period: str) -> dict:
         owner = owners.get(owner_id)
         rep_name = (owner.get("last_name") or owner.get("name") or owner_id) if owner else owner_id
 
-        disqualified = (props.get("rh_disqualified") or "").lower() == "true"
+        disqualified = (
+            (props.get("lifecyclestage") or "").lower() == "disqualified"
+            or (props.get("hs_lead_status") or "").lower() == "disqualified"
+        )
 
         rows.append({
             "contact_id":     cid,
