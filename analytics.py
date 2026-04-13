@@ -3624,6 +3624,35 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
     #    excluded from all metrics so they don't skew response-time numbers.
     qualified_rows = [r for r in rows if not r["disqualified"]]
 
+    # Helper: build Dialed vs Never Dialed outcome rows for any slice of leads.
+    _RESOLVED = {"completed", "no_show", "cancelled"}
+
+    def _dial_outcome_buckets(source_rows):
+        buckets = []
+        for label, group in [
+            ("Dialed",       [r for r in source_rows if r["stl_seconds"] is not None]),
+            ("Never dialed", [r for r in source_rows if r["stl_seconds"] is None]),
+        ]:
+            n = len(group)
+            if n == 0:
+                continue
+            resolved = [r for r in group if r["meeting_status"] in _RESOLVED]
+            r_n = len(resolved)
+            completed_n = sum(1 for r in resolved if r["meeting_status"] == "completed")
+            no_show_n   = sum(1 for r in resolved if r["meeting_status"] == "no_show")
+            deal_n      = sum(1 for r in group if r["has_deal"])
+            s2_n        = sum(1 for r in group if r["deal_reached_s2"])
+            buckets.append({
+                "label":          label,
+                "lead_count":     n,
+                "resolved_count": r_n,
+                "pct_completed":  _pct(completed_n, r_n),
+                "pct_no_show":    _pct(no_show_n, r_n),
+                "pct_deal":       _pct(deal_n, n),
+                "pct_s2":         _pct(s2_n, n),
+            })
+        return buckets
+
     rep_data = defaultdict(lambda: {
         "lead_count": 0,
         "stl_values": [],
@@ -3682,34 +3711,6 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
     }
 
     # 7. STL bucket outcome table — show rate + deal conversion by response speed
-    _RESOLVED = {"completed", "no_show", "cancelled"}
-
-    def _dial_outcome_buckets(source_rows):
-        buckets = []
-        for label, group in [
-            ("Dialed",       [r for r in source_rows if r["stl_seconds"] is not None]),
-            ("Never dialed", [r for r in source_rows if r["stl_seconds"] is None]),
-        ]:
-            n = len(group)
-            if n == 0:
-                continue
-            resolved = [r for r in group if r["meeting_status"] in _RESOLVED]
-            r_n = len(resolved)
-            completed_n = sum(1 for r in resolved if r["meeting_status"] == "completed")
-            no_show_n   = sum(1 for r in resolved if r["meeting_status"] == "no_show")
-            deal_n      = sum(1 for r in group if r["has_deal"])
-            s2_n        = sum(1 for r in group if r["deal_reached_s2"])
-            buckets.append({
-                "label":          label,
-                "lead_count":     n,
-                "resolved_count": r_n,
-                "pct_completed":  _pct(completed_n, r_n),
-                "pct_no_show":    _pct(no_show_n, r_n),
-                "pct_deal":       _pct(deal_n, n),
-                "pct_s2":         _pct(s2_n, n),
-            })
-        return buckets
-
     outcome_buckets = _dial_outcome_buckets(qualified_rows)
 
     return {
