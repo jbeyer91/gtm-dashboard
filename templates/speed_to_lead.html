@@ -163,25 +163,25 @@
 </div>
 {% endif %}
 
-{# ── Outcome impact by response speed ── #}
+{# ── Outcome by dial status ── #}
 {% if data.outcome_buckets %}
 <div class="mb-8">
-  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">Outcome by Response Speed</h2>
+  <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">Outcome by Dial Status</h2>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
         <tr>
-          <th class="px-4 py-3 text-left font-semibold">Called Within</th>
-          <th class="px-4 py-3 text-right font-semibold" title="Total leads in this STL bucket">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked Completed (excludes upcoming meetings)">Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked No-Show (excludes upcoming meetings)">No-Show Rate</th>
+          <th class="px-4 py-3 text-left font-semibold">Group</th>
+          <th class="px-4 py-3 text-right font-semibold" title="Total qualified leads in this group">Leads</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked Completed (upcoming meetings excluded)">Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" title="% of resolved meetings marked No-Show (upcoming meetings excluded)">No-Show Rate</th>
           <th class="px-4 py-3 text-right font-semibold" title="% of leads where any NB deal was created in HubSpot">Deal Created</th>
           <th class="px-4 py-3 text-right font-semibold" title="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for b in data.outcome_buckets %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100 {{ 'bg-gray-50/50' if loop.last else '' }}">
+        <tr class="hover:bg-blue-50/60 transition-colors duration-100">
           <td class="px-4 py-3 font-medium {{ 'text-gray-400 italic' if b.label == 'Never dialed' else '' }}">{{ b.label }}</td>
           <td class="px-4 py-3 text-right tabular-nums text-gray-500">
             {{ b.lead_count }}
