@@ -91,10 +91,11 @@
                   <tr>
                     <th class="px-3 py-1.5 text-left font-semibold">Group</th>
                     <th class="px-3 py-1.5 text-right font-semibold">Leads</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" title="% of resolved meetings marked Completed">Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" title="% of resolved meetings marked No-Show">No-Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" title="% of leads with any NB deal created">Deal Created</th>
-                    <th class="px-3 py-1.5 text-right font-semibold" title="% of leads with a deal at Stage 2+">Reached S2+</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that showed up">Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that were no-shows">No-Show Rate</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of resolved meetings that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of leads with any NB deal created">Deal Created</th>
+                    <th class="px-3 py-1.5 text-right font-semibold" data-tip="% of leads with a deal at Stage 2+">Reached S2+</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
@@ -109,6 +110,9 @@
                     <td class="px-3 py-1.5 text-right tabular-nums
                       {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
                       {{ fmt_pct(b.pct_no_show) }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">
+                      {{ fmt_pct(b.pct_cancelled) }}
                     </td>
                     <td class="px-3 py-1.5 text-right tabular-nums font-semibold
                       {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
@@ -148,7 +152,7 @@
                   </td>
                   <td class="px-3 py-2 text-gray-500 tabular-nums">
                     {{ lead.booking_dt }}
-                    {% if lead.off_hours %}<span title="Off-hours booking" class="ml-0.5">🌙</span>{% endif %}
+                    {% if lead.off_hours %}<span data-tip="Booked outside business hours — STL clock starts at next 9 am CT" class="ml-0.5 cursor-help">🌙</span>{% endif %}
                   </td>
                   <td class="px-3 py-2 text-gray-500 tabular-nums">{{ lead.first_dial_dt or "—" }}</td>
                   <td class="px-3 py-2 text-right tabular-nums font-semibold
@@ -199,19 +203,20 @@
 {% if data.outcome_buckets %}
 <div class="mb-8">
   <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-3">Outcome by Dial Status
-    <span class="normal-case font-normal text-gray-400 ml-1 text-xs"
-          title="Qualified leads only (disqualified contacts excluded). Show/No-Show rates count only meetings with a known outcome — upcoming meetings are excluded from those two columns.">· ⓘ</span>
+    <span class="normal-case font-normal text-gray-400 ml-1 text-xs cursor-help"
+          data-tip="Qualified leads only (disqualified contacts excluded). Show/No-Show/Cancelled rates use only meetings with a known outcome — upcoming meetings are excluded from those three columns. Show + No-Show + Cancelled = 100%.">· ⓘ</span>
   </h2>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
         <tr>
           <th class="px-4 py-3 text-left font-semibold">Group</th>
-          <th class="px-4 py-3 text-right font-semibold" title="Qualified leads (disqualified excluded) in this group">Leads</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of completed + no-show + cancelled meetings that were Completed. Upcoming meetings not counted.">Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of completed + no-show + cancelled meetings that were No-Show. Upcoming meetings not counted.">No-Show Rate</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
-          <th class="px-4 py-3 text-right font-semibold" title="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="Qualified leads (disqualified excluded) in this group">Leads</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome (show + no-show + cancelled), % that showed up">Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome, % that were no-shows">No-Show Rate</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="Of meetings with a known outcome, % that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
+          <th class="px-4 py-3 text-right font-semibold" data-tip="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -226,6 +231,9 @@
           <td class="px-4 py-3 text-right tabular-nums
             {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
             {{ fmt_pct(b.pct_no_show) }}
+          </td>
+          <td class="px-4 py-3 text-right tabular-nums text-gray-500">
+            {{ fmt_pct(b.pct_cancelled) }}
           </td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold
             {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
@@ -254,7 +262,7 @@
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(0)">Contact <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(1)">Booking Time <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(2)">First Dial <span class="sort-icon text-gray-300">↕</span></th>
-          <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" title="Time from business-hours open to first outbound call (adjusted for after-hours bookings)">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
+          <th class="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(3)" data-tip="Time from business-hours open to first outbound call. Bookings made outside Mon–Fri 9 am–5 pm CT have their clock start at the next business open (🌙).">Speed to Lead <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(4)">Rep <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(5)">Status <span class="sort-icon text-gray-300">↕</span></th>
           <th class="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-gray-700" onclick="sortTable(6)">Deal <span class="sort-icon text-gray-300">↕</span></th>
@@ -275,7 +283,7 @@
           <td class="px-4 py-3 tabular-nums text-gray-600">
             {{ row.booking_dt }}
             {% if row.off_hours %}
-              <span title="Booked outside business hours — STL clock started at next 9 am CT" class="ml-1 text-gray-400 text-xs">🌙</span>
+              <span data-tip="Booked outside business hours — STL clock starts at next 9 am CT" class="ml-1 text-gray-400 text-xs cursor-help">🌙</span>
             {% endif %}
           </td>
           <td class="px-4 py-3 tabular-nums text-gray-600">{{ row.first_dial_dt or "—" }}</td>

@@ -3642,18 +3642,20 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
                 continue
             resolved = [r for r in group if r["meeting_status"] in _RESOLVED]
             r_n = len(resolved)
-            completed_n = sum(1 for r in resolved if r["meeting_status"] == "completed")
-            no_show_n   = sum(1 for r in resolved if r["meeting_status"] == "no_show")
-            deal_n      = sum(1 for r in group if r["has_deal"])
-            s2_n        = sum(1 for r in group if r["deal_reached_s2"])
+            completed_n  = sum(1 for r in resolved if r["meeting_status"] == "completed")
+            no_show_n    = sum(1 for r in resolved if r["meeting_status"] == "no_show")
+            cancelled_n  = sum(1 for r in resolved if r["meeting_status"] == "cancelled")
+            deal_n       = sum(1 for r in group if r["has_deal"])
+            s2_n         = sum(1 for r in group if r["deal_reached_s2"])
             buckets.append({
-                "label":          label,
-                "lead_count":     n,
-                "resolved_count": r_n,
-                "pct_completed":  _pct(completed_n, r_n),
-                "pct_no_show":    _pct(no_show_n, r_n),
-                "pct_deal":       _pct(deal_n, n),
-                "pct_s2":         _pct(s2_n, n),
+                "label":           label,
+                "lead_count":      n,
+                "resolved_count":  r_n,
+                "pct_completed":   _pct(completed_n, r_n),
+                "pct_no_show":     _pct(no_show_n, r_n),
+                "pct_cancelled":   _pct(cancelled_n, r_n),
+                "pct_deal":        _pct(deal_n, n),
+                "pct_s2":          _pct(s2_n, n),
             })
         return buckets
 
