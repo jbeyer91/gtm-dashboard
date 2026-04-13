@@ -15,7 +15,7 @@ from hubspot import (
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
     get_target_account_companies, _search_all,
     get_calls_enriched,
-    get_rh_contacts, get_calls_for_contacts, HUBSPOT_PORTAL_ID,
+    get_rh_contacts, get_calls_for_contacts, get_deals_for_contacts, HUBSPOT_PORTAL_ID,
 )
 
 # ── Business model constants ──────────────────────────────────────────────────
@@ -3454,13 +3454,14 @@ def _next_business_open(dt_utc: datetime) -> datetime:
     return next_open_local.astimezone(timezone.utc)
 
 
-def compute_speed_to_lead(period: str) -> dict:
+def compute_speed_to_lead(period: str, team: str = "all") -> dict:
     """Compute speed-to-lead metrics for all RevenueHero inbound leads in the period.
 
     Returns a dict with:
-      rows      — lead-level list, sorted by booking_dt descending
-      rep_rows  — per-rep aggregates, sorted by lead_count descending
-      summary   — overall summary metrics
+      rows           — lead-level list, sorted by booking_dt descending
+      rep_rows       — per-rep aggregates, sorted by lead_count descending
+      summary        — overall summary metrics
+      outcome_buckets — show/deal rates by STL bucket
       period, start, end
     """
     start, end = get_date_range(period)
@@ -3480,8 +3481,25 @@ def compute_speed_to_lead(period: str) -> dict:
 
     contact_ids = [c["id"] for c in contacts]
 
-    # 3. Fetch calls associated with these contacts
+    # 3. Fetch calls and deals associated with these contacts
     contact_calls = get_calls_for_contacts(contact_ids)
+    contact_deals = get_deals_for_contacts(contact_ids)
+
+    # NB stage ordering for determining "most advanced" deal stage
+    _S2_PLUS = {NB_STAGES["stage2"], NB_STAGES["stage3"], NB_STAGES["stage4"],
+                NB_STAGES["won"], NB_STAGES["lost"]}
+    _STAGE_ORDER = [
+        NB_STAGES["won"], NB_STAGES["stage4"], NB_STAGES["stage3"],
+        NB_STAGES["stage2"], NB_STAGES["lost"], NB_STAGES["stage1"],
+    ]
+    _STAGE_LABELS = {
+        NB_STAGES["stage1"]: "Stage 1",
+        NB_STAGES["stage2"]: "Stage 2",
+        NB_STAGES["stage3"]: "Stage 3",
+        NB_STAGES["stage4"]: "Stage 4",
+        NB_STAGES["won"]:    "Won",
+        NB_STAGES["lost"]:   "Lost",
+    }
 
     # 4. Build lead-level rows
     rows = []
@@ -3559,28 +3577,48 @@ def compute_speed_to_lead(period: str) -> dict:
         rep_name = (owner.get("last_name") or owner.get("name") or owner_id) if owner else owner_id
 
         disqualified = (
-            (props.get("lifecyclestage") or "").lower() == "disqualified"
+            (props.get("lifecyclestage") or "") == "184059525"
             or (props.get("hs_lead_status") or "").lower() == "disqualified"
         )
 
+        # Deal data — find most advanced NB deal for this contact
+        nb_deals = contact_deals.get(cid, [])
+        has_deal = bool(nb_deals)
+        best_stage = None
+        for stage in _STAGE_ORDER:
+            if any(d["properties"].get("dealstage") == stage for d in nb_deals):
+                best_stage = stage
+                break
+        deal_reached_s2 = best_stage in _S2_PLUS
+        deal_label = _STAGE_LABELS.get(best_stage, "") if best_stage else ""
+
         rows.append({
-            "contact_id":     cid,
-            "contact_name":   contact_name,
-            "contact_url":    contact_url,
-            "booking_dt":     booking_dt.strftime("%Y-%m-%d %H:%M UTC"),
-            "booking_ts":     booking_dt.timestamp(),   # for sorting
-            "off_hours":      off_hours,                # booked outside business hours
-            "first_dial_dt":  first_dial_str,
-            "stl_seconds":    stl_seconds,
-            "stl_display":    stl_display,
-            "owner_id":       owner_id,
-            "rep_name":       rep_name,
-            "meeting_status": props.get("rh_meeting_status") or "",
-            "disqualified":   disqualified,
+            "contact_id":      cid,
+            "contact_name":    contact_name,
+            "contact_url":     contact_url,
+            "booking_dt":      booking_dt.strftime("%Y-%m-%d %H:%M UTC"),
+            "booking_ts":      booking_dt.timestamp(),   # for sorting
+            "off_hours":       off_hours,
+            "first_dial_dt":   first_dial_str,
+            "stl_seconds":     stl_seconds,
+            "stl_display":     stl_display,
+            "owner_id":        owner_id,
+            "rep_name":        rep_name,
+            "meeting_status":  props.get("rh_meeting_status") or "",
+            "disqualified":    disqualified,
+            "has_deal":        has_deal,
+            "deal_reached_s2": deal_reached_s2,
+            "deal_label":      deal_label,
         })
 
     # Sort lead rows newest booking first
     rows.sort(key=lambda r: r["booking_ts"], reverse=True)
+
+    # Filter by team if requested — apply before all aggregations so summary
+    # and outcome buckets reflect only the selected team's leads.
+    if team != "all":
+        team_map = get_owner_team_map()
+        rows = [r for r in rows if team_map.get(r["owner_id"]) == team]
 
     # 5. Aggregate by rep — disqualified leads are shown in the table but
     #    excluded from all metrics so they don't skew response-time numbers.
@@ -3641,11 +3679,39 @@ def compute_speed_to_lead(period: str) -> dict:
         "pct_never_dialed":    _pct(never_n, total_n),
     }
 
+    # 7. STL bucket outcome table — show rate + deal conversion by response speed
+    _BUCKETS = [
+        ("≤ 5 min",      lambda s: s is not None and s <= 300),
+        ("5 min – 1 hr", lambda s: s is not None and 300 < s <= 3600),
+        ("1 – 24 hrs",   lambda s: s is not None and 3600 < s <= 86400),
+        ("> 24 hrs",     lambda s: s is not None and s > 86400),
+        ("Never dialed", lambda s: s is None),
+    ]
+    outcome_buckets = []
+    for label, matches in _BUCKETS:
+        bucket_rows = [r for r in qualified_rows if matches(r["stl_seconds"])]
+        n = len(bucket_rows)
+        if n == 0:
+            continue
+        completed_n = sum(1 for r in bucket_rows if r["meeting_status"] == "completed")
+        no_show_n   = sum(1 for r in bucket_rows if r["meeting_status"] == "no_show")
+        deal_n      = sum(1 for r in bucket_rows if r["has_deal"])
+        s2_n        = sum(1 for r in bucket_rows if r["deal_reached_s2"])
+        outcome_buckets.append({
+            "label":         label,
+            "lead_count":    n,
+            "pct_completed": _pct(completed_n, n),
+            "pct_no_show":   _pct(no_show_n, n),
+            "pct_deal":      _pct(deal_n, n),
+            "pct_s2":        _pct(s2_n, n),
+        })
+
     return {
-        "rows":     rows,
-        "rep_rows": rep_rows,
-        "summary":  summary,
-        "period":   period,
-        "start":    start.isoformat(),
-        "end":      end.isoformat(),
+        "rows":            rows,
+        "rep_rows":        rep_rows,
+        "summary":         summary,
+        "outcome_buckets": outcome_buckets,
+        "period":          period,
+        "start":           start.isoformat(),
+        "end":             end.isoformat(),
     }
