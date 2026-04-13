@@ -4,9 +4,9 @@
 {% block content %}
 {% set ns_pl = namespace(label=period) %}
 {% for val, lbl in periods %}{% if val == period %}{% set ns_pl.label = lbl %}{% endif %}{% endfor %}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Call Stats</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">New Business Pipeline · {{ ns_pl.label }}</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">New Business Pipeline · {{ ns_pl.label }}</p>
 </div>
 
 {{ period_filter(period, periods, {"team": team}) }}
@@ -50,7 +50,7 @@
 <!-- Table -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Dials</th>
@@ -65,7 +65,7 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in data.rows %}
-      <tr class="hover:bg-blue-50/60 transition-colors duration-100">
+      <tr class="hover:bg-slate-50 transition-colors duration-100">
         <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.dials) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ row.avg_dials_per_day }}</td>

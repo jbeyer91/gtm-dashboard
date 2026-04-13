@@ -2,9 +2,9 @@
 {% from "macros.html" import stat_card, fmt_money, fmt_pct, csv_link %}
 {% block title %} — Forecast{% endblock %}
 {% block content %}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Forecast</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">HubSpot Submitted Forecast vs Quota</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">HubSpot Submitted Forecast vs Quota</p>
 </div>
 
 {{ csv_link(url_for('forecast_csv') ~ '?period=' ~ period) }}
@@ -22,7 +22,7 @@
 
 {# ── reusable row macro ───────────────────────────────────────────────────── #}
 {% macro forecast_row(row, is_subtotal=false, period="") %}
-<tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-blue-50/60 transition-colors duration-100{% endif %}">
+<tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-slate-50 transition-colors duration-100{% endif %}">
   <td class="px-4 py-3 {% if is_subtotal %}text-xs uppercase tracking-wider{% else %}font-medium{% endif %}">{{ row.ae }}</td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
     {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
@@ -51,7 +51,7 @@
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
       <tr>
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Quota $</th>

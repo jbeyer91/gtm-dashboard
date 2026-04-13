@@ -71,9 +71,9 @@
 {% block content %}
 {% if loading %}
 <meta http-equiv="refresh" content="5">
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps connect above or below team average</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Why reps connect above or below team average</p>
 </div>
 <div class="flex flex-col items-center gap-3 py-8 mb-4">
   <div class="w-12 h-12 rounded-full border-[3px] border-violet-500 loader-spin" style="border-top-color:transparent;"></div>
@@ -147,9 +147,9 @@
   </div>
 </div>
 {% elif data.state.empty %}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps connect above or below team average</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Why reps connect above or below team average</p>
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-8 text-center">
@@ -157,9 +157,9 @@
   <p class="text-sm text-slate-500 mt-2">Try a broader period, team, or rep selection.</p>
 </div>
 {% else %}
-<div class="rounded-2xl mb-6 px-8 py-6" style="background: linear-gradient(135deg, #1B3569 0%, #6B21A8 100%);">
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Connect Rate Drivers</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.65);">Why reps connect above or below team average</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Why reps connect above or below team average</p>
 </div>
 
 <div class="flex flex-col gap-3 mb-6">
@@ -539,7 +539,7 @@
         "Dialing Behavior": "Dial more unique numbers; reduce repeat-dialing same contact",
         "Timing": "Shift dials into strong windows (top connect-rate hours)"
       } %}
-      <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
           <th class="px-4 py-3 text-left font-semibold">Rep</th>
           <th class="px-4 py-3 text-right font-semibold">Delta vs Team</th>
@@ -570,7 +570,7 @@
         {# Coaching hint for primary driver #}
         {% set primary_hint = coaching_hints.get(row.primary_driver, "") %}
         {% set secondary_hint = coaching_hints.get(row.secondary_driver, "") %}
-        <tr class="hover:bg-blue-50/60 transition-colors duration-100 cursor-pointer select-none"
+        <tr class="hover:bg-slate-50 transition-colors duration-100 cursor-pointer select-none"
             onclick="toggleRepDetail('rep-detail-{{ loop.index }}')"
             aria-expanded="false">
           <td class="px-4 py-3 font-medium text-slate-800">
