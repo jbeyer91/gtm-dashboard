@@ -2336,7 +2336,8 @@ def compute_deals_won(period: str, source: str = "All") -> dict:
         if oid and _owner_allowed(oid, scope_end):
             owner_lost[oid] += 1
 
-    all_owners = set(owner_won.keys()) | set(owner_lost.keys())
+    all_owners = {oid for oid in (set(owner_won) | set(owner_lost) | set(quotas) | set(owners))
+                  if _owner_allowed(oid, scope_end) and owners.get(oid)}
     rows = []
     for oid in all_owners:
         owner = owners.get(oid)
