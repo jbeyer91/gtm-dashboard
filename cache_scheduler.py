@@ -79,6 +79,7 @@ _VIEWS = [
     analytics.compute_deals_lost,
     analytics.compute_deal_advancement,
     analytics.compute_inbound_funnel,
+    analytics.compute_deal_flow,
     analytics.compute_revenue_chart,
 ]
 

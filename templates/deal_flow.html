@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% from "macros.html" import period_filter, stat_card, fmt_num %}
+{% block title %} — Deal Flow{% endblock %}
+{% block content %}
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Deal Flow</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Stage Progression &middot; How Deals Flow From Creation to Outcome</p>
+</div>
+
+{{ period_filter(period, periods) }}
+
+{# ── Source toggle ── #}
+<div class="flex gap-2 mt-3 mb-5">
+  <button id="btn-inbound" onclick="toggleView('inbound')"
+    class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+    style="background:var(--accent);color:#fff;">Inbound</button>
+  <button id="btn-cold" onclick="toggleView('cold_outreach')"
+    class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+    style="background:#f1f5f9;color:#64748b;">Cold Outreach</button>
+</div>
+
+{# ── Stat cards (swapped by JS) ── #}
+<div id="stats-inbound" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
+  {% set ib = data.inbound.totals %}
+  {{ stat_card("Form Submitted", fmt_num(ib.form_submitted)) }}
+  {{ stat_card("Meetings Booked", fmt_num(ib.meeting_booked)) }}
+  {{ stat_card("Deals Created", fmt_num(ib.deal_created)) }}
+  {{ stat_card("Won", fmt_num(ib.won)) }}
+  {{ stat_card("Lost", fmt_num(ib.lost)) }}
+  {{ stat_card("Still Open", fmt_num(ib.open)) }}
+</div>
+<div id="stats-cold" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5 hidden">
+  {% set co = data.cold_outreach.totals %}
+  {{ stat_card("Deals Created", fmt_num(co.deal_created)) }}
+  {{ stat_card("Won", fmt_num(co.won)) }}
+  {{ stat_card("Lost", fmt_num(co.lost)) }}
+  {{ stat_card("Still Open", fmt_num(co.open)) }}
+</div>
+
+{# ── Sankey chart ── #}
+<div class="bg-white rounded-xl border px-6 py-6" style="border-color:var(--border-muted);">
+  <div style="position:relative;height:480px;">
+    <canvas id="sankeyChart"></canvas>
+  </div>
+</div>
+
+<script>
+(function () {
+  var inboundLinks = {{ data.inbound.links | tojson }};
+  var coldLinks    = {{ data.cold_outreach.links | tojson }};
+
+  // Node color palette
+  var nodeColors = {
+    'Form Submitted': '#6366f1',
+    'No Meeting':     '#94a3b8',
+    'No Deal':        '#94a3b8',
+    'Deal Created':   '#6366f1',
+    'Stage 2':        '#7C5CBF',
+    'Stage 3':        '#534AB7',
+    'Stage 4':        '#3730a3',
+    'Won':            '#059669',
+    'Lost':           '#dc2626',
+    'Still Open':     '#d97706'
+  };
+
+  // Meeting types get a teal palette
+  function getColor(label) {
+    if (nodeColors[label]) return nodeColors[label];
+    // Dynamic meeting types → teal shades
+    return '#0d9488';
+  }
+
+  var ctx = document.getElementById('sankeyChart');
+  var chart = new Chart(ctx, {
+    type: 'sankey',
+    data: {
+      datasets: [{
+        data: inboundLinks,
+        colorFrom: function (c) {
+          var d = c.dataset.data[c.dataIndex];
+          return d ? getColor(d.from) : '#6366f1';
+        },
+        colorTo: function (c) {
+          var d = c.dataset.data[c.dataIndex];
+          return d ? getColor(d.to) : '#6366f1';
+        },
+        colorMode: 'gradient',
+        labels: {},
+        priority: {
+          'Won': 0,
+          'Still Open': 1,
+          'Lost': 2,
+        },
+        size: 'max',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var d = ctx.dataset.data[ctx.dataIndex];
+              return d.from + ' \u2192 ' + d.to + ':  ' + d.flow + ' deals';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Toggle between inbound and cold outreach
+  window.toggleView = function (view) {
+    var btnInbound = document.getElementById('btn-inbound');
+    var btnCold    = document.getElementById('btn-cold');
+    var statsIb    = document.getElementById('stats-inbound');
+    var statsCo    = document.getElementById('stats-cold');
+
+    if (view === 'inbound') {
+      chart.data.datasets[0].data = inboundLinks;
+      btnInbound.style.background = 'var(--accent)';
+      btnInbound.style.color = '#fff';
+      btnCold.style.background = '#f1f5f9';
+      btnCold.style.color = '#64748b';
+      statsIb.classList.remove('hidden');
+      statsCo.classList.add('hidden');
+    } else {
+      chart.data.datasets[0].data = coldLinks;
+      btnCold.style.background = 'var(--accent)';
+      btnCold.style.color = '#fff';
+      btnInbound.style.background = '#f1f5f9';
+      btnInbound.style.color = '#64748b';
+      statsCo.classList.remove('hidden');
+      statsIb.classList.add('hidden');
+    }
+    chart.update();
+  };
+})();
+</script>
+{% endblock %}

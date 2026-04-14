@@ -761,6 +761,7 @@ def get_list_contacts(list_id: int, start: datetime, end: datetime) -> list:
         "firstname", "lastname", "email", "createdate", "hubspot_owner_id",
         "lifecyclestage", "utm_source",
         "demo_request_submitted_date", "first_sales_activity_after_demo_request",
+        "rh_meeting_type", "rh_meeting_status", "rh_meeting_created_at",
     ]
 
     # Page through all list members
