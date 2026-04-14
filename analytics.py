@@ -3015,9 +3015,13 @@ def _build_deal_links(deals):
 def compute_deal_flow(period: str) -> dict:
     """Compute Sankey flow data for inbound and cold outreach deal progression."""
     start, end = get_date_range(period)
+    scope_end = end
 
-    # ── All NB deals created in period ────────────────────────────────────────
+    # ── All NB deals created in period (owner-scoped like other pages) ────────
     all_deals = get_deals(start, end, "createdate")
+    all_deals = [d for d in all_deals
+                 if d["properties"].get("hubspot_owner_id")
+                 and _owner_allowed(d["properties"]["hubspot_owner_id"], scope_end)]
 
     inbound_deals = [d for d in all_deals
                      if _deal_source(d) == "Inbound"]
