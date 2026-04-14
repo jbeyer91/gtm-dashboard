@@ -28,7 +28,7 @@
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Total Named Accounts</th>
         <th class="px-4 py-3 text-right font-semibold" title="Highest-priority named accounts (A+, A, B, C tiers) that reps should be actively working.">A+ to C Accounts</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts where Active Since Transfer = TRUE (within Rules of Engagement).">% Within ROE</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts where Active Since Transfer is NOT true (outside Rules of Engagement).">% Outside ROE</th>
         <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts currently enrolled in an automated outreach sequence.">% In Sequence</th>
         <th class="px-4 py-3 text-right font-semibold" title="HubSpot tasks that are past their due date. Should be 0.">Overdue Tasks</th>
       </tr>
@@ -40,8 +40,8 @@
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.total_accounts) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.ac_accounts) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
-          {% if row.pct_within_roe >= 75 %}text-green-600{% elif row.pct_within_roe >= 50 %}text-yellow-600{% else %}text-red-500{% endif %}">
-          {{ fmt_pct(row.pct_within_roe) }}
+          {% if row.pct_outside_roe <= 25 %}text-green-600{% elif row.pct_outside_roe <= 50 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          {{ fmt_pct(row.pct_outside_roe) }}
         </td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_in_sequence) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
@@ -57,7 +57,7 @@
         <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(t.total_accounts) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(t.ac_accounts) }}</td>
-        <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_within_roe) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_outside_roe) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(t.pct_in_sequence) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ t.overdue_tasks }}</td>
       </tr>
