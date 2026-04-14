@@ -658,7 +658,7 @@ def get_deals(start: datetime, end: datetime, date_field: str = "createdate") ->
             "dealtype", "hubspot_owner_id", "hs_deal_stage_probability", "hs_is_closed_won",
             "hs_is_closed_lost", "deal_source", "hs_analytics_source",
             "closed_lost_reason", "closed_lost_sub_reason", "last_touch_channel",
-            "num_associated_contacts", "days_to_close",
+            "num_associated_contacts", "days_to_close", "employee_count",
             "hs_date_entered_71300357", "hs_date_entered_71300358",
             "hs_date_entered_1294419353", "hs_date_entered_71300359",
             "hs_date_entered_71300362", "hs_date_entered_71300363",
@@ -683,11 +683,16 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
         "properties": [
             "dealname", "dealstage", "pipeline", "amount", "closedate", "createdate",
             "dealtype", "hubspot_owner_id", "hs_is_closed_won", "hs_is_closed_lost",
-            "deal_source", "hs_deal_stage_probability", "hs_manual_forecast_category",
+            "deal_source", "hs_analytics_source", "employee_count",
+            "hs_deal_stage_probability", "hs_manual_forecast_category",
+            "hs_date_entered_71300357",
             "hs_date_entered_71300358",
+            "hs_date_entered_1294419353",
+            "hs_date_entered_71300359",
             "hs_v2_date_entered_71300358",
             "hs_next_step",
             "hs_next_meeting_start_time",
+            "gong_next_steps",
         ],
     }
     return _search_all("deals", payload)

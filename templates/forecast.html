@@ -15,10 +15,11 @@
   {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
   {{ stat_card("Won Revenue", fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
   {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "", delta=deltas.attain_pct, delta_fmt='pct') }}
-  {% if period == "this_month" %}
-  {{ stat_card("HS Submitted · " ~ this_month_label, fmt_money(t.submitted_amt) if t.submitted_amt is not none else "—", "from HubSpot forecast tool", delta=deltas.submitted_amt, delta_fmt='money') }}
-  {% endif %}
+  {{ stat_card("Projected", fmt_money(t.projected_amt) if t.projected_amt is not none else "—", "signal-adjusted forecast", delta=deltas.projected_amt, delta_fmt='money') }}
 </div>
+
+{# ── column count helper ─────────────────────────────────────────────────── #}
+{% set col_count = 7 if period == "this_month" else 6 %}
 
 {# ── reusable row macro ───────────────────────────────────────────────────── #}
 {% macro forecast_row(row, is_subtotal=false, period="") %}
@@ -41,6 +42,14 @@
     {% else %}text-red-500{% endif %}">
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold
+    {% if row.projected_amt is not none and row.gap_amt is not none %}
+      {% if row.projected_amt >= row.gap_amt %}text-green-600
+      {% elif row.projected_amt >= row.gap_amt * 0.5 %}text-yellow-600
+      {% else %}text-orange-500{% endif %}
+    {% else %}text-gray-400{% endif %}">
+    {% if row.projected_amt is not none %}{{ fmt_money(row.projected_amt) }}{% else %}—{% endif %}
+  </td>
   {% if period == "this_month" %}
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}text-indigo-600">
     {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal text-xs">Not submitted</span>{% endif %}
@@ -58,6 +67,10 @@
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
+        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-orange-600">
+          Projected $
+          <span class="block text-orange-400 font-normal normal-case tracking-normal">signal-adjusted</span>
+        </th>
         {% if period == "this_month" %}
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">
           Forecast Submission
@@ -71,7 +84,7 @@
     {# Team header #}
     <tbody>
       <tr class="bg-indigo-50 border-t border-indigo-100">
-        <td colspan="{{ 6 if period == 'this_month' else 5 }}" class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-700">
+        <td colspan="{{ col_count }}" class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-700">
           {{ group.team }} — {{ group.manager }}
         </td>
       </tr>
@@ -105,6 +118,9 @@
           {% else %}text-red-500{% endif %}">
           {% if t.gap_amt is not none %}{{ fmt_money(t.gap_amt) }}{% else %}—{% endif %}
         </td>
+        <td class="px-4 py-3 text-right border-l border-gray-100 font-semibold text-orange-600">
+          {% if t.projected_amt is not none %}{{ fmt_money(t.projected_amt) }}{% else %}—{% endif %}
+        </td>
         {% if period == "this_month" %}
         <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
@@ -114,4 +130,103 @@
     </tfoot>
   </table>
 </div>
+
+{# ── Projected Forecast · Deal Detail ────────────────────────────────────── #}
+{% if data.deal_details %}
+<details class="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6">
+  <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900 select-none">
+    Projected Forecast · Deal Detail
+    <span class="text-gray-400 font-normal">({{ data.deal_details | map(attribute='deals') | map('length') | sum }} deals)</span>
+    {% if data.benchmarks %}
+    <span class="text-gray-300 font-normal text-xs ml-2">· Scoring calibrated from {{ data.benchmarks.sample_size }} closed deals ({{ data.benchmarks.overall_win_rate | round(1) }}% win rate)</span>
+    {% endif %}
+  </summary>
+
+  {% for group in data.deal_details %}
+  {% if group.deals %}
+  <div class="border-t border-gray-100">
+    <div class="px-6 py-3 bg-slate-50 flex items-center justify-between">
+      <span class="text-sm font-semibold text-gray-700">{{ group.ae }}</span>
+      <span class="text-sm font-semibold text-orange-600">Projected: {{ fmt_money(group.projected_amt) }}</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="text-[10px] font-semibold text-slate-400 tracking-wider uppercase bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-4 py-2 text-left">Deal</th>
+            <th class="px-4 py-2 text-right">Amount</th>
+            <th class="px-4 py-2 text-left">Stage</th>
+            <th class="px-4 py-2 text-left">Source</th>
+            <th class="px-4 py-2 text-left">Emp Size</th>
+            <th class="px-4 py-2 text-right">Close Date</th>
+            <th class="px-4 py-2 text-right">Biz Days</th>
+            <th class="px-4 py-2 text-right">Base %</th>
+            <th class="px-4 py-2 text-right">Proj %</th>
+            <th class="px-4 py-2 text-right">Proj $</th>
+            <th class="px-4 py-2 text-left">Risk Flags</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          {% for deal in group.deals %}
+          <tr class="hover:bg-slate-50 transition-colors duration-100">
+            <td class="px-4 py-2 font-medium text-gray-800 max-w-[200px] truncate">
+              {% if portal_id and deal.deal_id %}
+              <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ deal.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ deal.deal_name }}</a>
+              {% else %}
+              {{ deal.deal_name }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ deal.source }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ deal.emp_segment if deal.emp_segment != "unknown" else "—" }}</td>
+            <td class="px-4 py-2 text-right tabular-nums text-gray-600">
+              {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums
+              {% if deal.biz_days_remaining is not none and deal.biz_days_remaining <= 3 %}text-red-600 font-semibold
+              {% elif deal.biz_days_remaining is not none and deal.biz_days_remaining <= 7 %}text-amber-600
+              {% else %}text-gray-600{% endif %}">
+              {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums text-gray-500">{{ "%.0f" | format(deal.base_prob * 100) }}%</td>
+            <td class="px-4 py-2 text-right tabular-nums font-semibold
+              {% if deal.projected_prob >= 0.5 %}text-green-600
+              {% elif deal.projected_prob >= 0.2 %}text-yellow-600
+              {% elif deal.projected_prob > 0 %}text-red-500
+              {% else %}text-gray-400{% endif %}">
+              {{ "%.0f" | format(deal.projected_prob * 100) }}%
+              {% if deal.base_prob > 0 %}
+              {% set pct_change = ((deal.projected_prob - deal.base_prob) / deal.base_prob * 100) | round(0) | int %}
+              {% if pct_change != 0 %}
+              <span class="text-[10px] font-normal {% if pct_change > 0 %}text-green-500{% else %}text-red-400{% endif %}">({{ "%+d" | format(pct_change) }}%)</span>
+              {% endif %}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums font-semibold">{{ fmt_money(deal.projected_amt) }}</td>
+            <td class="px-4 py-2">
+              <div class="flex flex-wrap gap-1">
+                {% for severity, msg in deal.risk_flags %}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border
+                  {% if severity == 'high' %}bg-red-50 text-red-700 border-red-200
+                  {% elif severity == 'medium' %}bg-amber-50 text-amber-700 border-amber-200
+                  {% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}">
+                  {{ msg }}
+                </span>
+                {% endfor %}
+                {% if not deal.risk_flags %}
+                <span class="text-green-500 text-[10px]">No flags</span>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</details>
+{% endif %}
 {% endblock %}
