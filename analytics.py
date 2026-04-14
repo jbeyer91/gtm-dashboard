@@ -3064,16 +3064,12 @@ def compute_deal_flow(period: str) -> dict:
             mtg_type_deal_count["Other"] += 1
 
     # ── Build inbound Sankey links ────────────────────────────────────────────
+    # Start Sankey from meeting types (not Form Submitted) to avoid the
+    # "No Meeting" flow dominating the entire diagram.  The pre-deal funnel
+    # (form → meeting → deal) is shown separately as stat cards.
     inbound_links = []
 
-    # Layer 1: Form Submitted → Meeting Types / No Meeting
-    for mt, count in sorted(meeting_type_counts.items(), key=lambda x: -x[1]):
-        if count > 0:
-            inbound_links.append({"from": "Form Submitted", "to": mt, "flow": count})
-    if no_meeting_count > 0:
-        inbound_links.append({"from": "Form Submitted", "to": "No Meeting", "flow": no_meeting_count})
-
-    # Layer 2: Meeting Types → Deal Created / No Deal
+    # Layer 1: Meeting Types → Deal Created / No Deal
     for mt, booked in meeting_type_counts.items():
         deals_from_mt = mtg_type_deal_count.get(mt, 0)
         no_deal = booked - deals_from_mt
@@ -3093,7 +3089,10 @@ def compute_deal_flow(period: str) -> dict:
 
     inbound_totals = {
         "form_submitted": form_submitted,
+        "no_meeting": no_meeting_count,
         "meeting_booked": meeting_booked,
+        "meeting_to_deal_pct": round(inbound_deal_totals["deal_created"] / meeting_booked * 100) if meeting_booked else 0,
+        "form_to_meeting_pct": round(meeting_booked / form_submitted * 100) if form_submitted else 0,
         **inbound_deal_totals,
     }
 
