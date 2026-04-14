@@ -687,6 +687,7 @@ def get_all_open_deals(start: datetime = None, end: datetime = None) -> list:
             "hs_date_entered_71300358",
             "hs_v2_date_entered_71300358",
             "hs_next_step",
+            "hs_next_meeting_start_time",
         ],
     }
     return _search_all("deals", payload)
