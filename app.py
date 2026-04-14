@@ -1686,17 +1686,17 @@ def book_coverage_csv():
     data = _filter_by_team(data, team) if is_admin else _filter_by_owner(data, owner_id)
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Within ROE",
-                "In Sequence", "Within ROE %", "In Seq %", "Overdue Tasks"])
+    w.writerow(["Rep", "Total Accounts", "A+-C Accounts", "Outside ROE",
+                "In Sequence", "Outside ROE %", "In Seq %", "Overdue Tasks"])
     for r in data["rows"]:
-        w.writerow([r["ae"], r["total_accounts"], r["ac_accounts"], r["within_roe"],
+        w.writerow([r["ae"], r["total_accounts"], r["ac_accounts"], r["outside_roe"],
                     r["in_sequence"],
-                    f"{r['pct_within_roe']:.1f}%",
+                    f"{r['pct_outside_roe']:.1f}%",
                     f"{r['pct_in_sequence']:.1f}%", r["overdue_tasks"]])
     t = data["totals"]
-    w.writerow(["TOTAL", t["total_accounts"], t["ac_accounts"], t["within_roe"],
+    w.writerow(["TOTAL", t["total_accounts"], t["ac_accounts"], t["outside_roe"],
                 t["in_sequence"],
-                f"{t['pct_within_roe']:.1f}%",
+                f"{t['pct_outside_roe']:.1f}%",
                 f"{t['pct_in_sequence']:.1f}%", t["overdue_tasks"]])
     return Response(out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=book-coverage.csv"})

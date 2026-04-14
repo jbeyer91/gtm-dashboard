@@ -3223,8 +3223,10 @@ def compute_book_coverage() -> dict:
             "total_accounts": data["total"],
             "ac_accounts": ac,
             "within_roe": data["within_roe"],
+            "outside_roe": ac - data["within_roe"],
             "in_sequence": data["in_sequence"],
             "pct_within_roe": _pct(data["within_roe"], ac),
+            "pct_outside_roe": _pct(ac - data["within_roe"], ac),
             "pct_in_sequence": _pct(data["in_sequence"], ac),
             "overdue_tasks": data["overdue_tasks"],
         })
@@ -3240,8 +3242,10 @@ def compute_book_coverage() -> dict:
         "total_accounts": _sum("total_accounts"),
         "ac_accounts": total_ac,
         "within_roe": _sum("within_roe"),
+        "outside_roe": _sum("outside_roe"),
         "in_sequence": _sum("in_sequence"),
         "pct_within_roe": _pct(_sum("within_roe"), total_ac),
+        "pct_outside_roe": _pct(_sum("outside_roe"), total_ac),
         "pct_in_sequence": _pct(_sum("in_sequence"), total_ac),
         "overdue_tasks": _sum("overdue_tasks"),
     }
