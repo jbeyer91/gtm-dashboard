@@ -152,9 +152,18 @@
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Why reps connect above or below team average</p>
 </div>
 
+<div class="flex flex-col gap-3 mb-6">
+  {{ period_filter(period, periods, {"team": team, "segment": segment, "comparison_mode": comparison_mode, "table_sort": table_sort}) }}
+  {% if data.filters.teams|length > 1 %}
+  <div class="flex flex-wrap items-center gap-3">
+    {{ filter_select("Team", team, data.filters.teams, "team") }}
+  </div>
+  {% endif %}
+</div>
+
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-8 text-center">
-  <p class="text-base font-semibold text-slate-800">No eligible call data for selected filters</p>
-  <p class="text-sm text-slate-500 mt-2">Try a broader period, team, or rep selection.</p>
+  <p class="text-base font-semibold text-slate-800">No eligible call data for this period yet.</p>
+  <p class="text-sm text-slate-500 mt-2">Try another period or team to broaden the analysis.</p>
 </div>
 {% else %}
 <div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
