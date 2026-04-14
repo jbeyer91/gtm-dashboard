@@ -2,6 +2,9 @@ import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+_CT = ZoneInfo("America/Chicago")
 from statistics import median
 from cache_utils import ttl_cache
 from hubspot import (
@@ -3561,7 +3564,7 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
                 first_dial_dt = _parse_hs_datetime(str(raw_call_ts).strip())
                 stl_seconds = max(0, int((first_dial_dt - effective_booking_dt).total_seconds()))
                 stl_display = _fmt_stl(stl_seconds)
-                first_dial_str = first_dial_dt.strftime("%Y-%m-%d %H:%M UTC")
+                first_dial_str = first_dial_dt.astimezone(_CT).strftime("%Y-%m-%d %H:%M CT")
             except ValueError:
                 stl_seconds = None
                 stl_display = "—"
@@ -3596,7 +3599,7 @@ def compute_speed_to_lead(period: str, team: str = "all") -> dict:
             "contact_id":      cid,
             "contact_name":    contact_name,
             "contact_url":     contact_url,
-            "booking_dt":      booking_dt.strftime("%Y-%m-%d %H:%M UTC"),
+            "booking_dt":      booking_dt.astimezone(_CT).strftime("%Y-%m-%d %H:%M CT"),
             "booking_ts":      booking_dt.timestamp(),   # for sorting
             "off_hours":       off_hours,
             "first_dial_dt":   first_dial_str,
