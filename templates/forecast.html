@@ -4,27 +4,61 @@
 {% block content %}
 <div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">Forecast</h1>
-  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">HubSpot Submitted Forecast vs Quota</p>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Signal-Adjusted Scenarios vs Manual Submission</p>
 </div>
 
 {{ csv_link(url_for('forecast_csv') ~ '?period=' ~ period) }}
 
 {% set t = data.totals %}
+{% set st = scenarios.totals %}
 {% if prior_label %}<p class="text-xs text-gray-400 -mt-1 mb-3">vs {{ prior_label }}</p>{% endif %}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  {{ stat_card("Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
-  {{ stat_card("Won Revenue", fmt_money(t.won_amt), delta=deltas.won_amt, delta_fmt='money') }}
-  {{ stat_card("Attainment", fmt_pct(t.attain_pct) if t.attain_pct is not none else "—", (fmt_money(t.gap_amt) ~ " gap") if t.gap_amt is not none else "", delta=deltas.attain_pct, delta_fmt='pct') }}
-  {{ stat_card("Projected", fmt_money(t.projected_amt) if t.projected_amt is not none else "—", "signal-adjusted forecast", delta=deltas.projected_amt, delta_fmt='money') }}
+
+{# ── Stat cards ──────────────────────────────────────────────────────────── #}
+{% set mod_amt = st.moderate if st else 0 %}
+{% set sub_amt = t.submitted_amt if t.submitted_amt is not none else 0 %}
+{% set vs_mod = sub_amt - mod_amt %}
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+  {{ stat_card("Team Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
+  {{ stat_card("Conservative", fmt_money(st.conservative) if st else "—", "proj % ≥ 90%", tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.") }}
+  {{ stat_card("Moderate", fmt_money(st.moderate) if st else "—", "proj % ≥ 75%", tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.") }}
+  {{ stat_card("Aggressive", fmt_money(st.aggressive) if st else "—", "proj % ≥ 60%", tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.") }}
+  {% if period == "this_month" %}
+  {% if vs_mod != 0 %}
+    {% set vs_label %}{% if vs_mod > 0 %}+{{ fmt_money(vs_mod) }} over model{% else %}-{{ fmt_money(vs_mod|abs) }} under model{% endif %}{% endset %}
+    {{ stat_card("Manual Submission", fmt_money(sub_amt) if t.submitted_amt is not none else "—", vs_label) }}
+  {% else %}
+    {{ stat_card("Manual Submission", fmt_money(sub_amt) if t.submitted_amt is not none else "—") }}
+  {% endif %}
+  {% else %}
+  {{ stat_card("Manual Submission", "—", "this_month only") }}
+  {% endif %}
+</div>
+
+{# ── Legend ───────────────────────────────────────────────────────────────── #}
+<div class="flex items-center gap-5 text-[11px] text-gray-500 mb-6 px-1">
+  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#185FA5;"></span> Conservative ≥90%</span>
+  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#3B6D11;"></span> Moderate ≥75%</span>
+  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#BA7517;"></span> Aggressive ≥60%</span>
+  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#534AB7;"></span> Manual submission</span>
+  {% if data.benchmarks %}
+  <span class="text-gray-300 ml-auto">Scoring calibrated from {{ data.benchmarks.sample_size }} closed deals ({{ (data.benchmarks.overall_win_rate * 100) | round(1) }}% win rate)</span>
+  {% endif %}
 </div>
 
 {# ── column count helper ─────────────────────────────────────────────────── #}
-{% set col_count = 7 if period == "this_month" else 6 %}
+{% set col_count = 9 if period == "this_month" else 8 %}
+
+{# ── scenario lookup helper ──────────────────────────────────────────────── #}
+{% set by_owner = scenarios.by_owner if scenarios else {} %}
 
 {# ── reusable row macro ───────────────────────────────────────────────────── #}
-{% macro forecast_row(row, is_subtotal=false, period="") %}
-<tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-slate-50 transition-colors duration-100{% endif %}">
-  <td class="px-4 py-3 {% if is_subtotal %}text-xs uppercase tracking-wider{% else %}font-medium{% endif %}">{{ row.ae }}</td>
+{% macro forecast_row(row, is_subtotal=false, period="", owner_scenario=none, group_deals=none) %}
+{% set os = owner_scenario or {} %}
+<tr class="{% if is_subtotal %}bg-gray-50 font-semibold border-t border-gray-200 text-gray-700{% else %}hover:bg-slate-50 transition-colors duration-100 cursor-pointer{% endif %}"
+    {% if not is_subtotal %}data-expand-rep="{{ row.owner_id }}"{% endif %}>
+  <td class="px-4 py-3 {% if is_subtotal %}text-xs uppercase tracking-wider{% else %}font-medium{% endif %}">
+    {% if not is_subtotal %}<span class="text-gray-400 mr-1 text-xs rep-chevron" data-chevron-for="{{ row.owner_id }}">&#9654;</span>{% endif %}{{ row.ae }}
+  </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">
     {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
   </td>
@@ -42,20 +76,151 @@
     {% else %}text-red-500{% endif %}">
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
-  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold
-    {% if row.projected_amt is not none and row.gap_amt is not none %}
-      {% if row.projected_amt >= row.gap_amt %}text-green-600
-      {% elif row.projected_amt >= row.gap_amt * 0.5 %}text-yellow-600
-      {% else %}text-orange-500{% endif %}
-    {% else %}text-gray-400{% endif %}">
-    {% if row.projected_amt is not none %}{{ fmt_money(row.projected_amt) }}{% else %}—{% endif %}
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold" style="color:#185FA5;">
+    {{ fmt_money(os.get('conservative', 0)) }}
+  </td>
+  <td class="px-4 py-3 text-right tabular-nums font-semibold" style="color:#3B6D11;">
+    {{ fmt_money(os.get('moderate', 0)) }}
+  </td>
+  <td class="px-4 py-3 text-right tabular-nums font-semibold" style="color:#BA7517;">
+    {{ fmt_money(os.get('aggressive', 0)) }}
   </td>
   {% if period == "this_month" %}
-  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}text-indigo-600">
+  <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 {% if not is_subtotal %}font-semibold {% endif %}" style="color:#534AB7;">
     {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal text-xs">Not submitted</span>{% endif %}
   </td>
   {% endif %}
 </tr>
+{# ── Inline drill-down (hidden by default) ─────────────────────────────── #}
+{% if not is_subtotal and group_deals %}
+{% set rep_deals = [] %}
+{% for g in group_deals if g.owner_id == row.owner_id %}{% set _ = rep_deals.extend(g.deals) %}{% endfor %}
+{% if rep_deals %}
+{% set rep_moderate = os.get('moderate', 0) %}
+{% set rep_sub = row.submitted_amt if row.submitted_amt is not none else 0 %}
+{% set rep_vs = rep_sub - rep_moderate %}
+<tr class="rep-detail hidden" data-detail-for="{{ row.owner_id }}">
+  <td colspan="{{ col_count }}" class="p-0">
+    <div class="bg-slate-50 border-t border-b border-gray-200">
+      {# Deal table #}
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="text-[10px] font-semibold text-slate-400 tracking-wider uppercase bg-gray-100 border-b border-gray-200">
+            <tr>
+              <th class="px-4 py-2 text-left">Deal</th>
+              <th class="px-4 py-2 text-right">Amount</th>
+              <th class="px-4 py-2 text-left">Stage</th>
+              <th class="px-4 py-2 text-right">Close</th>
+              <th class="px-4 py-2 text-right">Biz Days</th>
+              <th class="px-4 py-2 text-right" data-tip="Signal-adjusted close probability. Derived from 6 signals: time feasibility, activity, deal size, source, rep history and employee segment. Benchmarked against trailing 180-day closed deals.">Proj %</th>
+              <th class="px-4 py-2 text-right" style="color:#185FA5;" data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">Conservative</th>
+              <th class="px-4 py-2 text-right" style="color:#3B6D11;" data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">Moderate</th>
+              <th class="px-4 py-2 text-right" style="color:#BA7517;" data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">Aggressive</th>
+              <th class="px-4 py-2 text-left">Risk Flags</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            {% for deal in rep_deals %}
+            <tr class="hover:bg-slate-50 transition-colors duration-100">
+              <td class="px-4 py-2 font-medium text-gray-800 max-w-[200px] truncate">
+                {% if portal_id and deal.deal_id %}
+                <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ deal.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ deal.deal_name }}</a>
+                {% else %}
+                {{ deal.deal_name }}
+                {% endif %}
+              </td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
+              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-gray-600">
+                {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
+              </td>
+              <td class="px-4 py-2 text-right tabular-nums
+                {% if deal.biz_days_remaining is not none and deal.biz_days_remaining <= 3 %}text-red-600 font-semibold
+                {% elif deal.biz_days_remaining is not none and deal.biz_days_remaining <= 7 %}text-amber-600
+                {% else %}text-gray-600{% endif %}">
+                {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
+              </td>
+              <td class="px-4 py-2 text-right tabular-nums font-semibold
+                {% if deal.projected_prob >= 0.75 %}text-green-600
+                {% elif deal.projected_prob >= 0.50 %}text-amber-600
+                {% else %}text-red-500{% endif %}">
+                {{ "%.0f" | format(deal.projected_prob * 100) }}%
+              </td>
+              {# Conservative: show $ if prob >= 0.90, else dimmed dash #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#185FA5;">
+                {% if deal.projected_prob >= 0.90 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              </td>
+              {# Moderate: show $ if prob >= 0.75 #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#3B6D11;">
+                {% if deal.projected_prob >= 0.75 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              </td>
+              {# Aggressive: show $ if prob >= 0.60 #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#BA7517;">
+                {% if deal.projected_prob >= 0.60 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              </td>
+              <td class="px-4 py-2">
+                <div class="flex flex-wrap gap-1">
+                  {% for severity, msg in deal.risk_flags %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border
+                    {% if severity == 'high' %}bg-red-50 text-red-700 border-red-200
+                    {% elif severity == 'medium' %}bg-amber-50 text-amber-700 border-amber-200
+                    {% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}">
+                    {{ msg }}
+                  </span>
+                  {% endfor %}
+                  {% if not deal.risk_flags %}
+                  <span class="text-gray-400 text-[10px]">No flags</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {# Gap summary bar #}
+      <div class="grid grid-cols-5 gap-px bg-gray-200 border-t border-gray-200 text-xs">
+        <div class="bg-white px-4 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Conservative</p>
+          <p class="font-bold tabular-nums" style="color:#185FA5;">{{ fmt_money(os.get('conservative', 0)) }}</p>
+        </div>
+        <div class="bg-white px-4 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Moderate</p>
+          <p class="font-bold tabular-nums" style="color:#3B6D11;">{{ fmt_money(os.get('moderate', 0)) }}</p>
+        </div>
+        <div class="bg-white px-4 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Aggressive</p>
+          <p class="font-bold tabular-nums" style="color:#BA7517;">{{ fmt_money(os.get('aggressive', 0)) }}</p>
+        </div>
+        <div class="bg-white px-4 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Manual Submission</p>
+          <p class="font-bold tabular-nums" style="color:#534AB7;">
+            {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal">—</span>{% endif %}
+          </p>
+        </div>
+        <div class="bg-white px-4 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">vs Moderate</p>
+          {% if row.submitted_amt is not none %}
+            {% if rep_vs > 0 %}
+            <p class="font-bold tabular-nums text-red-600">+{{ fmt_money(rep_vs) }}</p>
+            <p class="text-[10px] text-red-500 mt-0.5">Rep is over model</p>
+            {% elif rep_vs < 0 %}
+            <p class="font-bold tabular-nums text-green-600">-{{ fmt_money(rep_vs|abs) }}</p>
+            <p class="text-[10px] text-green-500 mt-0.5">Rep is under model</p>
+            {% else %}
+            <p class="font-bold tabular-nums text-gray-500">$0</p>
+            <p class="text-[10px] text-gray-400 mt-0.5">Matches model</p>
+            {% endif %}
+          {% else %}
+          <p class="text-gray-400 italic font-normal">—</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </td>
+</tr>
+{% endif %}
+{% endif %}
 {% endmacro %}
 
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -67,14 +232,25 @@
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Won $</th>
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-orange-600">
-          Projected $
-          <span class="block text-orange-400 font-normal normal-case tracking-normal">signal-adjusted</span>
+        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200" style="color:#185FA5;"
+            data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">
+          Conservative
+          <span class="block font-normal normal-case tracking-normal" style="color:#185FA5; opacity:0.6;">≥ 90%</span>
+        </th>
+        <th class="px-4 py-3 text-right font-semibold" style="color:#3B6D11;"
+            data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">
+          Moderate
+          <span class="block font-normal normal-case tracking-normal" style="color:#3B6D11; opacity:0.6;">≥ 75%</span>
+        </th>
+        <th class="px-4 py-3 text-right font-semibold" style="color:#BA7517;"
+            data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">
+          Aggressive
+          <span class="block font-normal normal-case tracking-normal" style="color:#BA7517; opacity:0.6;">≥ 60%</span>
         </th>
         {% if period == "this_month" %}
-        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 text-indigo-600">
+        <th class="px-4 py-3 text-right font-semibold border-l border-gray-200" style="color:#534AB7;">
           Forecast Submission
-          <span class="block text-indigo-400 font-normal normal-case tracking-normal">{{ this_month_label }}</span>
+          <span class="block font-normal normal-case tracking-normal" style="color:#534AB7; opacity:0.6;">{{ this_month_label }}</span>
         </th>
         {% endif %}
       </tr>
@@ -89,12 +265,18 @@
         </td>
       </tr>
     </tbody>
-    {# Rep rows #}
+    {# Rep rows + inline drill-downs #}
     <tbody class="divide-y divide-gray-100">
       {% for row in group.rows %}
-        {{ forecast_row(row, period=period) }}
+        {{ forecast_row(row, period=period, owner_scenario=by_owner.get(row.owner_id, {}), group_deals=data.deal_details) }}
       {% endfor %}
-      {{ forecast_row(group.subtotal, is_subtotal=true, period=period) }}
+      {# Subtotal — compute team-level scenario sums #}
+      {% set team_scenario = {"conservative": 0, "moderate": 0, "aggressive": 0} %}
+      {% for row in group.rows %}
+        {% set rs = by_owner.get(row.owner_id, {}) %}
+        {% set _ = team_scenario.update({"conservative": team_scenario.conservative + rs.get("conservative", 0), "moderate": team_scenario.moderate + rs.get("moderate", 0), "aggressive": team_scenario.aggressive + rs.get("aggressive", 0)}) %}
+      {% endfor %}
+      {{ forecast_row(group.subtotal, is_subtotal=true, period=period, owner_scenario=team_scenario) }}
     </tbody>
     {% endfor %}
 
@@ -118,11 +300,17 @@
           {% else %}text-red-500{% endif %}">
           {% if t.gap_amt is not none %}{{ fmt_money(t.gap_amt) }}{% else %}—{% endif %}
         </td>
-        <td class="px-4 py-3 text-right border-l border-gray-100 font-semibold text-orange-600">
-          {% if t.projected_amt is not none %}{{ fmt_money(t.projected_amt) }}{% else %}—{% endif %}
+        <td class="px-4 py-3 text-right border-l border-gray-100 font-semibold" style="color:#185FA5;">
+          {{ fmt_money(st.conservative) if st else "—" }}
+        </td>
+        <td class="px-4 py-3 text-right font-semibold" style="color:#3B6D11;">
+          {{ fmt_money(st.moderate) if st else "—" }}
+        </td>
+        <td class="px-4 py-3 text-right font-semibold" style="color:#BA7517;">
+          {{ fmt_money(st.aggressive) if st else "—" }}
         </td>
         {% if period == "this_month" %}
-        <td class="px-4 py-3 text-right border-l border-gray-100 text-indigo-600">
+        <td class="px-4 py-3 text-right border-l border-gray-100" style="color:#534AB7;">
           {% if t.submitted_amt is not none %}{{ fmt_money(t.submitted_amt) }}{% else %}—{% endif %}
         </td>
         {% endif %}
@@ -131,102 +319,21 @@
   </table>
 </div>
 
-{# ── Projected Forecast · Deal Detail ────────────────────────────────────── #}
-{% if data.deal_details %}
-<details class="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6">
-  <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900 select-none">
-    Projected Forecast · Deal Detail
-    <span class="text-gray-400 font-normal">({{ data.deal_details | map(attribute='deals') | map('length') | sum }} deals)</span>
-    {% if data.benchmarks %}
-    <span class="text-gray-300 font-normal text-xs ml-2">· Scoring calibrated from {{ data.benchmarks.sample_size }} closed deals ({{ (data.benchmarks.overall_win_rate * 100) | round(1) }}% win rate)</span>
-    {% endif %}
-  </summary>
-
-  {% for group in data.deal_details %}
-  {% if group.deals %}
-  <div class="border-t border-gray-100">
-    <div class="px-6 py-3 bg-slate-50 flex items-center justify-between">
-      <span class="text-sm font-semibold text-gray-700">{{ group.ae }}</span>
-      <span class="text-sm font-semibold text-orange-600">Projected: {{ fmt_money(group.projected_amt) }}</span>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        <thead class="text-[10px] font-semibold text-slate-400 tracking-wider uppercase bg-gray-50 border-b border-gray-100">
-          <tr>
-            <th class="px-4 py-2 text-left">Deal</th>
-            <th class="px-4 py-2 text-right">Amount</th>
-            <th class="px-4 py-2 text-left">Stage</th>
-            <th class="px-4 py-2 text-left">Source</th>
-            <th class="px-4 py-2 text-left">Emp Size</th>
-            <th class="px-4 py-2 text-right">Close Date</th>
-            <th class="px-4 py-2 text-right">Biz Days</th>
-            <th class="px-4 py-2 text-right">Base %</th>
-            <th class="px-4 py-2 text-right">Proj %</th>
-            <th class="px-4 py-2 text-right">Proj $</th>
-            <th class="px-4 py-2 text-left">Risk Flags</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-50">
-          {% for deal in group.deals %}
-          <tr class="hover:bg-slate-50 transition-colors duration-100">
-            <td class="px-4 py-2 font-medium text-gray-800 max-w-[200px] truncate">
-              {% if portal_id and deal.deal_id %}
-              <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ deal.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ deal.deal_name }}</a>
-              {% else %}
-              {{ deal.deal_name }}
-              {% endif %}
-            </td>
-            <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
-            <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
-            <td class="px-4 py-2 text-gray-600">{{ deal.source }}</td>
-            <td class="px-4 py-2 text-gray-600">{{ deal.emp_segment if deal.emp_segment != "unknown" else "—" }}</td>
-            <td class="px-4 py-2 text-right tabular-nums text-gray-600">
-              {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
-            </td>
-            <td class="px-4 py-2 text-right tabular-nums
-              {% if deal.biz_days_remaining is not none and deal.biz_days_remaining <= 3 %}text-red-600 font-semibold
-              {% elif deal.biz_days_remaining is not none and deal.biz_days_remaining <= 7 %}text-amber-600
-              {% else %}text-gray-600{% endif %}">
-              {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
-            </td>
-            <td class="px-4 py-2 text-right tabular-nums text-gray-500">{{ "%.0f" | format(deal.base_prob * 100) }}%</td>
-            <td class="px-4 py-2 text-right tabular-nums font-semibold
-              {% if deal.projected_prob >= 0.5 %}text-green-600
-              {% elif deal.projected_prob >= 0.2 %}text-yellow-600
-              {% elif deal.projected_prob > 0 %}text-red-500
-              {% else %}text-gray-400{% endif %}">
-              {{ "%.0f" | format(deal.projected_prob * 100) }}%
-              {% if deal.base_prob > 0 %}
-              {% set pct_change = ((deal.projected_prob - deal.base_prob) / deal.base_prob * 100) | round(0) | int %}
-              {% if pct_change != 0 %}
-              <span class="text-[10px] font-normal {% if pct_change > 0 %}text-green-500{% else %}text-red-400{% endif %}">({{ "%+d" | format(pct_change) }}%)</span>
-              {% endif %}
-              {% endif %}
-            </td>
-            <td class="px-4 py-2 text-right tabular-nums font-semibold">{{ fmt_money(deal.projected_amt) }}</td>
-            <td class="px-4 py-2">
-              <div class="flex flex-wrap gap-1">
-                {% for severity, msg in deal.risk_flags %}
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border
-                  {% if severity == 'high' %}bg-red-50 text-red-700 border-red-200
-                  {% elif severity == 'medium' %}bg-amber-50 text-amber-700 border-amber-200
-                  {% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}">
-                  {{ msg }}
-                </span>
-                {% endfor %}
-                {% if not deal.risk_flags %}
-                <span class="text-green-500 text-[10px]">No flags</span>
-                {% endif %}
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endif %}
-  {% endfor %}
-</details>
-{% endif %}
+{# ── Expand/collapse JS ──────────────────────────────────────────────────── #}
+<script>
+(function () {
+  document.querySelectorAll('[data-expand-rep]').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var id = tr.getAttribute('data-expand-rep');
+      var detail = document.querySelector('[data-detail-for="' + id + '"]');
+      if (!detail) return;
+      var open = !detail.classList.contains('hidden');
+      detail.classList.toggle('hidden');
+      var chev = document.querySelector('[data-chevron-for="' + id + '"]');
+      if (chev) chev.style.transform = open ? '' : 'rotate(90deg)';
+    });
+  });
+})();
+</script>
+<style>.rep-chevron { display: inline-block; transition: transform 0.15s; font-size: 8px; }</style>
 {% endblock %}
