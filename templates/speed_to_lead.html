@@ -336,31 +336,7 @@ window.sortRepTable = function (mode) {
 // Apply default sort on page load
 sortRepTable('worst_median');
 
-// ── Bar segment tooltips ──────────────────────────────────────────────────
-(function () {
-  var tip = document.createElement('div');
-  tip.style.cssText = 'position:fixed;z-index:9999;background:#1e293b;color:#f8fafc;font-size:11px;line-height:1.4;padding:5px 9px;border-radius:5px;pointer-events:none;white-space:nowrap;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
-  document.body.appendChild(tip);
-
-  document.addEventListener('mouseover', function (e) {
-    var seg = e.target.closest('.bar-segment');
-    if (seg && seg.dataset.tip) {
-      tip.textContent = seg.dataset.tip;
-      tip.style.display = 'block';
-    }
-  });
-  document.addEventListener('mousemove', function (e) {
-    if (tip.style.display !== 'none') {
-      tip.style.left = (e.clientX + 12) + 'px';
-      tip.style.top  = (e.clientY - 32) + 'px';
-    }
-  });
-  document.addEventListener('mouseout', function (e) {
-    if (e.target.closest('.bar-segment')) {
-      tip.style.display = 'none';
-    }
-  });
-})();
+// Bar segment tooltips handled by global [data-tip] handler in base.html
 
 // ── Team Scatter Plot ─────────────────────────────────────────────────────────
 (function () {
