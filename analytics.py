@@ -2933,7 +2933,8 @@ def _highest_stage_reached(props):
 def _build_deal_links(deals):
     """Build Sankey link counts from a list of deals.
 
-    Returns list of {from, to, flow} dicts and summary totals.
+    Returns list of {from, to, flow} dicts and summary totals including
+    per-stage "reached" counts for the funnel strip.
     """
     _s1 = NB_STAGES["stage1"]
     _won = NB_STAGES["won"]
@@ -2941,6 +2942,8 @@ def _build_deal_links(deals):
 
     flow = defaultdict(int)
     totals = {"deal_created": 0, "won": 0, "lost": 0, "open": 0}
+    # Track how many deals reached each stage (for funnel strip)
+    reached = {"s1": 0, "s2": 0, "s3": 0, "s4": 0}
 
     for d in deals:
         props = d["properties"]
@@ -2948,10 +2951,14 @@ def _build_deal_links(deals):
         is_won = props.get("hs_is_closed_won") == "true"
         is_lost = props.get("hs_is_closed_lost") == "true"
         totals["deal_created"] += 1
+        reached["s1"] += 1  # every deal reaches Stage 1
 
         if is_won:
             totals["won"] += 1
             # Won deals passed through all stages
+            reached["s2"] += 1
+            reached["s3"] += 1
+            reached["s4"] += 1
             for i in range(len(_PROGRESSION) - 1):
                 flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
             flow[("Stage 4", "Won")] += 1
@@ -2960,6 +2967,10 @@ def _build_deal_links(deals):
             totals["lost"] += 1
             highest = _highest_stage_reached(props)
             highest_idx = _PROGRESSION.index(highest) if highest in _PROGRESSION else 0
+            # Count stages reached
+            for i in range(1, highest_idx + 1):
+                key = ["s1", "s2", "s3", "s4"][i]
+                reached[key] += 1
             # Flow through stages up to the highest reached
             for i in range(highest_idx):
                 flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
@@ -2970,14 +2981,33 @@ def _build_deal_links(deals):
             totals["open"] += 1
             # Still open — determine current stage
             current_idx = _PROGRESSION.index(stage) if stage in _PROGRESSION else 0
-            current_label = _STAGE_LABELS.get(stage, "Stage 1")
+            # Count stages reached
+            for i in range(1, current_idx + 1):
+                key = ["s1", "s2", "s3", "s4"][i]
+                reached[key] += 1
             # Flow through stages up to current
             for i in range(current_idx):
                 flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
             # Then to "Still Open"
+            current_label = _STAGE_LABELS.get(stage, "Stage 1")
             flow[(current_label, "Still Open")] += 1
 
     links = [{"from": k[0], "to": k[1], "flow": v} for k, v in flow.items() if v > 0]
+
+    # Build funnel steps: list of {label, count, pct} for the strip
+    _pct_safe = lambda num, den: round(num / den * 100) if den else 0
+    totals["funnel"] = [
+        {"label": "Stage 1", "count": reached["s1"]},
+        {"label": "Stage 2", "count": reached["s2"],
+         "pct": _pct_safe(reached["s2"], reached["s1"])},
+        {"label": "Stage 3", "count": reached["s3"],
+         "pct": _pct_safe(reached["s3"], reached["s2"])},
+        {"label": "Stage 4", "count": reached["s4"],
+         "pct": _pct_safe(reached["s4"], reached["s3"])},
+        {"label": "Won",     "count": totals["won"],
+         "pct": _pct_safe(totals["won"], reached["s4"])},
+    ]
+
     return links, totals
 
 
@@ -3082,13 +3112,21 @@ def compute_deal_flow(period: str) -> dict:
     # Rename "Stage 1" sources to connect from "Stage 1" node (already correct name)
     inbound_links.extend(deal_stage_links)
 
+    # Build full inbound funnel: pre-deal steps + deal stage funnel
+    _pct_ib = lambda num, den: round(num / den * 100) if den else 0
+    deal_funnel = inbound_deal_totals["funnel"]
+    # Add conversion % from Meetings Booked → Stage 1
+    if deal_funnel:
+        deal_funnel[0]["pct"] = _pct_ib(deal_funnel[0]["count"], meeting_booked)
+    inbound_funnel = [
+        {"label": "Forms Submitted", "count": form_submitted},
+        {"label": "Meetings Booked", "count": meeting_booked,
+         "pct": _pct_ib(meeting_booked, form_submitted)},
+    ] + deal_funnel
+
     inbound_totals = {
-        "form_submitted": form_submitted,
-        "no_meeting": no_meeting_count,
-        "meeting_booked": meeting_booked,
-        "meeting_to_deal_pct": round(inbound_deal_totals["deal_created"] / meeting_booked * 100) if meeting_booked else 0,
-        "form_to_meeting_pct": round(meeting_booked / form_submitted * 100) if form_submitted else 0,
         **inbound_deal_totals,
+        "funnel": inbound_funnel,
     }
 
     # ── Cold outreach Sankey links ────────────────────────────────────────────

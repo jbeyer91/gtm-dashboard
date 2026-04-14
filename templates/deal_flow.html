@@ -22,56 +22,41 @@
 {% set ib = data.inbound.totals %}
 {% set co = data.cold_outreach.totals %}
 
-{# ── Inbound: Pre-deal funnel strip + deal outcome cards ── #}
-<div id="stats-inbound">
-  {# Funnel strip: Form → Meeting → Deal #}
-  <div class="flex items-center gap-0 mb-4 bg-white rounded-xl border px-5 py-4" style="border-color:var(--border-muted);">
-    <div class="text-center flex-none" style="min-width:110px;">
-      <p class="text-[22px] font-bold text-slate-900 tabular-nums">{{ fmt_num(ib.form_submitted) }}</p>
-      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Forms Submitted</p>
-    </div>
-    <div class="flex-none px-3 text-center">
+{# ── Funnel strip macro ── #}
+{% macro funnel_strip(steps, lost, open) %}
+<div class="flex items-center mb-4 bg-white rounded-xl border px-5 py-4 overflow-x-auto" style="border-color:var(--border-muted);">
+  {% for step in steps %}
+    {% if step.pct is defined %}
+    <div class="flex-none px-2 text-center">
       <span class="text-slate-300 text-lg">&rarr;</span>
-      <p class="text-[10px] font-semibold tabular-nums mt-0.5" style="color:var(--accent);">{{ ib.form_to_meeting_pct }}%</p>
+      <p class="text-[10px] font-semibold tabular-nums mt-0.5" style="color:var(--accent);">{{ step.pct }}%</p>
     </div>
-    <div class="text-center flex-none" style="min-width:110px;">
-      <p class="text-[22px] font-bold text-slate-900 tabular-nums">{{ fmt_num(ib.meeting_booked) }}</p>
-      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Meetings Booked</p>
+    {% endif %}
+    <div class="text-center flex-none" style="min-width:80px;">
+      <p class="text-[22px] font-bold tabular-nums {% if step.label == 'Won' %}{% else %}text-slate-900{% endif %}" {% if step.label == 'Won' %}style="color:var(--good);"{% endif %}>{{ fmt_num(step.count) }}</p>
+      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">{{ step.label }}</p>
     </div>
-    <div class="flex-none px-3 text-center">
-      <span class="text-slate-300 text-lg">&rarr;</span>
-      <p class="text-[10px] font-semibold tabular-nums mt-0.5" style="color:var(--accent);">{{ ib.meeting_to_deal_pct }}%</p>
+  {% endfor %}
+  <div class="flex-1"></div>
+  <div class="flex gap-5">
+    <div class="text-center">
+      <p class="text-[22px] font-bold tabular-nums" style="color:var(--bad);">{{ fmt_num(lost) }}</p>
+      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Lost</p>
     </div>
-    <div class="text-center flex-none" style="min-width:110px;">
-      <p class="text-[22px] font-bold text-slate-900 tabular-nums">{{ fmt_num(ib.deal_created) }}</p>
-      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Deals Created</p>
-    </div>
-    <div class="flex-1"></div>
-    <div class="flex gap-5">
-      <div class="text-center">
-        <p class="text-[22px] font-bold tabular-nums" style="color:var(--good);">{{ fmt_num(ib.won) }}</p>
-        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Won</p>
-      </div>
-      <div class="text-center">
-        <p class="text-[22px] font-bold tabular-nums" style="color:var(--bad);">{{ fmt_num(ib.lost) }}</p>
-        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Lost</p>
-      </div>
-      <div class="text-center">
-        <p class="text-[22px] font-bold tabular-nums" style="color:var(--warn);">{{ fmt_num(ib.open) }}</p>
-        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Still Open</p>
-      </div>
+    <div class="text-center">
+      <p class="text-[22px] font-bold tabular-nums" style="color:var(--warn);">{{ fmt_num(open) }}</p>
+      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-0.5">Still Open</p>
     </div>
   </div>
 </div>
+{% endmacro %}
 
-{# ── Cold outreach: deal outcome cards ── #}
+<div id="stats-inbound">
+  {{ funnel_strip(ib.funnel, ib.lost, ib.open) }}
+</div>
+
 <div id="stats-cold" class="hidden">
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-    {{ stat_card("Stage 1 Deals", fmt_num(co.deal_created)) }}
-    {{ stat_card("Won", fmt_num(co.won)) }}
-    {{ stat_card("Lost", fmt_num(co.lost)) }}
-    {{ stat_card("Still Open", fmt_num(co.open)) }}
-  </div>
+  {{ funnel_strip(co.funnel, co.lost, co.open) }}
 </div>
 
 {# ── Sankey chart ── #}
