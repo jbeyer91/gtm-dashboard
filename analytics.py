@@ -3136,9 +3136,13 @@ def compute_deal_flow(period: str) -> dict:
     # ── Cold outreach Sankey links ────────────────────────────────────────────
     cold_stage_links, cold_totals = _build_deal_links(cold_deals)
 
+    # ── All deals (combined) Sankey links ─────────────────────────────────────
+    all_stage_links, all_totals = _build_deal_links(all_deals)
+
     return {
         "inbound": {"links": inbound_links, "totals": inbound_totals},
         "cold_outreach": {"links": cold_stage_links, "totals": cold_totals},
+        "all": {"links": all_stage_links, "totals": all_totals},
         "period": period,
     }
 
