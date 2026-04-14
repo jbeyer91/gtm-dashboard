@@ -140,59 +140,73 @@
         </tr>
         {# ── Rep drill-down detail row ── #}
         <tr id="rep-{{ row.owner_id }}" class="hidden" data-detail-for="{{ row.owner_id }}">
-          <td colspan="6" class="px-0 py-0 bg-slate-50 border-t border-b border-slate-100">
+          <td colspan="6" class="px-0 py-0" style="background:#ECEDF1;">
+            <div style="padding:12px 14px;">
 
-            {# Outcome mini-table #}
+            {# ── Element 1: Summary group cards ── #}
             {% if row.outcome_buckets %}
-            <div class="px-10 pt-3 pb-2">
-              <table class="w-full text-xs rounded-lg overflow-hidden border border-slate-200">
-                <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase" style="background: #f1f5f9;">
-                  <tr>
-                    <th class="px-3 py-1.5 text-left font-medium">Group</th>
-                    <th class="px-3 py-1.5 text-right font-medium">Leads</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that showed up">Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were no-shows">No-Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with any NB deal created">Deal Created</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with a deal at Stage 2+">Reached S2+</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200 bg-white">
-                  {% for b in row.outcome_buckets %}
-                  <tr>
-                    <td class="px-3 py-1.5 font-medium">{{ b.label }}</td>
-                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
-                      {{ fmt_pct(b.pct_completed) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums
-                      {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
-                      {{ fmt_pct(b.pct_no_show) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">
-                      {{ fmt_pct(b.pct_cancelled) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-                      {{ fmt_pct(b.pct_deal) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-                      {{ fmt_pct(b.pct_s2) }}
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              {% for b in row.outcome_buckets %}
+              <div class="bg-white rounded-lg" style="padding:8px 10px; border:0.5px solid rgba(0,0,0,0.08);">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-[11px] font-medium text-slate-400">{{ b.label }} leads</span>
+                  <span class="text-[11px] font-medium" style="color:#1A1F36;">{{ b.lead_count }}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span class="text-[11px]"><span class="text-slate-400">Show rate</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_completed) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">No-show</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_no_show) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">Deal created</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_deal) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">Reached S2+</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_s2) }}</span></span>
+                </div>
+              </div>
+              {% endfor %}
             </div>
             {% endif %}
 
-            {# Lead list #}
+            {# ── Element 2: Distribution bar ── #}
+            {% set ns_r = namespace(lt5=0, lt60=0, gt60=0, nd=0, total=0) %}
+            {% for lead in data.rows if lead.owner_id == row.owner_id and not lead.disqualified %}
+              {% set ns_r.total = ns_r.total + 1 %}
+              {% if lead.stl_seconds is none %}{% set ns_r.nd = ns_r.nd + 1 %}
+              {% elif lead.stl_seconds <= 300 %}{% set ns_r.lt5 = ns_r.lt5 + 1 %}
+              {% elif lead.stl_seconds <= 3600 %}{% set ns_r.lt60 = ns_r.lt60 + 1 %}
+              {% else %}{% set ns_r.gt60 = ns_r.gt60 + 1 %}{% endif %}
+            {% endfor %}
+            {% if ns_r.total > 0 %}
+            {% set rp_lt5  = (ns_r.lt5  / ns_r.total * 100)|round(1) %}
+            {% set rp_mid  = (ns_r.lt60 / ns_r.total * 100)|round(1) %}
+            {% set rp_gt1  = (ns_r.gt60 / ns_r.total * 100)|round(1) %}
+            {% set rp_nd   = (ns_r.nd   / ns_r.total * 100)|round(1) %}
+            <div class="mb-3">
+              <div class="relative" style="height:16px;">
+                <div class="flex h-full overflow-hidden" style="border-radius:3px;">
+                  {% if rp_lt5 > 0 %}<div style="width:{{ rp_lt5 }}%;background:#1D9E75;" class="h-full"></div>{% endif %}
+                  {% if rp_mid > 0 %}<div style="width:{{ rp_mid }}%;background:#7C5CBF;" class="h-full"></div>{% endif %}
+                  {% if rp_gt1 > 0 %}<div style="width:{{ rp_gt1 }}%;background:#BA7517;" class="h-full"></div>{% endif %}
+                  {% if rp_nd  > 0 %}<div style="width:{{ rp_nd  }}%;background:#A32D2D;" class="h-full"></div>{% endif %}
+                </div>
+                {# 5-min tick mark #}
+                {% set tick_pos = rp_lt5 %}
+                {% if tick_pos > 0 and tick_pos < 100 %}
+                <div class="absolute top-0" style="left:{{ tick_pos }}%;height:100%;border-left:1.5px solid #534AB7;"></div>
+                <span class="absolute text-[9px] font-medium" style="left:{{ tick_pos }}%;top:-14px;transform:translateX(-50%);color:#534AB7;">5m</span>
+                {% endif %}
+              </div>
+              <div class="flex items-center justify-between mt-1.5">
+                <span class="text-[10px] text-slate-400">≤ 5 min: {{ rp_lt5 }}%</span>
+                <span class="text-[11px] font-medium"
+                  style="color:{% if row.median_stl_seconds is none %}#6B7280{% elif row.median_stl_seconds <= 300 %}#1D9E75{% elif row.median_stl_seconds <= 7200 %}#BA7517{% else %}#A32D2D{% endif %};">
+                  Median: {{ row.median_stl_display }}
+                </span>
+              </div>
+            </div>
+            {% endif %}
+
+            {# ── Element 3: Contact-level lead table ── #}
             <table class="w-full text-xs">
               <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase">
                 <tr>
-                  <th class="pl-10 pr-3 py-2 text-left font-medium">Contact</th>
+                  <th class="pl-3 pr-3 py-2 text-left font-medium">Contact</th>
                   <th class="px-3 py-2 text-left font-medium">Booking</th>
                   <th class="px-3 py-2 text-left font-medium">First Dial</th>
                   <th class="px-3 py-2 text-right font-medium">STL</th>
@@ -203,7 +217,7 @@
               <tbody class="divide-y divide-slate-100">
                 {% for lead in data.rows if lead.owner_id == row.owner_id %}
                 <tr class="hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
-                  <td class="pl-10 pr-3 py-2 font-medium">
+                  <td class="pl-3 pr-3 py-2 font-medium">
                     {% if lead.contact_url %}
                       <a href="{{ lead.contact_url }}" target="_blank" rel="noopener"
                          class="text-blue-600 hover:underline">{{ lead.contact_name }}</a>
@@ -249,6 +263,8 @@
                 {% endfor %}
               </tbody>
             </table>
+
+            </div>{# end padding wrapper #}
           </td>
         </tr>
         {% endfor %}
