@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, team_filter, stat_card, fmt_pct %}
+{% from "macros.html" import period_filter, team_filter, fmt_pct %}
 {% block title %} — Speed to Lead{% endblock %}
 {% block content %}
 
@@ -19,294 +19,257 @@
 
 {% set s = data.summary %}
 
-{# ── Summary cards ── #}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  {{ stat_card("Inbound Leads", s.lead_count,
-               delta=deltas.lead_count,
-               tip="Qualified leads (not_booked and disqualified excluded) with a booking in this period.") }}
-  {{ stat_card("Median Speed to Lead", s.median_stl_display,
-               tip="Median time from business-hours open to first outbound call, across dialed leads only. Adjusted for after-hours bookings.") }}
-  {{ stat_card("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min),
-               delta=deltas.pct_within_5min, delta_fmt='pct',
-               tip="% of qualified leads reached with an outbound call within 5 minutes of business-hours open.") }}
-  {{ stat_card("Never Dialed", fmt_pct(s.pct_never_dialed),
-               delta=deltas.pct_never_dialed, delta_fmt='pct', invert=true,
-               tip="% of qualified leads with no outbound call logged after the booking timestamp.") }}
-</div>
-
-{# ── By Rep table (expandable) ── #}
-{% set pct_lt5    = s.pct_within_5min %}
-{% set pct_5to1hr = [s.pct_within_1hr - s.pct_within_5min, 0]|max %}
-{% set pct_gt1hr  = [100 - s.pct_within_1hr - s.pct_never_dialed, 0]|max %}
-{% set pct_nd     = s.pct_never_dialed %}
-{% set ns_c = namespace(lt5=0, lt60=0, gt60=0, nd=0) %}
-{% for row in data.rows %}{% if not row.disqualified %}{% if row.stl_seconds is none %}{% set ns_c.nd = ns_c.nd + 1 %}{% elif row.stl_seconds <= 300 %}{% set ns_c.lt5 = ns_c.lt5 + 1 %}{% elif row.stl_seconds <= 3600 %}{% set ns_c.lt60 = ns_c.lt60 + 1 %}{% else %}{% set ns_c.gt60 = ns_c.gt60 + 1 %}{% endif %}{% endif %}{% endfor %}
-
-{# ── Charts ── #}
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-
-  {# Left: Response time distribution (CSS segmented bar) #}
-  <div class="bg-white rounded-xl border px-5 py-5" style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-    <div class="flex items-center gap-2.5 mb-1">
-      <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-      <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Response Time Distribution</h2>
-    </div>
-    <p class="text-xs text-slate-400 mb-5 pl-3.5">Share of leads by how quickly they were called</p>
-    <div class="flex h-3 rounded-full overflow-hidden" style="background: #f1f5f9;">
-      {% if pct_lt5 > 0 %}<div class="h-full cursor-help" style="width:{{ pct_lt5|round(1) }}%;background:#059669;" data-tip="≤ 5 min · {{ ns_c.lt5 }} leads ({{ pct_lt5|round(1) }}%)"></div>{% endif %}
-      {% if pct_5to1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_5to1hr|round(1) }}%;background:#6366f1;" data-tip="5 min – 1 hr · {{ ns_c.lt60 }} leads ({{ pct_5to1hr|round(1) }}%)"></div>{% endif %}
-      {% if pct_gt1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_gt1hr|round(1) }}%;background:#d97706;" data-tip="> 1 hr · {{ ns_c.gt60 }} leads ({{ pct_gt1hr|round(1) }}%)"></div>{% endif %}
-      {% if pct_nd > 0 %}<div class="h-full cursor-help" style="width:{{ pct_nd|round(1) }}%;background:#dc2626;" data-tip="Never dialed · {{ ns_c.nd }} leads ({{ pct_nd|round(1) }}%)"></div>{% endif %}
-    </div>
-    <div class="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-5">
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#059669;"></span><span class="text-xs text-slate-500">≤ 5 min</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt5 }} <span class="font-normal text-slate-400">· {{ pct_lt5|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#6366f1;"></span><span class="text-xs text-slate-500">5 min – 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt60 }} <span class="font-normal text-slate-400">· {{ pct_5to1hr|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#d97706;"></span><span class="text-xs text-slate-500">> 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.gt60 }} <span class="font-normal text-slate-400">· {{ pct_gt1hr|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#dc2626;"></span><span class="text-xs text-slate-500">Never dialed</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.nd }} <span class="font-normal text-slate-400">· {{ pct_nd|round(1) }}%</span></span>
-      </div>
-    </div>
-  </div>
-
-  {# Right: Median STL by rep (Chart.js horizontal bar) #}
-  {% if data.rep_rows %}
-  <div class="bg-white rounded-xl border px-5 py-5" style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-    <div class="flex items-center gap-2.5 mb-1">
-      <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-      <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Median Response by Rep</h2>
-    </div>
-    <p class="text-xs text-slate-400 mb-4 pl-3.5">Median speed to lead · dialed leads only</p>
-    <div style="position:relative;height:{{ [data.rep_rows|length * 44 + 20, 180]|max }}px;">
-      <canvas id="repStlChart"></canvas>
-    </div>
-  </div>
+{# ── Hero KPI cards ── #}
+{# Macro-free inline cards: no border, 8px radius, sentiment-aware deltas #}
+{% macro _kpi(label, value, delta, invert=false, fmt='num') %}
+<div class="bg-white rounded-lg px-5 py-4">
+  <p class="text-[22px] font-medium tabular-nums leading-none" style="color:#1A1F36;">{{ value }}</p>
+  <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-400 mt-1">{{ label }}</p>
+  {% if delta is not none and delta != 0 %}
+    {% set pos   = delta > 0 %}
+    {% set good  = (pos and not invert) or (not pos and invert) %}
+    {% set arrow = '↑' if pos else '↓' %}
+    {% set color = '#1D9E75' if good else '#A32D2D' %}
+    {% if fmt == 'pct' %}
+      <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ delta|abs|round(1) }}%</p>
+    {% elif fmt == 'stl' %}
+      {# Convert absolute seconds delta to readable duration #}
+      {% set abs_s = delta|abs|int %}
+      {% if abs_s < 60 %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ abs_s }}s</p>
+      {% elif abs_s < 3600 %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ (abs_s // 60) }}m {{ (abs_s % 60) }}s</p>
+      {% else %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ (abs_s // 3600) }}h {{ ((abs_s % 3600) // 60) }}m</p>
+      {% endif %}
+    {% else %}
+      <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ delta|abs|int }}</p>
+    {% endif %}
+  {% elif delta == 0 %}
+    <p class="text-[12px] text-slate-400 mt-1.5">— vs prior</p>
   {% endif %}
+</div>
+{% endmacro %}
 
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  {{ _kpi("Total Leads", s.lead_count, deltas.lead_count) }}
+  {{ _kpi("Median STL", s.median_stl_display, deltas.median_stl_seconds, invert=true, fmt='stl') }}
+  {{ _kpi("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min), deltas.pct_within_5min, fmt='pct') }}
+  {{ _kpi("Never Dialed", fmt_pct(s.pct_never_dialed), deltas.pct_never_dialed, invert=true, fmt='pct') }}
 </div>
 
+{# ── Team scatter plot ── #}
+{% if data.rep_rows %}
+<div class="bg-white rounded-lg px-5 py-5 mb-8">
+  <h2 class="text-[13px] font-semibold tracking-tight" style="color:#1A1F36;">Rep Performance</h2>
+  <p class="text-[12px] text-slate-400 mt-0.5 mb-4">Bubble size = lead volume · left and low = best · any never-dialed is a miss.</p>
+  <div style="position:relative;height:360px;">
+    <canvas id="scatterChart"></canvas>
+  </div>
+  <div class="flex items-center gap-5 mt-3">
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#1D9E75;"></span>On target (≤ 5 min median)</span>
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#BA7517;"></span>At risk (5 min – 2 hr)</span>
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#A32D2D;"></span>Off target (> 2 hr)</span>
+  </div>
+</div>
+{% endif %}
+
+{# ── Rep table ── #}
 {% if data.rep_rows %}
 <div class="mb-8">
-  <div class="flex items-center gap-2.5 mb-4">
-    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">By Rep</h2>
-    <span class="text-[11px] text-slate-400 font-normal">· click a row to expand</span>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-[13px] font-semibold tracking-tight" style="color:#1A1F36;">By Rep</h2>
+    <div class="flex items-center gap-1" id="sort-pills">
+      <button type="button" data-sort="worst_median" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer bg-white" style="color:#1A1F36;" onclick="sortRepTable('worst_median')">Worst median</button>
+      <button type="button" data-sort="most_nd" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600" onclick="sortRepTable('most_nd')">Most never-dialed</button>
+      <button type="button" data-sort="lead_vol" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600" onclick="sortRepTable('lead_vol')">Lead volume</button>
+    </div>
   </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
-        <tr>
-          <th class="px-4 py-3 text-left font-medium">Rep</th>
-          <th class="px-4 py-3 text-right font-medium">Leads</th>
-          <th class="px-4 py-3 text-right font-medium" title="Median time from business-hours open to first outbound call">Median STL</th>
-          <th class="px-4 py-3 text-right font-medium" title="% dialed within 5 minutes of lead opening">≤ 5 min</th>
-          <th class="px-4 py-3 text-right font-medium" title="% dialed within 1 hour of lead opening">≤ 1 hr</th>
-          <th class="px-4 py-3 text-right font-medium" title="% of leads with no outbound call after booking">Never Dialed</th>
+  <div class="bg-white rounded-lg overflow-x-auto">
+    <table class="w-full text-sm" id="rep-table">
+      <thead>
+        <tr class="text-[10px] uppercase font-normal text-slate-400 tracking-[0.06em]">
+          <th class="px-4 py-2.5 text-left font-normal">Rep</th>
+          <th class="px-4 py-2.5 text-right font-normal">Leads</th>
+          <th class="px-4 py-2.5 text-right font-normal">Median STL</th>
+          <th class="px-4 py-2.5 text-right font-normal">≤ 5 min</th>
+          <th class="px-4 py-2.5 text-right font-normal">≤ 1 hr</th>
+          <th class="px-4 py-2.5 text-right font-normal">Never Dialed</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="rep-tbody">
         {% for row in data.rep_rows %}
         {# ── Rep summary row ── #}
-        <tr class="border-t border-gray-100 hover:bg-slate-50 transition-colors duration-100 cursor-pointer select-none"
+        <tr class="rep-summary-row cursor-pointer select-none transition-colors duration-100 hover:bg-[#F4F5F8]"
+            style="border-bottom: 0.5px solid rgba(0,0,0,0.05);"
+            data-median="{{ row.median_stl_seconds if row.median_stl_seconds is not none else 999999 }}"
+            data-pctnd="{{ row.pct_never_dialed }}"
+            data-leads="{{ row.lead_count }}"
+            data-owner="{{ row.owner_id }}"
             onclick="toggleRepDetail('rep-{{ row.owner_id }}', this)">
-          <td class="px-4 py-3 font-medium flex items-center gap-2">
+          <td class="px-4 py-2 font-medium flex items-center gap-2" style="color:#1A1F36;">
             <svg class="rep-arrow w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
             </svg>
             {{ row.rep_name or "—" }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ row.lead_count }}</td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if row.median_stl_seconds is none %}text-gray-400
-            {% elif row.median_stl_seconds <= 900 %}text-green-600
-            {% elif row.median_stl_seconds <= 3600 %}text-yellow-600
-            {% else %}text-red-500{% endif %}">{{ row.median_stl_display }}</td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_within_5min >= 50 %}text-green-600{% elif row.pct_within_5min >= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums" style="color:#1A1F36;">{{ row.lead_count }}</td>
+          <td class="px-4 py-2 text-right">
+            {% if row.median_stl_seconds is none %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F0F0F2;color:#6B7280;">—</span>
+            {% elif row.median_stl_seconds <= 300 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#E6F5EF;color:#1D9E75;">{{ row.median_stl_display }}</span>
+            {% elif row.median_stl_seconds <= 7200 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#FDF3E3;color:#BA7517;">{{ row.median_stl_display }}</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F5E6E6;color:#A32D2D;">{{ row.median_stl_display }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_within_5min >= 50 %}#1D9E75{% elif row.pct_within_5min >= 25 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_within_5min) }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_within_1hr >= 75 %}text-green-600{% elif row.pct_within_1hr >= 50 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_within_1hr >= 75 %}#1D9E75{% elif row.pct_within_1hr >= 50 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_within_1hr) }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_never_dialed == 0 %}text-green-600{% elif row.pct_never_dialed <= 20 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_never_dialed == 0 %}#1D9E75{% elif row.pct_never_dialed <= 20 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_never_dialed) }}
           </td>
         </tr>
         {# ── Rep drill-down detail row ── #}
-        <tr id="rep-{{ row.owner_id }}" class="hidden">
-          <td colspan="6" class="px-0 py-0 bg-slate-50 border-t border-b border-slate-100">
+        <tr id="rep-{{ row.owner_id }}" class="hidden" data-detail-for="{{ row.owner_id }}">
+          <td colspan="6" class="px-0 py-0" style="background:#ECEDF1;">
+            <div style="padding:12px 14px;">
 
-            {# Outcome mini-table #}
+            {# ── Element 1: Summary group cards ── #}
             {% if row.outcome_buckets %}
-            <div class="px-10 pt-3 pb-2">
-              <table class="w-full text-xs rounded-lg overflow-hidden border border-slate-200">
-                <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase" style="background: #f1f5f9;">
-                  <tr>
-                    <th class="px-3 py-1.5 text-left font-medium">Group</th>
-                    <th class="px-3 py-1.5 text-right font-medium">Leads</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that showed up">Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were no-shows">No-Show Rate</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of resolved meetings that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with any NB deal created">Deal Created</th>
-                    <th class="px-3 py-1.5 text-right font-medium" data-tip="% of leads with a deal at Stage 2+">Reached S2+</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200 bg-white">
-                  {% for b in row.outcome_buckets %}
-                  <tr>
-                    <td class="px-3 py-1.5 font-medium">{{ b.label }}</td>
-                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
-                      {{ fmt_pct(b.pct_completed) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums
-                      {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
-                      {{ fmt_pct(b.pct_no_show) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums text-gray-500">
-                      {{ fmt_pct(b.pct_cancelled) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-                      {{ fmt_pct(b.pct_deal) }}
-                    </td>
-                    <td class="px-3 py-1.5 text-right tabular-nums font-semibold
-                      {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-                      {{ fmt_pct(b.pct_s2) }}
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              {% for b in row.outcome_buckets %}
+              <div class="bg-white rounded-lg" style="padding:8px 10px; border:0.5px solid rgba(0,0,0,0.08);">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-[11px] font-medium text-slate-400">{{ b.label }} leads</span>
+                  <span class="text-[11px] font-medium" style="color:#1A1F36;">{{ b.lead_count }}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span class="text-[11px]"><span class="text-slate-400">Show rate</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_completed) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">No-show</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_no_show) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">Deal created</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_deal) }}</span></span>
+                  <span class="text-[11px]"><span class="text-slate-400">Reached S2+</span> <span class="font-medium" style="color:#1A1F36;">{{ fmt_pct(b.pct_s2) }}</span></span>
+                </div>
+              </div>
+              {% endfor %}
             </div>
             {% endif %}
 
-            {# Lead list #}
-            <table class="w-full text-xs">
-              <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase">
-                <tr>
-                  <th class="pl-10 pr-3 py-2 text-left font-medium">Contact</th>
-                  <th class="px-3 py-2 text-left font-medium">Booking</th>
-                  <th class="px-3 py-2 text-left font-medium">First Dial</th>
-                  <th class="px-3 py-2 text-right font-medium">STL</th>
-                  <th class="px-3 py-2 text-left font-medium">Status</th>
-                  <th class="px-3 py-2 text-left font-medium">Deal</th>
+            {# ── Element 2: Distribution bar ── #}
+            {% set ns_r = namespace(lt5=0, lt60=0, gt60=0, nd=0, total=0) %}
+            {% for lead in data.rows if lead.owner_id == row.owner_id and not lead.disqualified %}
+              {% set ns_r.total = ns_r.total + 1 %}
+              {% if lead.stl_seconds is none %}{% set ns_r.nd = ns_r.nd + 1 %}
+              {% elif lead.stl_seconds <= 300 %}{% set ns_r.lt5 = ns_r.lt5 + 1 %}
+              {% elif lead.stl_seconds <= 3600 %}{% set ns_r.lt60 = ns_r.lt60 + 1 %}
+              {% else %}{% set ns_r.gt60 = ns_r.gt60 + 1 %}{% endif %}
+            {% endfor %}
+            {% if ns_r.total > 0 %}
+            {% set rp_lt5  = (ns_r.lt5  / ns_r.total * 100)|round(1) %}
+            {% set rp_mid  = (ns_r.lt60 / ns_r.total * 100)|round(1) %}
+            {% set rp_gt1  = (ns_r.gt60 / ns_r.total * 100)|round(1) %}
+            {% set rp_nd   = (ns_r.nd   / ns_r.total * 100)|round(1) %}
+            <div class="mb-3">
+              <div class="relative" style="height:16px;">
+                <div class="flex h-full overflow-hidden" style="border-radius:3px;">
+                  {% if rp_lt5 > 0 %}<div style="width:{{ rp_lt5 }}%;background:#1D9E75;" class="h-full"></div>{% endif %}
+                  {% if rp_mid > 0 %}<div style="width:{{ rp_mid }}%;background:#7C5CBF;" class="h-full"></div>{% endif %}
+                  {% if rp_gt1 > 0 %}<div style="width:{{ rp_gt1 }}%;background:#BA7517;" class="h-full"></div>{% endif %}
+                  {% if rp_nd  > 0 %}<div style="width:{{ rp_nd  }}%;background:#A32D2D;" class="h-full"></div>{% endif %}
+                </div>
+                {# 5-min tick mark #}
+                {% set tick_pos = rp_lt5 %}
+                {% if tick_pos > 0 and tick_pos < 100 %}
+                <div class="absolute top-0" style="left:{{ tick_pos }}%;height:100%;border-left:1.5px solid #534AB7;"></div>
+                <span class="absolute text-[9px] font-medium" style="left:{{ tick_pos }}%;top:-14px;transform:translateX(-50%);color:#534AB7;">5m</span>
+                {% endif %}
+              </div>
+              <div class="flex items-center justify-between mt-1.5">
+                <span class="text-[10px] text-slate-400">≤ 5 min: {{ rp_lt5 }}%</span>
+                <span class="text-[11px] font-medium"
+                  style="color:{% if row.median_stl_seconds is none %}#6B7280{% elif row.median_stl_seconds <= 300 %}#1D9E75{% elif row.median_stl_seconds <= 7200 %}#BA7517{% else %}#A32D2D{% endif %};">
+                  Median: {{ row.median_stl_display }}
+                </span>
+              </div>
+            </div>
+            {% endif %}
+
+            {# ── Element 3: Contact-level lead table ── #}
+            <table class="w-full bg-white rounded-lg overflow-hidden">
+              <thead>
+                <tr class="text-[10px] uppercase font-normal text-slate-400 tracking-[0.06em]">
+                  <th class="pl-3 pr-2 py-2 text-left font-normal">Contact</th>
+                  <th class="px-2 py-2 text-left font-normal">Booking (CT)</th>
+                  <th class="px-2 py-2 text-left font-normal">First Dial (CT)</th>
+                  <th class="px-2 py-2 text-right font-normal">STL</th>
+                  <th class="px-2 py-2 text-left font-normal">Status</th>
+                  <th class="px-2 py-2 text-left font-normal">Deal</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 {% for lead in data.rows if lead.owner_id == row.owner_id %}
-                <tr class="hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
-                  <td class="pl-10 pr-3 py-2 font-medium">
+                <tr class="text-[11px] hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
+                  <td class="pl-3 pr-2 py-1.5 font-medium" style="color:#1A1F36;">
                     {% if lead.contact_url %}
                       <a href="{{ lead.contact_url }}" target="_blank" rel="noopener"
-                         class="text-blue-600 hover:underline">{{ lead.contact_name }}</a>
+                         class="hover:underline" style="color:#534AB7;">{{ lead.contact_name }}</a>
                     {% else %}{{ lead.contact_name }}{% endif %}
                   </td>
-                  <td class="px-3 py-2 text-gray-500 tabular-nums">
+                  <td class="px-2 py-1.5 text-gray-500 tabular-nums">
                     {{ lead.booking_dt }}
-                    {% if lead.off_hours %}<span data-tip="Booked outside business hours — STL clock starts at next 9 am CT" class="ml-0.5 cursor-help">🌙</span>{% endif %}
+                    {% if lead.off_hours %}<span class="inline-flex items-center ml-1 px-1 rounded-[3px] text-[9px] font-medium" style="background:#FAEEDA;color:#854F0B;padding-top:1px;padding-bottom:1px;">after hrs</span>{% endif %}
                   </td>
-                  <td class="px-3 py-2 text-gray-500 tabular-nums">{{ lead.first_dial_dt or "—" }}</td>
-                  <td class="px-3 py-2 text-right tabular-nums font-semibold
-                    {% if lead.disqualified or lead.stl_seconds is none %}text-gray-400
-                    {% elif lead.stl_seconds == 0 %}text-green-600
-                    {% elif lead.stl_seconds <= 300 %}text-green-600
-                    {% elif lead.stl_seconds <= 3600 %}text-yellow-600
-                    {% else %}text-red-500{% endif %}">
-                    {% if lead.stl_seconds == 0 %}&lt; 1m{% else %}{{ lead.stl_display }}{% endif %}
+                  <td class="px-2 py-1.5 tabular-nums">
+                    {% if lead.first_dial_dt %}<span class="text-gray-500">{{ lead.first_dial_dt }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
                   </td>
-                  <td class="px-3 py-2">
-                    {% set status = lead.meeting_status %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
-                      {% if status == 'completed' %}bg-emerald-50 text-emerald-700
-                      {% elif status == 'upcoming' %}bg-indigo-50 text-indigo-700
-                      {% elif status in ['cancelled', 'no_show'] %}bg-red-50 text-red-700
-                      {% else %}bg-slate-100 text-slate-500{% endif %}">
-                      {{ status | replace('_', ' ') | title if status else '—' }}
-                    </span>
-                    {% if lead.disqualified %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 ml-1">DQ</span>
+                  <td class="px-2 py-1.5 text-right tabular-nums font-medium">
+                    {% if lead.disqualified or lead.stl_seconds is none %}
+                      <span class="text-slate-300">—</span>
+                    {% else %}
+                      {% set stl_h = lead.stl_seconds // 3600 %}
+                      {% set stl_m = (lead.stl_seconds % 3600) // 60 %}
+                      <span style="color:{% if lead.stl_seconds <= 300 %}#1D9E75{% elif lead.stl_seconds <= 3600 %}#BA7517{% else %}#A32D2D{% endif %};">{{ stl_h }}h {{ '%02d'|format(stl_m) }}m</span>
                     {% endif %}
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-2 py-1.5">
+                    {% set status = lead.meeting_status %}
+                    {% if status == 'completed' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#E6F5EF;color:#1D9E75;">Completed</span>
+                    {% elif status == 'no_show' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F5E6E6;color:#A32D2D;">No Show</span>
+                    {% elif status == 'cancelled' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#FDF3E3;color:#BA7517;">Cancelled</span>
+                    {% elif status == 'lost' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F0F0F2;color:#6B7280;">Lost</span>
+                    {% elif status %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F0F0F2;color:#6B7280;">{{ status | replace('_', ' ') | title }}</span>
+                    {% else %}
+                      <span class="text-slate-300">—</span>
+                    {% endif %}
+                    {% if lead.disqualified %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold ml-1" style="background:#FDF3E3;color:#BA7517;">DQ</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-2 py-1.5">
                     {% if lead.deal_label %}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
-                        {% if lead.deal_label == 'Won' %}bg-emerald-50 text-emerald-700
-                        {% elif lead.deal_reached_s2 %}bg-violet-50 text-violet-700
-                        {% else %}bg-indigo-50 text-indigo-600{% endif %}">
-                        {{ lead.deal_label }}
-                      </span>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#EEEDFE;color:#3C3489;">{{ lead.deal_label }}</span>
                     {% else %}<span class="text-slate-300">—</span>{% endif %}
                   </td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
+            <p class="text-[10px] text-slate-400 mt-2">After-hours = booking between 10pm–6am CT · STL measured from booking timestamp</p>
 
-{# ── Outcome by dial status ── #}
-{% if data.outcome_buckets %}
-<div class="mb-8">
-  <div class="flex items-center gap-2.5 mb-4">
-    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Outcome by Dial Status</h2>
-    <span class="text-[11px] text-slate-400 cursor-help" data-tip="Qualified leads only (disqualified contacts excluded). Show/No-Show/Cancelled rates use only meetings with a known outcome — upcoming meetings are excluded from those three columns. Show + No-Show + Cancelled = 100%.">ⓘ</span>
-  </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
-        <tr>
-          <th class="px-4 py-3 text-left font-medium">Group</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Qualified leads (disqualified excluded) in this group">Leads</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome (show + no-show + cancelled), % that showed up">Show Rate</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were no-shows">No-Show Rate</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-100">
-        {% for b in data.outcome_buckets %}
-        <tr class="hover:bg-slate-50 transition-colors duration-100">
-          <td class="px-4 py-3 font-medium">{{ b.label }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
-            {{ fmt_pct(b.pct_completed) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
-            {{ fmt_pct(b.pct_no_show) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums text-gray-500">
-            {{ fmt_pct(b.pct_cancelled) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-            {{ fmt_pct(b.pct_deal) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-            {{ fmt_pct(b.pct_s2) }}
+            </div>{# end padding wrapper #}
           </td>
         </tr>
         {% endfor %}
@@ -327,55 +290,204 @@ window.toggleRepDetail = function (rowId, triggerRow) {
   if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
 };
 
-// ── Median STL by Rep ─────────────────────────────────────────────────────────
-(function () {
-  const canvas = document.getElementById('repStlChart');
-  if (!canvas) return;
+// ── Sort rep table ──────────────────────────────────────────────────────────
+window.sortRepTable = function (mode) {
+  var tbody = document.getElementById('rep-tbody');
+  if (!tbody) return;
 
-  const labels      = [{% for row in data.rep_rows %}"{{ row.rep_name or 'Unknown' }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  const hasDials    = [{% for row in data.rep_rows %}{{ 'true' if row.median_stl_seconds is not none else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const seconds     = [{% for row in data.rep_rows %}{{ row.median_stl_seconds if row.median_stl_seconds is not none else '0' }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const displays    = [{% for row in data.rep_rows %}"{{ row.median_stl_display or '—' }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  const leadCounts  = [{% for row in data.rep_rows %}{{ row.lead_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const pct5min     = [{% for row in data.rep_rows %}{{ row.pct_within_5min|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const pctNd       = [{% for row in data.rep_rows %}{{ row.pct_never_dialed|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
-
-  const colors = seconds.map(function (s, i) {
-    if (!hasDials[i]) return '#cbd5e1';
-    if (s <= 900)     return '#059669';
-    if (s <= 3600)    return '#d97706';
-    return '#dc2626';
+  // Update pill active states
+  document.querySelectorAll('.sort-pill').forEach(function (btn) {
+    if (btn.getAttribute('data-sort') === mode) {
+      btn.className = 'sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer bg-white';
+      btn.style.color = '#1A1F36';
+    } else {
+      btn.className = 'sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600';
+      btn.style.color = '';
+    }
   });
 
+  // Collect summary rows with their detail rows
+  var pairs = [];
+  var summaryRows = tbody.querySelectorAll('.rep-summary-row');
+  summaryRows.forEach(function (row) {
+    var oid = row.getAttribute('data-owner');
+    var detail = tbody.querySelector('[data-detail-for="' + oid + '"]');
+    pairs.push({ summary: row, detail: detail });
+  });
+
+  // Sort
+  pairs.sort(function (a, b) {
+    if (mode === 'worst_median') {
+      return parseFloat(b.summary.dataset.median) - parseFloat(a.summary.dataset.median);
+    } else if (mode === 'most_nd') {
+      return parseFloat(b.summary.dataset.pctnd) - parseFloat(a.summary.dataset.pctnd);
+    } else {
+      return parseFloat(b.summary.dataset.leads) - parseFloat(a.summary.dataset.leads);
+    }
+  });
+
+  // Re-append in sorted order
+  pairs.forEach(function (p) {
+    tbody.appendChild(p.summary);
+    if (p.detail) tbody.appendChild(p.detail);
+  });
+};
+
+// Apply default sort on page load
+sortRepTable('worst_median');
+
+// ── Team Scatter Plot ─────────────────────────────────────────────────────────
+(function () {
+  var canvas = document.getElementById('scatterChart');
+  if (!canvas) return;
+
+  // Data from Jinja
+  var reps = [
+    {% for row in data.rep_rows %}
+    {
+      name:    "{{ row.rep_name or 'Unknown' }}",
+      medSec:  {{ row.median_stl_seconds if row.median_stl_seconds is not none else 'null' }},
+      medDisp: "{{ row.median_stl_display or '—' }}",
+      leads:   {{ row.lead_count }},
+      pctNd:   {{ row.pct_never_dialed|round(1) }},
+      pct5:    {{ row.pct_within_5min|round(1) }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  // Filter out reps with no dials (null median) — they have no meaningful x position
+  var plotReps = reps.filter(function (r) { return r.medSec !== null; });
+
+  // Map lead counts to bubble radius 7–15px
+  var minLeads = Math.min.apply(null, plotReps.map(function (r) { return r.leads; }));
+  var maxLeads = Math.max.apply(null, plotReps.map(function (r) { return r.leads; }));
+  var range = maxLeads - minLeads || 1;
+
+  function bubbleRadius(leads) {
+    return 7 + (leads - minLeads) / range * 8;
+  }
+
+  function bubbleColor(sec) {
+    if (sec <= 300)  return 'rgba(29,158,117,0.88)';   // teal
+    if (sec <= 7200) return 'rgba(186,117,23,0.88)';   // amber
+    return 'rgba(163,45,45,0.88)';                      // red
+  }
+
+  function fmtMin(min) {
+    if (min < 60) return Math.round(min) + 'm';
+    var h = Math.floor(min / 60);
+    var m = Math.round(min % 60);
+    return m ? h + 'h ' + m + 'm' : h + 'h';
+  }
+
+  // Build one dataset per rep so each bubble can have its own color
+  var datasets = plotReps.map(function (r) {
+    return {
+      label: r.name,
+      data: [{ x: r.medSec / 60, y: r.pctNd, r: bubbleRadius(r.leads) }],
+      backgroundColor: bubbleColor(r.medSec),
+      hoverBackgroundColor: bubbleColor(r.medSec),
+      _rep: r  // stash for tooltip
+    };
+  });
+
+  // Custom plugin: reference line + corner annotations + rep labels
+  var scatterExtras = {
+    id: 'scatterExtras',
+    afterDraw: function (chart) {
+      var ctx = chart.ctx;
+      var xScale = chart.scales.x;
+      var yScale = chart.scales.y;
+      var area = chart.chartArea;
+
+      // ── Dashed vertical reference at 5 min ──
+      var x5 = xScale.getPixelForValue(5);
+      if (x5 >= area.left && x5 <= area.right) {
+        ctx.save();
+        ctx.strokeStyle = '#534AB7';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x5, area.top);
+        ctx.lineTo(x5, area.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Label
+        ctx.fillStyle = '#534AB7';
+        ctx.font = "500 10px 'Inter', system-ui, sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('5 min target', x5, area.top - 10);
+        ctx.restore();
+      }
+
+      // ── Corner annotations ──
+      ctx.save();
+      ctx.font = "500 10px 'Inter', system-ui, sans-serif";
+      // Bottom-left: "Fast · all called"
+      ctx.fillStyle = '#1D9E75';
+      ctx.textAlign = 'left';
+      ctx.fillText('Fast · all called', area.left + 6, area.bottom - 8);
+      // Top-right: "Slow · leads missed"
+      ctx.fillStyle = '#A32D2D';
+      ctx.textAlign = 'right';
+      ctx.fillText('Slow · leads missed', area.right - 6, area.top + 14);
+      ctx.restore();
+
+      // ── Rep name labels adjacent to bubbles ──
+      ctx.save();
+      ctx.font = "400 10px 'Inter', system-ui, sans-serif";
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'left';
+
+      // Collect label positions for collision avoidance
+      var labels = [];
+      datasets.forEach(function (ds) {
+        var pt = ds.data[0];
+        var px = xScale.getPixelForValue(pt.x);
+        var py = yScale.getPixelForValue(pt.y);
+        labels.push({ name: ds._rep.name, x: px, y: py, r: pt.r });
+      });
+
+      // Simple collision avoidance: sort by y, nudge if overlapping
+      labels.sort(function (a, b) { return a.y - b.y; });
+      for (var i = 1; i < labels.length; i++) {
+        var prev = labels[i - 1];
+        var cur = labels[i];
+        var prevLabelY = prev.y;
+        var curLabelY = cur.y;
+        if (Math.abs(curLabelY - prevLabelY) < 12 && Math.abs(cur.x - prev.x) < 60) {
+          labels[i].y = prevLabelY + 13;
+        }
+      }
+
+      labels.forEach(function (l) {
+        ctx.fillText(l.name, l.x + l.r + 4, l.y + 3);
+      });
+      ctx.restore();
+    }
+  };
+
   new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: seconds,
-        backgroundColor: colors,
-        borderRadius: 4,
-        borderSkipped: false,
-        minBarLength: 5,
-      }]
-    },
+    type: 'bubble',
+    data: { datasets: datasets },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 24, right: 80 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: function (items) { return labels[items[0].dataIndex]; },
+            title: function (items) {
+              return items[0].dataset._rep.name;
+            },
             label: function (ctx) {
-              var i = ctx.dataIndex;
-              if (!hasDials[i]) return ['  No dialed leads', '  ' + leadCounts[i] + ' total leads'];
+              var r = ctx.dataset._rep;
               return [
-                '  Median STL:  ' + displays[i],
-                '  Leads:  ' + leadCounts[i],
-                '  ≤ 5 min:  ' + pct5min[i] + '%',
-                '  Never dialed:  ' + pctNd[i] + '%',
+                '  Median STL: ' + r.medDisp,
+                '  Leads: ' + r.leads,
+                '  ≤ 5 min: ' + r.pct5 + '%',
+                '  Never dialed: ' + r.pctNd + '%'
               ];
             }
           },
@@ -384,36 +496,39 @@ window.toggleRepDetail = function (rowId, triggerRow) {
           bodyColor: '#f8fafc',
           padding: 12,
           cornerRadius: 6,
-          displayColors: false,
+          displayColors: false
         }
       },
       scales: {
         x: {
-          beginAtZero: true,
+          type: 'linear',
+          min: 0,
+          suggestedMax: 350,
+          title: { display: true, text: 'Median Speed to Lead', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
           grid: { color: '#f1f5f9' },
           border: { display: false },
           ticks: {
             color: '#94a3b8',
             font: { size: 10, family: "'Inter', system-ui, sans-serif" },
-            maxTicksLimit: 6,
-            callback: function (val) {
-              if (val === 0) return '0';
-              if (val < 60)   return val + 's';
-              if (val < 3600) return Math.round(val / 60) + 'm';
-              return (val / 3600).toFixed(1) + 'h';
-            }
+            callback: function (val) { return fmtMin(val); }
           }
         },
         y: {
-          grid: { display: false },
+          type: 'linear',
+          min: 0,
+          suggestedMax: 45,
+          title: { display: true, text: 'Never-dialed rate', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
+          grid: { color: '#f1f5f9' },
           border: { display: false },
           ticks: {
-            color: '#64748b',
-            font: { size: 11, family: "'Inter', system-ui, sans-serif" }
+            color: '#94a3b8',
+            font: { size: 10, family: "'Inter', system-ui, sans-serif" },
+            callback: function (val) { return val + '%'; }
           }
         }
       }
-    }
+    },
+    plugins: [scatterExtras]
   });
 })();
 </script>
