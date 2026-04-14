@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 os.environ["DISABLE_CACHE_SCHEDULER"] = "1"
@@ -267,6 +268,87 @@ class LoginRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Rep diagnostic table", response.data)
         self.assertIn(b"Convo %", response.data)
+
+    def test_compute_connect_rate_drivers_parses_timestamp_before_hour_bucket(self):
+        metrics = {
+            "Direct Number Rate": 100.0,
+            "Shared Number Rate": 0.0,
+            "High-Confidence Phone Rate": 100.0,
+            "Buyer-Title Rate": 0.0,
+            "ICP A–C Rate": 100.0,
+            "Low ICP Rate": 0.0,
+            "No ICP Data Rate": 0.0,
+            "Company-Object Dial Rate": 0.0,
+            "Unique Numbers / 100 Dials": 100.0,
+            "Repeat Dial Rate": 0.0,
+            "First Attempt Rate": 100.0,
+            "Shared-Number Recycle Rate": 0.0,
+            "Best-Window Dial Rate": 100.0,
+            "Weak-Window Dial Rate": 0.0,
+            "Connect Rate in Strong Windows": 100.0,
+            "Connect Rate in Weak Windows": 0.0,
+        }
+        aggregate = {
+            "dials": 1,
+            "connects": 1,
+            "conversations": 1,
+            "connect_pct": 100.0,
+            "conversation_pct": 100.0,
+            "field_coverage_pct": 100.0,
+            "unique_contacts": 1,
+            "metrics": metrics,
+        }
+        calls = [{
+            "id": "call-1",
+            "_contact_id": "contact-1",
+            "_company_id": "company-1",
+            "_email": "buyer@example.com",
+            "_mobilephone": "+1 (555) 111-2222",
+            "_phone": "",
+            "_jobtitle": "VP Sales",
+            "_line_type": "Mobile",
+            "_icp_rank": "A",
+            "_from_company_object": False,
+            "properties": {
+                "hubspot_owner_id": "1",
+                "hs_call_direction": "OUTBOUND",
+                "hs_timestamp": "2026-04-14T14:00:00Z",
+                "hs_call_disposition": next(iter(app_module.analytics.CALL_CONNECTED_GUIDS)),
+                "hs_call_duration": "61000",
+            },
+        }]
+
+        with patch.object(app_module.analytics, "get_date_range", return_value=(
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 4, 30, tzinfo=timezone.utc),
+        )), patch.object(
+            app_module.analytics, "get_owners", return_value={"1": {"name": "Rep A", "last_name": "A"}}
+        ), patch.object(
+            app_module.analytics, "apply_manual_owner_overrides", side_effect=lambda owners: owners
+        ), patch.object(
+            app_module.analytics, "get_owner_team_map", return_value={"1": "Veterans"}
+        ), patch.object(
+            app_module.analytics, "get_deal_contact_windows", return_value=({}, {})
+        ), patch.object(
+            app_module.analytics, "get_calls_enriched", return_value=calls
+        ), patch.object(
+            app_module.analytics, "_owner_allowed", return_value=True
+        ), patch.object(
+            app_module.analytics, "_build_connect_driver_aggregate", return_value=aggregate
+        ), patch.object(
+            app_module.analytics, "_compute_timing_windows", return_value=({9}, set(), {})
+        ), patch.object(
+            app_module.analytics, "_build_driver_contributions",
+            return_value={"Dial Mix": 0.0, "Dialing Behavior": 0.0, "Timing": 0.0}
+        ), patch.object(
+            app_module.analytics, "_build_driver_cards", return_value=[]
+        ), patch.object(
+            app_module.analytics, "_build_segment_connect_rates", return_value={"tables": [], "data_gaps": {}}
+        ):
+            data = app_module.analytics.compute_connect_rate_drivers("this_month", "all", "all", "all", _force=True)
+
+        self.assertFalse(data["state"]["empty"])
+        self.assertEqual(data["team_comparison"]["rows"][0]["rep"], "A")
 
 
 if __name__ == "__main__":
