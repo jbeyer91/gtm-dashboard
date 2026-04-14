@@ -3077,10 +3077,12 @@ def compute_scorecard(period: str = "this_month") -> dict:
                      if d["properties"].get("hs_is_closed_won") == "true"]
     created_deals = get_deals(start, end, "createdate")
 
-    # Open deals for Next Steps % metric
+    # Open deals for Next Steps % and Upcoming Meeting % metrics
     open_deals = get_all_open_deals()
-    owner_open_total      = defaultdict(int)
-    owner_open_with_steps = defaultdict(int)
+    now = datetime.now(timezone.utc)
+    owner_open_total        = defaultdict(int)
+    owner_open_with_steps   = defaultdict(int)
+    owner_open_with_meeting = defaultdict(int)
     for d in open_deals:
         oid = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid):
@@ -3089,6 +3091,13 @@ def compute_scorecard(period: str = "this_month") -> dict:
         ns = d["properties"].get("hs_next_step") or ""
         if ns.strip():
             owner_open_with_steps[oid] += 1
+        mtg_raw = d["properties"].get("hs_next_meeting_start_time") or ""
+        if mtg_raw.strip():
+            try:
+                if _parse_hs_datetime(mtg_raw) >= now:
+                    owner_open_with_meeting[oid] += 1
+            except (ValueError, TypeError):
+                pass
 
     book             = compute_book_coverage()
     book_by_owner    = {row["owner_id"]: row for row in book["rows"]}
@@ -3192,6 +3201,8 @@ def compute_scorecard(period: str = "this_month") -> dict:
         open_total      = owner_open_total.get(oid, 0)
         open_with_steps = owner_open_with_steps.get(oid, 0)
         next_steps_pct  = round(open_with_steps / open_total * 100) if open_total else None
+        open_with_meeting    = owner_open_with_meeting.get(oid, 0)
+        upcoming_meeting_pct = round(open_with_meeting / open_total * 100) if open_total else None
 
         rows.append({
             "ae":              owners[oid]["last_name"] or owners[oid]["name"],
@@ -3212,6 +3223,7 @@ def compute_scorecard(period: str = "this_month") -> dict:
             "stale_count":     stale_count,
             "ac_accounts":     ac_accounts,
             "next_steps_pct":  next_steps_pct,
+            "upcoming_meeting_pct": upcoming_meeting_pct,
         })
 
     rows.sort(key=lambda r: r["grade_sort"])
