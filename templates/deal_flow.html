@@ -11,14 +11,18 @@
 
 {# ── Source toggle ── #}
 <div class="flex gap-2 mt-3 mb-5">
+  <button id="btn-all" onclick="toggleView('all')"
+    class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+    style="background:var(--accent);color:#fff;">All</button>
   <button id="btn-inbound" onclick="toggleView('inbound')"
     class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
-    style="background:var(--accent);color:#fff;">Inbound</button>
+    style="background:#f1f5f9;color:#64748b;">Inbound</button>
   <button id="btn-cold" onclick="toggleView('cold_outreach')"
     class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
     style="background:#f1f5f9;color:#64748b;">Cold Outreach</button>
 </div>
 
+{% set al = data.all.totals %}
 {% set ib = data.inbound.totals %}
 {% set co = data.cold_outreach.totals %}
 
@@ -51,7 +55,11 @@
 </div>
 {% endmacro %}
 
-<div id="stats-inbound">
+<div id="stats-all">
+  {{ funnel_strip(al.funnel, al.lost, al.open) }}
+</div>
+
+<div id="stats-inbound" class="hidden">
   {{ funnel_strip(ib.funnel, ib.lost, ib.open) }}
 </div>
 
@@ -68,8 +76,11 @@
 
 <script>
 (function () {
+  var allLinks     = {{ data.all.links | tojson }};
   var inboundLinks = {{ data.inbound.links | tojson }};
   var coldLinks    = {{ data.cold_outreach.links | tojson }};
+
+  var linkSets = { all: allLinks, inbound: inboundLinks, cold_outreach: coldLinks };
 
   // Node color palette
   var nodeColors = {
@@ -94,7 +105,7 @@
     type: 'sankey',
     data: {
       datasets: [{
-        data: inboundLinks,
+        data: allLinks,
         colorFrom: function (c) {
           var d = c.dataset.data[c.dataIndex];
           return d ? getColor(d.from) : '#6366f1';
@@ -130,30 +141,26 @@
     }
   });
 
-  window.toggleView = function (view) {
-    var btnInbound = document.getElementById('btn-inbound');
-    var btnCold    = document.getElementById('btn-cold');
-    var statsIb    = document.getElementById('stats-inbound');
-    var statsCo    = document.getElementById('stats-cold');
+  var buttons = { all: 'btn-all', inbound: 'btn-inbound', cold_outreach: 'btn-cold' };
+  var statsDivs = { all: 'stats-all', inbound: 'stats-inbound', cold_outreach: 'stats-cold' };
 
-    if (view === 'inbound') {
-      chart.data.datasets[0].data = inboundLinks;
-      btnInbound.style.background = 'var(--accent)';
-      btnInbound.style.color = '#fff';
-      btnCold.style.background = '#f1f5f9';
-      btnCold.style.color = '#64748b';
-      statsIb.classList.remove('hidden');
-      statsCo.classList.add('hidden');
-    } else {
-      chart.data.datasets[0].data = coldLinks;
-      btnCold.style.background = 'var(--accent)';
-      btnCold.style.color = '#fff';
-      btnInbound.style.background = '#f1f5f9';
-      btnInbound.style.color = '#64748b';
-      statsCo.classList.remove('hidden');
-      statsIb.classList.add('hidden');
-    }
+  window.toggleView = function (view) {
+    chart.data.datasets[0].data = linkSets[view];
     chart.update();
+
+    Object.keys(buttons).forEach(function (k) {
+      var btn = document.getElementById(buttons[k]);
+      var stats = document.getElementById(statsDivs[k]);
+      if (k === view) {
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+        stats.classList.remove('hidden');
+      } else {
+        btn.style.background = '#f1f5f9';
+        btn.style.color = '#64748b';
+        stats.classList.add('hidden');
+      }
+    });
   };
 })();
 </script>
