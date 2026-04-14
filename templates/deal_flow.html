@@ -67,7 +67,7 @@
 {# ── Cold outreach: deal outcome cards ── #}
 <div id="stats-cold" class="hidden">
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-    {{ stat_card("Deals Created", fmt_num(co.deal_created)) }}
+    {{ stat_card("Stage 1 Deals", fmt_num(co.deal_created)) }}
     {{ stat_card("Won", fmt_num(co.won)) }}
     {{ stat_card("Lost", fmt_num(co.lost)) }}
     {{ stat_card("Still Open", fmt_num(co.open)) }}
@@ -88,8 +88,9 @@
 
   // Node color palette
   var nodeColors = {
+    'Demo Request':   '#0d9488',
     'No Deal':        '#94a3b8',
-    'Deal Created':   '#6366f1',
+    'Stage 1':        '#6366f1',
     'Stage 2':        '#7C5CBF',
     'Stage 3':        '#534AB7',
     'Stage 4':        '#3730a3',

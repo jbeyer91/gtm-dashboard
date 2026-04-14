@@ -3064,27 +3064,22 @@ def compute_deal_flow(period: str) -> dict:
             mtg_type_deal_count["Other"] += 1
 
     # ── Build inbound Sankey links ────────────────────────────────────────────
-    # Start Sankey from meeting types (not Form Submitted) to avoid the
-    # "No Meeting" flow dominating the entire diagram.  The pre-deal funnel
-    # (form → meeting → deal) is shown separately as stat cards.
+    # Start Sankey from "Demo Request" (all meeting types collapsed) to keep
+    # the diagram clean.  The pre-deal funnel strip shows conversion rates.
     inbound_links = []
 
-    # Layer 1: Meeting Types → Deal Created / No Deal
-    for mt, booked in meeting_type_counts.items():
-        deals_from_mt = mtg_type_deal_count.get(mt, 0)
-        no_deal = booked - deals_from_mt
-        if deals_from_mt > 0:
-            inbound_links.append({"from": mt, "to": "Deal Created", "flow": deals_from_mt})
-        if no_deal > 0:
-            inbound_links.append({"from": mt, "to": "No Deal", "flow": no_deal})
+    # Layer 1: Demo Request → Stage 1 / No Deal
+    total_deals_from_meetings = sum(mtg_type_deal_count.values())
+    no_deal_from_meetings = meeting_booked - total_deals_from_meetings
+    if total_deals_from_meetings > 0:
+        inbound_links.append({"from": "Demo Request", "to": "Stage 1", "flow": total_deals_from_meetings})
+    if no_deal_from_meetings > 0:
+        inbound_links.append({"from": "Demo Request", "to": "No Deal", "flow": no_deal_from_meetings})
 
-    # Layer 3+: Deal stage progression
+    # Layer 2+: Deal stage progression
     deal_stage_links, inbound_deal_totals = _build_deal_links(inbound_deals)
 
-    # Rename "Stage 1" in deal links to connect from "Deal Created"
-    for link in deal_stage_links:
-        if link["from"] == "Stage 1":
-            link["from"] = "Deal Created"
+    # Rename "Stage 1" sources to connect from "Stage 1" node (already correct name)
     inbound_links.extend(deal_stage_links)
 
     inbound_totals = {
@@ -3098,10 +3093,6 @@ def compute_deal_flow(period: str) -> dict:
 
     # ── Cold outreach Sankey links ────────────────────────────────────────────
     cold_stage_links, cold_totals = _build_deal_links(cold_deals)
-    # For cold outreach, deals start at "Deal Created" (= Stage 1)
-    for link in cold_stage_links:
-        if link["from"] == "Stage 1":
-            link["from"] = "Deal Created"
 
     return {
         "inbound": {"links": inbound_links, "totals": inbound_totals},
