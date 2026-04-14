@@ -156,6 +156,7 @@ NAV = [
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
         {"endpoint": "deal_flow",       "label": "Deal Flow"},
         {"endpoint": "forecast",        "label": "Forecast"},
+        {"endpoint": "revenue_chart",   "label": "Revenue Trends"},
     ]},
     {"type": "group", "label": "Pipeline", "children": [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
@@ -163,18 +164,15 @@ NAV = [
     ]},
     {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
     {"type": "group", "label": "Calls", "children": [
-        {"endpoint": "call_stats",                    "label": "Summary"},
+        {"endpoint": "call_stats",                          "label": "Summary"},
+        {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
+        {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Connect Rate Drivers"},
+        {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
     ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
-    ]},
-    {"type": "group", "label": "Analytics", "children": [
-        {"endpoint": "revenue_chart",                       "label": "Revenue Trends"},
-        {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
-        {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Connect Rate Drivers"},
-        {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
-        {"endpoint": "speed_to_lead",                       "label": "Speed to Lead"},
+        {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
     ]},
 ]
 
