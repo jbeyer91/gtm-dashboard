@@ -2951,14 +2951,17 @@ def compute_forecast(period: str) -> dict:
     won_deals = get_deals(start, end, "closedate")
     won_deals = [d for d in won_deals if d["properties"].get("hs_is_closed_won") == "true"]
 
-    open_deals = get_all_open_deals(start, end)
+    # Use the full period boundary (e.g. end-of-month) so open deals with
+    # close dates later in the period are included, not just up to today.
+    coverage = _coverage_end(period, start, end)
+    open_deals = get_all_open_deals(start, coverage)
 
     # Projected forecast setup — derive benchmarks from historical CRM data
     rep_stats_map = _rep_trailing_deal_stats()
     benchmarks = _historical_deal_benchmarks()
     today_dt = datetime.now(timezone.utc)
     today_date = today_dt.date()
-    period_end_date = end.date() if hasattr(end, "date") else end
+    period_end_date = coverage.date() if hasattr(coverage, "date") else coverage
     proj_holiday_map = _holiday_map_between(today_date, period_end_date)
 
     # Map HubSpot user_id → owner_id (needed to resolve forecast submissions)
