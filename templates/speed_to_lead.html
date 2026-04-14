@@ -62,7 +62,7 @@
 {% if data.rep_rows %}
 <div class="bg-white rounded-lg px-5 py-5 mb-8">
   <h2 class="text-[13px] font-semibold tracking-tight" style="color:#1A1F36;">Rep Performance</h2>
-  <p class="text-[12px] text-slate-400 mt-0.5 mb-4">Bubble size = lead volume · left and low = best · any never-dialed is a miss.</p>
+  <p class="text-[12px] text-slate-400 mt-0.5 mb-4">Bubble size = lead volume · left and low = best · any never-dialed is a miss · time axis capped at 3h.</p>
   <div style="position:relative;height:360px;">
     <canvas id="scatterChart"></canvas>
   </div>
@@ -180,10 +180,10 @@
             <div class="mb-3">
               <div class="relative" style="height:16px;">
                 <div class="flex h-full overflow-hidden" style="border-radius:3px;">
-                  {% if rp_lt5 > 0 %}<div style="width:{{ rp_lt5 }}%;background:#1D9E75;" class="h-full"></div>{% endif %}
-                  {% if rp_mid > 0 %}<div style="width:{{ rp_mid }}%;background:#7C5CBF;" class="h-full"></div>{% endif %}
-                  {% if rp_gt1 > 0 %}<div style="width:{{ rp_gt1 }}%;background:#BA7517;" class="h-full"></div>{% endif %}
-                  {% if rp_nd  > 0 %}<div style="width:{{ rp_nd  }}%;background:#A32D2D;" class="h-full"></div>{% endif %}
+                  {% if rp_lt5 > 0 %}<div style="width:{{ rp_lt5 }}%;background:#1D9E75;" class="h-full bar-segment cursor-default" data-tip="≤ 5 min  •  {{ ns_r.lt5 }} leads ({{ rp_lt5 }}%)"></div>{% endif %}
+                  {% if rp_mid > 0 %}<div style="width:{{ rp_mid }}%;background:#7C5CBF;" class="h-full bar-segment cursor-default" data-tip="5 min – 1 hr  •  {{ ns_r.lt60 }} leads ({{ rp_mid }}%)"></div>{% endif %}
+                  {% if rp_gt1 > 0 %}<div style="width:{{ rp_gt1 }}%;background:#BA7517;" class="h-full bar-segment cursor-default" data-tip="> 1 hr  •  {{ ns_r.gt60 }} leads ({{ rp_gt1 }}%)"></div>{% endif %}
+                  {% if rp_nd  > 0 %}<div style="width:{{ rp_nd  }}%;background:#A32D2D;" class="h-full bar-segment cursor-default" data-tip="Never dialed  •  {{ ns_r.nd }} leads ({{ rp_nd }}%)"></div>{% endif %}
                 </div>
                 {# 5-min tick mark #}
                 {% set tick_pos = rp_lt5 %}
@@ -336,6 +336,32 @@ window.sortRepTable = function (mode) {
 // Apply default sort on page load
 sortRepTable('worst_median');
 
+// ── Bar segment tooltips ──────────────────────────────────────────────────
+(function () {
+  var tip = document.createElement('div');
+  tip.style.cssText = 'position:fixed;z-index:9999;background:#1e293b;color:#f8fafc;font-size:11px;line-height:1.4;padding:5px 9px;border-radius:5px;pointer-events:none;white-space:nowrap;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+  document.body.appendChild(tip);
+
+  document.addEventListener('mouseover', function (e) {
+    var seg = e.target.closest('.bar-segment');
+    if (seg && seg.dataset.tip) {
+      tip.textContent = seg.dataset.tip;
+      tip.style.display = 'block';
+    }
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (tip.style.display !== 'none') {
+      tip.style.left = (e.clientX + 12) + 'px';
+      tip.style.top  = (e.clientY - 32) + 'px';
+    }
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (e.target.closest('.bar-segment')) {
+      tip.style.display = 'none';
+    }
+  });
+})();
+
 // ── Team Scatter Plot ─────────────────────────────────────────────────────────
 (function () {
   var canvas = document.getElementById('scatterChart');
@@ -380,11 +406,13 @@ sortRepTable('worst_median');
     return m ? h + 'h ' + m + 'm' : h + 'h';
   }
 
+  var CAP_MIN = 180; // 3-hour display cap in minutes
+
   // Build one dataset per rep so each bubble can have its own color
   var datasets = plotReps.map(function (r) {
     return {
       label: r.name,
-      data: [{ x: r.medSec / 60, y: r.pctNd, r: bubbleRadius(r.leads) }],
+      data: [{ x: Math.min(r.medSec / 60, CAP_MIN), y: r.pctNd, r: bubbleRadius(r.leads) }],
       backgroundColor: bubbleColor(r.medSec),
       hoverBackgroundColor: bubbleColor(r.medSec),
       _rep: r  // stash for tooltip
@@ -503,8 +531,8 @@ sortRepTable('worst_median');
         x: {
           type: 'linear',
           min: 0,
-          suggestedMax: 350,
-          title: { display: true, text: 'Median Speed to Lead', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
+          max: 180,
+          title: { display: true, text: 'Median Speed to Lead (capped at 3h)', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
           grid: { color: '#f1f5f9' },
           border: { display: false },
           ticks: {
