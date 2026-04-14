@@ -2571,6 +2571,29 @@ def compute_revenue_chart(period: str) -> dict:
 
 
 # ── Projected forecast scoring ───────────────────────────────────────────────
+# Employee-size segments used for win-rate bucketing.
+_EMP_SEGMENTS = [
+    ("0-30",  0,   30),
+    ("31-99", 31,  99),
+    ("100+",  100, 999_999),
+]
+
+
+def _emp_segment(props: dict) -> str:
+    """Return the employee-size segment label for a deal."""
+    raw = props.get("employee_count")
+    if raw in (None, "", "0"):
+        return "unknown"
+    try:
+        count = int(float(raw))
+    except (ValueError, TypeError):
+        return "unknown"
+    for label, lo, hi in _EMP_SEGMENTS:
+        if lo <= count <= hi:
+            return label
+    return "unknown"
+
+
 # Fallback constants used when insufficient historical data exists.
 _STAGE_MIN_BIZ_DAYS_FALLBACK = {
     NB_STAGES["stage1"]: 20,
@@ -2718,11 +2741,29 @@ def _historical_deal_benchmarks(lookback_days: int = 180) -> dict:
             fb = _SIZE_MULT_FALLBACK.get(max_ratio, 1.0)
             size_thresholds.append((max_ratio, fb))
 
+    # ── Employee-size segment win rates → multipliers ────────────────────────
+    emp_seg_won   = defaultdict(int)
+    emp_seg_total = defaultdict(int)
+    for d in closed:
+        seg = _emp_segment(d["properties"])
+        emp_seg_total[seg] += 1
+        if d["properties"].get("hs_is_closed_won") == "true":
+            emp_seg_won[seg] += 1
+
+    emp_seg_multipliers = {}
+    for seg in [label for label, _, _ in _EMP_SEGMENTS] + ["unknown"]:
+        total = emp_seg_total.get(seg, 0)
+        if total >= 5:
+            seg_wr = emp_seg_won.get(seg, 0) / total
+            raw_mult = seg_wr / overall_win_rate if overall_win_rate else 1.0
+            emp_seg_multipliers[seg] = max(0.40, min(1.50, round(raw_mult, 2)))
+
     return {
         "stage_min_biz_days": stage_min_biz_days,
         "source_multipliers": source_multipliers,
         "source_mult_default": source_mult_default,
         "size_thresholds": size_thresholds,
+        "emp_seg_multipliers": emp_seg_multipliers,
         "overall_win_rate": round(overall_win_rate, 4),
         "sample_size": len(closed),
     }
@@ -2853,11 +2894,21 @@ def _score_deal_projected(
     src_default = bm.get("source_mult_default", 0.95)
     source_mult = src_mults.get(source, src_default)
 
-    # ── Signal 5: Rep history ────────────────────────────────────────────────
+    # ── Signal 5: Rep history (overall + segment-specific) ──────────────────
+    emp_seg = _emp_segment(props)
     if rep_stats:
         _s1 = NB_STAGES["stage1"]
         global_combined = STAGE1_TO_STAGE2 * STAGE2_WIN_RATE
-        if stage == _s1:
+
+        # Check if this rep has a segment-specific win rate for the deal's
+        # employee-size bucket.  If so, blend it with the overall rate to get
+        # a more accurate multiplier.
+        seg_wr = (rep_stats.get("seg_win_rates") or {}).get(emp_seg)
+
+        if seg_wr is not None and STAGE2_WIN_RATE:
+            # Segment-specific: use the rep's win rate in this employee-size bucket
+            rep_mult = seg_wr / STAGE2_WIN_RATE
+        elif stage == _s1:
             rep_combined = rep_stats["s1_to_s2"] * rep_stats["win_rate_s2"]
             rep_mult = rep_combined / global_combined if global_combined else 1.0
         else:
@@ -2866,8 +2917,13 @@ def _score_deal_projected(
     else:
         rep_mult = 1.0
 
+    # ── Signal 6: Employee-size segment (org-wide) ───────────────────────────
+    emp_seg_mults = bm.get("emp_seg_multipliers") or {}
+    emp_seg_mult = emp_seg_mults.get(emp_seg, 1.0)
+
     # ── Final projected probability ──────────────────────────────────────────
-    projected_prob = base_prob * time_mult * activity_mult * size_mult * source_mult * rep_mult
+    projected_prob = (base_prob * time_mult * activity_mult * size_mult
+                      * source_mult * rep_mult * emp_seg_mult)
     projected_prob = max(0.0, min(0.95, projected_prob))
 
     return {
@@ -2878,6 +2934,8 @@ def _score_deal_projected(
         "size_mult":      round(size_mult, 2),
         "source_mult":    round(source_mult, 2),
         "rep_mult":       round(rep_mult, 2),
+        "emp_seg_mult":   round(emp_seg_mult, 2),
+        "emp_segment":    emp_seg,
         "risk_flags":     risk_flags,
         "biz_days_remaining": biz_days_remaining if closedate_dt is not None else None,
     }
@@ -3007,6 +3065,8 @@ def compute_forecast(period: str) -> dict:
             "size_mult":        score["size_mult"],
             "source_mult":      score["source_mult"],
             "rep_mult":         score["rep_mult"],
+            "emp_seg_mult":     score["emp_seg_mult"],
+            "emp_segment":      score["emp_segment"],
         })
 
     owner_team = get_owner_team_map()  # {owner_id: "Rising" | "Veterans"}
@@ -3645,9 +3705,14 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
     Uses trailing `lookback_days` of won+lost deals. Falls back to global constants
     for reps with fewer than MIN_SAMPLE concluded deals.
 
-    Returns {owner_id: {"win_rate_s2": float, "s1_to_s2": float, "acv": float, "sample": int}}
+    Also computes per-rep win rates by employee-size segment (0-30, 31-99, 100+)
+    so the projected forecast can use segment-specific rep performance.
+
+    Returns {owner_id: {"win_rate_s2": float, "s1_to_s2": float, "acv": float,
+                        "sample": int, "seg_win_rates": {segment: win_rate}}}
     """
     MIN_SAMPLE = 5
+    MIN_SEG_SAMPLE = 3  # fewer deals per segment is ok since it's a sub-bucket
     _s2 = NB_STAGES["stage2"]
 
     end   = datetime.now(timezone.utc)
@@ -3660,6 +3725,9 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
     owner_stats = defaultdict(lambda: {
         "total": 0, "won": 0, "s2_total": 0, "s2_won": 0, "won_amt": 0.0
     })
+    # Per-rep, per-segment counters
+    owner_seg_stats = defaultdict(lambda: defaultdict(lambda: {"won": 0, "total": 0}))
+
     for d in closed:
         oid  = d["properties"].get("hubspot_owner_id", "")
         if not oid or not _owner_allowed(oid, end):
@@ -3667,6 +3735,7 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
         props  = d["properties"]
         is_won = props.get("hs_is_closed_won") == "true"
         amt    = float(props.get("amount") or 0)
+        seg    = _emp_segment(props)
         # Deal reached stage 2 if the hs_date_entered field for that stage is populated
         hit_s2 = bool(props.get(f"hs_date_entered_{_s2}"))
 
@@ -3679,6 +3748,11 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
             if is_won:
                 owner_stats[oid]["s2_won"] += 1
 
+        # Segment tracking
+        owner_seg_stats[oid][seg]["total"] += 1
+        if is_won:
+            owner_seg_stats[oid][seg]["won"] += 1
+
     result = {}
     for oid, s in owner_stats.items():
         if s["total"] >= MIN_SAMPLE:
@@ -3689,11 +3763,19 @@ def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
             win_rate_s2 = STAGE2_WIN_RATE
             s1_to_s2    = STAGE1_TO_STAGE2
             acv         = ACV
+
+        # Build per-segment win rates for this rep
+        seg_win_rates = {}
+        for seg, seg_s in owner_seg_stats.get(oid, {}).items():
+            if seg_s["total"] >= MIN_SEG_SAMPLE:
+                seg_win_rates[seg] = seg_s["won"] / seg_s["total"]
+
         result[oid] = {
             "win_rate_s2": max(win_rate_s2, 0.05),  # floor at 5% to avoid runaway targets
             "s1_to_s2":    max(s1_to_s2,    0.10),
             "acv":         max(acv,          1_000),
             "sample":      s["total"],
+            "seg_win_rates": seg_win_rates,
         }
     return result
 

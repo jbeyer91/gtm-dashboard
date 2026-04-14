@@ -157,6 +157,7 @@
             <th class="px-4 py-2 text-right">Amount</th>
             <th class="px-4 py-2 text-left">Stage</th>
             <th class="px-4 py-2 text-left">Source</th>
+            <th class="px-4 py-2 text-left">Emp Size</th>
             <th class="px-4 py-2 text-right">Close Date</th>
             <th class="px-4 py-2 text-right">Biz Days</th>
             <th class="px-4 py-2 text-right">Base %</th>
@@ -178,6 +179,7 @@
             <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
             <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
             <td class="px-4 py-2 text-gray-600">{{ deal.source }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ deal.emp_segment if deal.emp_segment != "unknown" else "—" }}</td>
             <td class="px-4 py-2 text-right tabular-nums text-gray-600">
               {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
             </td>
