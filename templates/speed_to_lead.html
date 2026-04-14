@@ -58,65 +58,21 @@
   {{ _kpi("Never Dialed", fmt_pct(s.pct_never_dialed), deltas.pct_never_dialed, invert=true, fmt='pct') }}
 </div>
 
-{# ── By Rep table (expandable) ── #}
-{% set pct_lt5    = s.pct_within_5min %}
-{% set pct_5to1hr = [s.pct_within_1hr - s.pct_within_5min, 0]|max %}
-{% set pct_gt1hr  = [100 - s.pct_within_1hr - s.pct_never_dialed, 0]|max %}
-{% set pct_nd     = s.pct_never_dialed %}
-{% set ns_c = namespace(lt5=0, lt60=0, gt60=0, nd=0) %}
-{% for row in data.rows %}{% if not row.disqualified %}{% if row.stl_seconds is none %}{% set ns_c.nd = ns_c.nd + 1 %}{% elif row.stl_seconds <= 300 %}{% set ns_c.lt5 = ns_c.lt5 + 1 %}{% elif row.stl_seconds <= 3600 %}{% set ns_c.lt60 = ns_c.lt60 + 1 %}{% else %}{% set ns_c.gt60 = ns_c.gt60 + 1 %}{% endif %}{% endif %}{% endfor %}
-
-{# ── Charts ── #}
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-
-  {# Left: Response time distribution (CSS segmented bar) #}
-  <div class="bg-white rounded-xl border px-5 py-5" style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-    <div class="flex items-center gap-2.5 mb-1">
-      <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-      <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Response Time Distribution</h2>
-    </div>
-    <p class="text-xs text-slate-400 mb-5 pl-3.5">Share of leads by how quickly they were called</p>
-    <div class="flex h-3 rounded-full overflow-hidden" style="background: #f1f5f9;">
-      {% if pct_lt5 > 0 %}<div class="h-full cursor-help" style="width:{{ pct_lt5|round(1) }}%;background:#059669;" data-tip="≤ 5 min · {{ ns_c.lt5 }} leads ({{ pct_lt5|round(1) }}%)"></div>{% endif %}
-      {% if pct_5to1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_5to1hr|round(1) }}%;background:#6366f1;" data-tip="5 min – 1 hr · {{ ns_c.lt60 }} leads ({{ pct_5to1hr|round(1) }}%)"></div>{% endif %}
-      {% if pct_gt1hr > 0 %}<div class="h-full cursor-help" style="width:{{ pct_gt1hr|round(1) }}%;background:#d97706;" data-tip="> 1 hr · {{ ns_c.gt60 }} leads ({{ pct_gt1hr|round(1) }}%)"></div>{% endif %}
-      {% if pct_nd > 0 %}<div class="h-full cursor-help" style="width:{{ pct_nd|round(1) }}%;background:#dc2626;" data-tip="Never dialed · {{ ns_c.nd }} leads ({{ pct_nd|round(1) }}%)"></div>{% endif %}
-    </div>
-    <div class="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-5">
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#059669;"></span><span class="text-xs text-slate-500">≤ 5 min</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt5 }} <span class="font-normal text-slate-400">· {{ pct_lt5|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#6366f1;"></span><span class="text-xs text-slate-500">5 min – 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.lt60 }} <span class="font-normal text-slate-400">· {{ pct_5to1hr|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#d97706;"></span><span class="text-xs text-slate-500">> 1 hr</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.gt60 }} <span class="font-normal text-slate-400">· {{ pct_gt1hr|round(1) }}%</span></span>
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:#dc2626;"></span><span class="text-xs text-slate-500">Never dialed</span></div>
-        <span class="text-xs font-semibold tabular-nums text-slate-700">{{ ns_c.nd }} <span class="font-normal text-slate-400">· {{ pct_nd|round(1) }}%</span></span>
-      </div>
-    </div>
+{# ── Team scatter plot ── #}
+{% if data.rep_rows %}
+<div class="bg-white rounded-lg px-5 py-5 mb-8">
+  <h2 class="text-[13px] font-semibold tracking-tight" style="color:#1A1F36;">Rep Performance</h2>
+  <p class="text-[12px] text-slate-400 mt-0.5 mb-4">Bubble size = lead volume · left and low = best · any never-dialed is a miss.</p>
+  <div style="position:relative;height:360px;">
+    <canvas id="scatterChart"></canvas>
   </div>
-
-  {# Right: Median STL by rep (Chart.js horizontal bar) #}
-  {% if data.rep_rows %}
-  <div class="bg-white rounded-xl border px-5 py-5" style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-    <div class="flex items-center gap-2.5 mb-1">
-      <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-      <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Median Response by Rep</h2>
-    </div>
-    <p class="text-xs text-slate-400 mb-4 pl-3.5">Median speed to lead · dialed leads only</p>
-    <div style="position:relative;height:{{ [data.rep_rows|length * 44 + 20, 180]|max }}px;">
-      <canvas id="repStlChart"></canvas>
-    </div>
+  <div class="flex items-center gap-5 mt-3">
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#1D9E75;"></span>On target (≤ 5 min median)</span>
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#BA7517;"></span>At risk (5 min – 2 hr)</span>
+    <span class="flex items-center gap-1.5 text-[11px] text-slate-400"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:#A32D2D;"></span>Off target (> 2 hr)</span>
   </div>
-  {% endif %}
-
 </div>
+{% endif %}
 
 {% if data.rep_rows %}
 <div class="mb-8">
@@ -351,55 +307,158 @@ window.toggleRepDetail = function (rowId, triggerRow) {
   if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
 };
 
-// ── Median STL by Rep ─────────────────────────────────────────────────────────
+// ── Team Scatter Plot ─────────────────────────────────────────────────────────
 (function () {
-  const canvas = document.getElementById('repStlChart');
+  var canvas = document.getElementById('scatterChart');
   if (!canvas) return;
 
-  const labels      = [{% for row in data.rep_rows %}"{{ row.rep_name or 'Unknown' }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  const hasDials    = [{% for row in data.rep_rows %}{{ 'true' if row.median_stl_seconds is not none else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const seconds     = [{% for row in data.rep_rows %}{{ row.median_stl_seconds if row.median_stl_seconds is not none else '0' }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const displays    = [{% for row in data.rep_rows %}"{{ row.median_stl_display or '—' }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  const leadCounts  = [{% for row in data.rep_rows %}{{ row.lead_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const pct5min     = [{% for row in data.rep_rows %}{{ row.pct_within_5min|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
-  const pctNd       = [{% for row in data.rep_rows %}{{ row.pct_never_dialed|round(1) }}{% if not loop.last %},{% endif %}{% endfor %}];
+  // Data from Jinja
+  var reps = [
+    {% for row in data.rep_rows %}
+    {
+      name:    "{{ row.rep_name or 'Unknown' }}",
+      medSec:  {{ row.median_stl_seconds if row.median_stl_seconds is not none else 'null' }},
+      medDisp: "{{ row.median_stl_display or '—' }}",
+      leads:   {{ row.lead_count }},
+      pctNd:   {{ row.pct_never_dialed|round(1) }},
+      pct5:    {{ row.pct_within_5min|round(1) }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
 
-  const colors = seconds.map(function (s, i) {
-    if (!hasDials[i]) return '#cbd5e1';
-    if (s <= 900)     return '#059669';
-    if (s <= 3600)    return '#d97706';
-    return '#dc2626';
+  // Filter out reps with no dials (null median) — they have no meaningful x position
+  var plotReps = reps.filter(function (r) { return r.medSec !== null; });
+
+  // Map lead counts to bubble radius 7–15px
+  var minLeads = Math.min.apply(null, plotReps.map(function (r) { return r.leads; }));
+  var maxLeads = Math.max.apply(null, plotReps.map(function (r) { return r.leads; }));
+  var range = maxLeads - minLeads || 1;
+
+  function bubbleRadius(leads) {
+    return 7 + (leads - minLeads) / range * 8;
+  }
+
+  function bubbleColor(sec) {
+    if (sec <= 300)  return 'rgba(29,158,117,0.88)';   // teal
+    if (sec <= 7200) return 'rgba(186,117,23,0.88)';   // amber
+    return 'rgba(163,45,45,0.88)';                      // red
+  }
+
+  function fmtMin(min) {
+    if (min < 60) return Math.round(min) + 'm';
+    var h = Math.floor(min / 60);
+    var m = Math.round(min % 60);
+    return m ? h + 'h ' + m + 'm' : h + 'h';
+  }
+
+  // Build one dataset per rep so each bubble can have its own color
+  var datasets = plotReps.map(function (r) {
+    return {
+      label: r.name,
+      data: [{ x: r.medSec / 60, y: r.pctNd, r: bubbleRadius(r.leads) }],
+      backgroundColor: bubbleColor(r.medSec),
+      hoverBackgroundColor: bubbleColor(r.medSec),
+      _rep: r  // stash for tooltip
+    };
   });
 
+  // Custom plugin: reference line + corner annotations + rep labels
+  var scatterExtras = {
+    id: 'scatterExtras',
+    afterDraw: function (chart) {
+      var ctx = chart.ctx;
+      var xScale = chart.scales.x;
+      var yScale = chart.scales.y;
+      var area = chart.chartArea;
+
+      // ── Dashed vertical reference at 5 min ──
+      var x5 = xScale.getPixelForValue(5);
+      if (x5 >= area.left && x5 <= area.right) {
+        ctx.save();
+        ctx.strokeStyle = '#534AB7';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x5, area.top);
+        ctx.lineTo(x5, area.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Label
+        ctx.fillStyle = '#534AB7';
+        ctx.font = "500 10px 'Inter', system-ui, sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('5 min target', x5, area.top - 10);
+        ctx.restore();
+      }
+
+      // ── Corner annotations ──
+      ctx.save();
+      ctx.font = "500 10px 'Inter', system-ui, sans-serif";
+      // Bottom-left: "Fast · all called"
+      ctx.fillStyle = '#1D9E75';
+      ctx.textAlign = 'left';
+      ctx.fillText('Fast · all called', area.left + 6, area.bottom - 8);
+      // Top-right: "Slow · leads missed"
+      ctx.fillStyle = '#A32D2D';
+      ctx.textAlign = 'right';
+      ctx.fillText('Slow · leads missed', area.right - 6, area.top + 14);
+      ctx.restore();
+
+      // ── Rep name labels adjacent to bubbles ──
+      ctx.save();
+      ctx.font = "400 10px 'Inter', system-ui, sans-serif";
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'left';
+
+      // Collect label positions for collision avoidance
+      var labels = [];
+      datasets.forEach(function (ds) {
+        var pt = ds.data[0];
+        var px = xScale.getPixelForValue(pt.x);
+        var py = yScale.getPixelForValue(pt.y);
+        labels.push({ name: ds._rep.name, x: px, y: py, r: pt.r });
+      });
+
+      // Simple collision avoidance: sort by y, nudge if overlapping
+      labels.sort(function (a, b) { return a.y - b.y; });
+      for (var i = 1; i < labels.length; i++) {
+        var prev = labels[i - 1];
+        var cur = labels[i];
+        var prevLabelY = prev.y;
+        var curLabelY = cur.y;
+        if (Math.abs(curLabelY - prevLabelY) < 12 && Math.abs(cur.x - prev.x) < 60) {
+          labels[i].y = prevLabelY + 13;
+        }
+      }
+
+      labels.forEach(function (l) {
+        ctx.fillText(l.name, l.x + l.r + 4, l.y + 3);
+      });
+      ctx.restore();
+    }
+  };
+
   new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: seconds,
-        backgroundColor: colors,
-        borderRadius: 4,
-        borderSkipped: false,
-        minBarLength: 5,
-      }]
-    },
+    type: 'bubble',
+    data: { datasets: datasets },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 24, right: 80 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: function (items) { return labels[items[0].dataIndex]; },
+            title: function (items) {
+              return items[0].dataset._rep.name;
+            },
             label: function (ctx) {
-              var i = ctx.dataIndex;
-              if (!hasDials[i]) return ['  No dialed leads', '  ' + leadCounts[i] + ' total leads'];
+              var r = ctx.dataset._rep;
               return [
-                '  Median STL:  ' + displays[i],
-                '  Leads:  ' + leadCounts[i],
-                '  ≤ 5 min:  ' + pct5min[i] + '%',
-                '  Never dialed:  ' + pctNd[i] + '%',
+                '  Median STL: ' + r.medDisp,
+                '  Leads: ' + r.leads,
+                '  ≤ 5 min: ' + r.pct5 + '%',
+                '  Never dialed: ' + r.pctNd + '%'
               ];
             }
           },
@@ -408,36 +467,39 @@ window.toggleRepDetail = function (rowId, triggerRow) {
           bodyColor: '#f8fafc',
           padding: 12,
           cornerRadius: 6,
-          displayColors: false,
+          displayColors: false
         }
       },
       scales: {
         x: {
-          beginAtZero: true,
+          type: 'linear',
+          min: 0,
+          suggestedMax: 350,
+          title: { display: true, text: 'Median Speed to Lead', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
           grid: { color: '#f1f5f9' },
           border: { display: false },
           ticks: {
             color: '#94a3b8',
             font: { size: 10, family: "'Inter', system-ui, sans-serif" },
-            maxTicksLimit: 6,
-            callback: function (val) {
-              if (val === 0) return '0';
-              if (val < 60)   return val + 's';
-              if (val < 3600) return Math.round(val / 60) + 'm';
-              return (val / 3600).toFixed(1) + 'h';
-            }
+            callback: function (val) { return fmtMin(val); }
           }
         },
         y: {
-          grid: { display: false },
+          type: 'linear',
+          min: 0,
+          suggestedMax: 45,
+          title: { display: true, text: 'Never-dialed rate', color: '#94a3b8', font: { size: 10, family: "'Inter', system-ui, sans-serif" } },
+          grid: { color: '#f1f5f9' },
           border: { display: false },
           ticks: {
-            color: '#64748b',
-            font: { size: 11, family: "'Inter', system-ui, sans-serif" }
+            color: '#94a3b8',
+            font: { size: 10, family: "'Inter', system-ui, sans-serif" },
+            callback: function (val) { return val + '%'; }
           }
         }
       }
-    }
+    },
+    plugins: [scatterExtras]
   });
 })();
 </script>
