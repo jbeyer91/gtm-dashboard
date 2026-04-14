@@ -76,7 +76,7 @@ class LoginRouteTests(unittest.TestCase):
             "rep_detail": {"selected_owner_id": None, "available": False},
         }
 
-        with patch.object(
+        with patch.object(app_module, "_current_user_is_admin", return_value=False), patch.object(
             app_module.analytics,
             "compute_connect_rate_drivers",
             return_value=payload,
@@ -179,7 +179,7 @@ class LoginRouteTests(unittest.TestCase):
             "rep_detail": {"selected_owner_id": None, "available": False},
         }
 
-        with patch.object(app_module.calls_drilldown_bp, "is_cached", return_value=True), patch.object(
+        with patch.object(app_module, "_current_user_is_admin", return_value=False), patch.object(app_module.calls_drilldown_bp, "is_cached", return_value=True), patch.object(
             app_module.analytics,
             "compute_connect_rate_drivers",
             return_value=payload,
@@ -191,6 +191,60 @@ class LoginRouteTests(unittest.TestCase):
         self.assertIn(b"Rep diagnostic table", response.data)
         self.assertIn(b"Same Number Across Contacts", response.data)
         self.assertNotIn(b"Rep Detail", response.data)
+
+    def test_connect_rate_drivers_empty_state_keeps_filters_visible(self):
+        with self.client.session_transaction() as sess:
+            sess["authenticated"] = True
+
+        payload = {
+            "view": {
+                "period": "this_month",
+                "period_label": "This Month",
+                "team": "all",
+                "rep": "all",
+                "rep_label": "All reps",
+                "segment": "all",
+                "segment_enabled": False,
+                "is_rep_view": False,
+            },
+            "filters": {
+                "teams": [
+                    {"value": "all", "label": "All"},
+                    {"value": "Veterans", "label": "Veterans"},
+                ],
+                "reps": [{"value": "all", "label": "All reps"}],
+                "segments": [],
+            },
+            "state": {
+                "loading": False,
+                "empty": True,
+                "partial_explanation": False,
+                "sample_too_small": False,
+                "field_coverage_weak": False,
+                "message": "No eligible call data for selected filters",
+            },
+            "kpis": [],
+            "notes": {},
+            "gap_decomposition": {"title": "What is driving the gap?", "buckets": []},
+            "driver_cards": [],
+            "team_comparison": {"mode": "connect_pct", "modes": [], "team_avg_connect_pct": 0.0, "rows": []},
+            "diagnostic_table": {"sort": "worst_delta_vs_team", "sorts": [], "rows": [], "team_avg_row": None},
+            "rep_detail": {"selected_owner_id": None, "available": False},
+        }
+
+        with patch.object(app_module, "_current_user_is_admin", return_value=False), patch.object(
+            app_module.analytics,
+            "compute_connect_rate_drivers",
+            return_value=payload,
+        ):
+            response = self.client.get("/calls/connect-rate-drivers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Connect Rate Drivers", response.data)
+        self.assertIn(b"No eligible call data for this period yet.", response.data)
+        self.assertIn(b"This Month", response.data)
+        self.assertIn(b"Team", response.data)
+        self.assertIn(b"Veterans", response.data)
 
     def test_connect_rate_drivers_legacy_payload_is_normalized(self):
         with self.client.session_transaction() as sess:
@@ -261,7 +315,7 @@ class LoginRouteTests(unittest.TestCase):
         def legacy_compute(period, team="all", rep="all", segment="all"):
             return legacy_payload
 
-        with patch.object(app_module.analytics, "compute_connect_rate_drivers", side_effect=legacy_compute):
+        with patch.object(app_module, "_current_user_is_admin", return_value=False), patch.object(app_module.analytics, "compute_connect_rate_drivers", side_effect=legacy_compute):
             response = self.client.get("/calls/connect-rate-drivers")
 
         self.assertEqual(response.status_code, 200)
