@@ -164,16 +164,16 @@ NAV = [
     {"type": "group", "label": "Calls", "children": [
         {"endpoint": "call_stats",                    "label": "Summary"},
     ]},
-    {"type": "group", "label": "Analytics", "children": [
-        {"endpoint": "revenue_chart",                       "label": "Revenue Chart"},
-        {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
-        {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Rate Drivers"},
-        {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
-        {"endpoint": "speed_to_lead",                       "label": "Speed to Lead"},
-    ]},
     {"type": "group", "label": "Marketing", "children": [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
+    ]},
+    {"type": "group", "label": "Analytics", "children": [
+        {"endpoint": "revenue_chart",                       "label": "Revenue Trends"},
+        {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
+        {"endpoint": "calls_drilldown.connect_rate_drivers","label": "Connect Rate Drivers"},
+        {"endpoint": "calls_drilldown.dial_pipeline",       "label": "Dials to Pipeline"},
+        {"endpoint": "speed_to_lead",                       "label": "Speed to Lead"},
     ]},
 ]
 
