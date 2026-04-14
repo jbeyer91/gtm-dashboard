@@ -1283,6 +1283,11 @@ def compute_connect_rate_drivers(
             continue
         contact_id = call.get("_contact_id")
         company_id = call.get("_company_id")
+        ts_raw = props.get("hs_timestamp") or props.get("hs_createdate") or ""
+        try:
+            ts = _parse_hs_datetime(ts_raw)
+        except (ValueError, AttributeError):
+            ts = None
         if _call_excluded_by_deal_window(props, contact_id, contact_windows,
                                           company_id, company_windows):
             continue
