@@ -137,6 +137,9 @@
   <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900 select-none">
     Projected Forecast · Deal Detail
     <span class="text-gray-400 font-normal">({{ data.deal_details | map(attribute='deals') | map('length') | sum }} deals)</span>
+    {% if data.benchmarks %}
+    <span class="text-gray-300 font-normal text-xs ml-2">· Scoring calibrated from {{ data.benchmarks.sample_size }} closed deals ({{ data.benchmarks.overall_win_rate | round(1) }}% win rate)</span>
+    {% endif %}
   </summary>
 
   {% for group in data.deal_details %}

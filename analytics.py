@@ -2571,20 +2571,161 @@ def compute_revenue_chart(period: str) -> dict:
 
 
 # ── Projected forecast scoring ───────────────────────────────────────────────
-# Minimum business days to close from each stage (base, for ACV-sized deals).
-_STAGE_MIN_BIZ_DAYS = {
+# Fallback constants used when insufficient historical data exists.
+_STAGE_MIN_BIZ_DAYS_FALLBACK = {
     NB_STAGES["stage1"]: 20,
     NB_STAGES["stage2"]: 12,
     NB_STAGES["stage3"]: 7,
     NB_STAGES["stage4"]: 3,
 }
-
-_SOURCE_MULTIPLIER = {
+_SOURCE_MULT_FALLBACK = {
     "Inbound":        1.05,
     "Referral":       1.05,
     "Cold outreach":  0.90,
 }
-_SOURCE_MULT_DEFAULT = 0.95
+_SIZE_MULT_FALLBACK = {1.5: 1.00, 3.0: 0.85, 99999: 0.70}
+
+_MIN_DEALS_FOR_BENCHMARK = 10  # need this many closed deals to trust the data
+
+
+def _historical_deal_benchmarks(lookback_days: int = 180) -> dict:
+    """Derive forecast scoring benchmarks from actual closed-deal data.
+
+    Analyzes trailing closed (won + lost) deals to compute:
+      - stage_min_biz_days: median business days from each stage entry to close (won deals)
+      - source_multipliers: relative win-rate multiplier per source vs. overall win rate
+      - size_multipliers:   relative win-rate multiplier per ACV-ratio bucket
+      - overall_win_rate:   total won / total closed
+
+    Falls back to hardcoded constants when insufficient data.
+    Returns dict with keys: stage_min_biz_days, source_multipliers, source_mult_default,
+                           size_thresholds, overall_win_rate, sample_size.
+    """
+    end   = datetime.now(timezone.utc)
+    start = end - timedelta(days=lookback_days)
+    deals = get_deals(start, end, "closedate")
+    closed = [d for d in deals
+              if d["properties"].get("hs_is_closed_won") == "true"
+              or d["properties"].get("hs_is_closed_lost") == "true"]
+    won = [d for d in closed if d["properties"].get("hs_is_closed_won") == "true"]
+
+    if len(closed) < _MIN_DEALS_FOR_BENCHMARK:
+        return {
+            "stage_min_biz_days": dict(_STAGE_MIN_BIZ_DAYS_FALLBACK),
+            "source_multipliers": dict(_SOURCE_MULT_FALLBACK),
+            "source_mult_default": 0.95,
+            "size_thresholds": list(_SIZE_MULT_FALLBACK.items()),
+            "overall_win_rate": STAGE2_WIN_RATE,
+            "sample_size": len(closed),
+        }
+
+    # ── Stage timing: median biz days from stage entry to close (won deals) ──
+    stage_ids = [
+        ("stage1", NB_STAGES["stage1"]),
+        ("stage2", NB_STAGES["stage2"]),
+        ("stage3", NB_STAGES["stage3"]),
+        ("stage4", NB_STAGES["stage4"]),
+    ]
+    close_stage_id = NB_STAGES["won"]
+
+    stage_days: dict[str, list[int]] = {sid: [] for _, sid in stage_ids}
+    for d in won:
+        props = d["properties"]
+        close_ts_raw = props.get(f"hs_date_entered_{close_stage_id}") or props.get("closedate") or ""
+        close_dt = _parse_hs_datetime(close_ts_raw) if close_ts_raw else None
+        if not close_dt:
+            continue
+        close_date = close_dt.date() if hasattr(close_dt, "date") else close_dt
+        for _, sid in stage_ids:
+            entered_raw = props.get(f"hs_date_entered_{sid}") or ""
+            if not entered_raw:
+                continue
+            entered_dt = _parse_hs_datetime(entered_raw)
+            if not entered_dt:
+                continue
+            entered_date = entered_dt.date() if hasattr(entered_dt, "date") else entered_dt
+            if entered_date <= close_date:
+                bdays = _working_days_between(
+                    entered_date, close_date,
+                    _holiday_map_between(entered_date, close_date),
+                )
+                if bdays >= 0:
+                    stage_days[sid].append(bdays)
+
+    stage_min_biz_days = {}
+    for _, sid in stage_ids:
+        samples = stage_days[sid]
+        if len(samples) >= 5:
+            # Use 25th percentile as "minimum realistic" — faster than median,
+            # represents optimistic-but-achievable timing
+            samples_sorted = sorted(samples)
+            p25_idx = max(0, len(samples_sorted) // 4 - 1)
+            stage_min_biz_days[sid] = max(1, samples_sorted[p25_idx])
+        else:
+            stage_min_biz_days[sid] = _STAGE_MIN_BIZ_DAYS_FALLBACK.get(sid, 15)
+
+    # ── Source win rates → multipliers ───────────────────────────────────────
+    overall_win_rate = len(won) / len(closed) if closed else STAGE2_WIN_RATE
+
+    source_won = defaultdict(int)
+    source_total = defaultdict(int)
+    for d in closed:
+        src = _deal_source(d)
+        source_total[src] += 1
+        if d["properties"].get("hs_is_closed_won") == "true":
+            source_won[src] += 1
+
+    source_multipliers = {}
+    for src, total in source_total.items():
+        if total >= 5:
+            src_win_rate = source_won[src] / total
+            # Multiplier = this source's win rate / overall win rate, clamped
+            raw_mult = src_win_rate / overall_win_rate if overall_win_rate else 1.0
+            source_multipliers[src] = max(0.50, min(1.50, round(raw_mult, 2)))
+
+    # Default for unknown sources: slight discount
+    source_mult_default = 0.95
+
+    # ── Size-based win rates → multipliers ───────────────────────────────────
+    # Bucket deals by amount relative to overall median ACV
+    won_amounts = [float(d["properties"].get("amount") or 0) for d in won if float(d["properties"].get("amount") or 0) > 0]
+    median_acv = sorted(won_amounts)[len(won_amounts) // 2] if won_amounts else ACV
+
+    # Buckets: small (<=1.5x median), medium (1.5-3x), large (>3x)
+    size_buckets = {"small": {"won": 0, "total": 0}, "medium": {"won": 0, "total": 0}, "large": {"won": 0, "total": 0}}
+    for d in closed:
+        amt = float(d["properties"].get("amount") or 0)
+        ratio = (amt / median_acv) if median_acv else 1.0
+        if ratio <= 1.5:
+            bucket = "small"
+        elif ratio <= 3.0:
+            bucket = "medium"
+        else:
+            bucket = "large"
+        size_buckets[bucket]["total"] += 1
+        if d["properties"].get("hs_is_closed_won") == "true":
+            size_buckets[bucket]["won"] += 1
+
+    size_thresholds = []  # list of (max_ratio, multiplier)
+    for bucket_name, max_ratio in [("small", 1.5), ("medium", 3.0), ("large", 99999)]:
+        b = size_buckets[bucket_name]
+        if b["total"] >= 5:
+            bucket_wr = b["won"] / b["total"]
+            raw_mult = bucket_wr / overall_win_rate if overall_win_rate else 1.0
+            size_thresholds.append((max_ratio, max(0.40, min(1.30, round(raw_mult, 2)))))
+        else:
+            # Fall back to hardcoded
+            fb = _SIZE_MULT_FALLBACK.get(max_ratio, 1.0)
+            size_thresholds.append((max_ratio, fb))
+
+    return {
+        "stage_min_biz_days": stage_min_biz_days,
+        "source_multipliers": source_multipliers,
+        "source_mult_default": source_mult_default,
+        "size_thresholds": size_thresholds,
+        "overall_win_rate": round(overall_win_rate, 4),
+        "sample_size": len(closed),
+    }
 
 
 def _score_deal_projected(
@@ -2593,30 +2734,39 @@ def _score_deal_projected(
     today,
     holiday_map: dict,
     period_end,
+    benchmarks: dict | None = None,
 ) -> dict:
     """Score a single open deal with contextual projected probability.
+
+    Uses historical CRM benchmarks (from _historical_deal_benchmarks) for stage
+    timing, source win rates, and size win rates.  Falls back to hardcoded
+    constants only when insufficient historical data exists.
 
     Returns dict with projected_prob, individual multipliers, risk_flags, etc.
     """
     risk_flags = []  # list of (severity, message)
+    bm = benchmarks or {}
 
     base_prob = float(props.get("hs_deal_stage_probability") or 0)
     amt       = _parse_amount(props.get("amount"))
     stage     = props.get("dealstage") or ""
     rep_acv   = (rep_stats or {}).get("acv", ACV)
 
-    # ── Signal 3: Deal size ──────────────────────────────────────────────────
+    # ── Signal 3: Deal size (from historical win rates by size bucket) ───────
     size_ratio = (amt / rep_acv) if rep_acv else 1.0
+    size_thresholds = bm.get("size_thresholds") or list(_SIZE_MULT_FALLBACK.items())
+    size_mult = 1.0
+    for max_ratio, mult in size_thresholds:
+        if size_ratio <= max_ratio:
+            size_mult = mult
+            break
     if size_ratio > 3.0:
-        size_mult = 0.70
         risk_flags.append(("medium", f"Very large deal: {size_ratio:.1f}x typical ACV"))
     elif size_ratio > 1.5:
-        size_mult = 0.85
         risk_flags.append(("low", f"Large deal: {size_ratio:.1f}x typical ACV"))
-    else:
-        size_mult = 1.00
 
-    # ── Signal 1: Time feasibility ───────────────────────────────────────────
+    # ── Signal 1: Time feasibility (from historical stage-to-close timing) ───
+    stage_min_biz_days = bm.get("stage_min_biz_days") or _STAGE_MIN_BIZ_DAYS_FALLBACK
     closedate_raw = props.get("closedate") or ""
     closedate_dt = _parse_hs_datetime(closedate_raw) if closedate_raw else None
 
@@ -2635,7 +2785,7 @@ def _score_deal_projected(
             risk_flags.append(("high", "Close date is in the past"))
         else:
             biz_days_remaining = _working_days_between(today_date, close_date, holiday_map)
-            base_min = _STAGE_MIN_BIZ_DAYS.get(stage, 15)
+            base_min = stage_min_biz_days.get(stage, 15)
             # Scale min days for large deals
             if size_ratio > 3.0:
                 adjusted_min = base_min * 2.0
@@ -2697,9 +2847,11 @@ def _score_deal_projected(
         if not has_next_steps:
             risk_flags.append(("medium", "No next steps defined"))
 
-    # ── Signal 4: Deal source ────────────────────────────────────────────────
+    # ── Signal 4: Deal source (from historical win rates by source) ──────────
     source = _deal_source({"properties": props})
-    source_mult = _SOURCE_MULTIPLIER.get(source, _SOURCE_MULT_DEFAULT)
+    src_mults = bm.get("source_multipliers") or _SOURCE_MULT_FALLBACK
+    src_default = bm.get("source_mult_default", 0.95)
+    source_mult = src_mults.get(source, src_default)
 
     # ── Signal 5: Rep history ────────────────────────────────────────────────
     if rep_stats:
@@ -2743,8 +2895,9 @@ def compute_forecast(period: str) -> dict:
 
     open_deals = get_all_open_deals(start, end)
 
-    # Projected forecast setup
+    # Projected forecast setup — derive benchmarks from historical CRM data
     rep_stats_map = _rep_trailing_deal_stats()
+    benchmarks = _historical_deal_benchmarks()
     today_dt = datetime.now(timezone.utc)
     today_date = today_dt.date()
     period_end_date = end.date() if hasattr(end, "date") else end
@@ -2830,6 +2983,7 @@ def compute_forecast(period: str) -> dict:
             today_dt,
             proj_holiday_map,
             period_end_date,
+            benchmarks=benchmarks,
         )
         proj_amt = amt * score["projected_prob"]
         owner_projected[oid] += proj_amt
@@ -2966,6 +3120,7 @@ def compute_forecast(period: str) -> dict:
     return {
         "rows": rows, "groups": groups, "totals": totals, "period": period,
         "deal_details": deal_detail_groups,
+        "benchmarks": benchmarks,
     }
 
 
