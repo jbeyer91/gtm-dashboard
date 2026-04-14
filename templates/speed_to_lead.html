@@ -415,6 +415,7 @@ sortRepTable('worst_median');
       data: [{ x: Math.min(r.medSec / 60, CAP_MIN), y: r.pctNd, r: bubbleRadius(r.leads) }],
       backgroundColor: bubbleColor(r.medSec),
       hoverBackgroundColor: bubbleColor(r.medSec),
+      clip: false,
       _rep: r  // stash for tooltip
     };
   });
