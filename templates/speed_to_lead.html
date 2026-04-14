@@ -74,57 +74,72 @@
 </div>
 {% endif %}
 
+{# ── Rep table ── #}
 {% if data.rep_rows %}
 <div class="mb-8">
-  <div class="flex items-center gap-2.5 mb-4">
-    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">By Rep</h2>
-    <span class="text-[11px] text-slate-400 font-normal">· click a row to expand</span>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-[13px] font-semibold tracking-tight" style="color:#1A1F36;">By Rep</h2>
+    <div class="flex items-center gap-1" id="sort-pills">
+      <button type="button" data-sort="worst_median" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer bg-white" style="color:#1A1F36;" onclick="sortRepTable('worst_median')">Worst median</button>
+      <button type="button" data-sort="most_nd" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600" onclick="sortRepTable('most_nd')">Most never-dialed</button>
+      <button type="button" data-sort="lead_vol" class="sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600" onclick="sortRepTable('lead_vol')">Lead volume</button>
+    </div>
   </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
-        <tr>
-          <th class="px-4 py-3 text-left font-medium">Rep</th>
-          <th class="px-4 py-3 text-right font-medium">Leads</th>
-          <th class="px-4 py-3 text-right font-medium" title="Median time from business-hours open to first outbound call">Median STL</th>
-          <th class="px-4 py-3 text-right font-medium" title="% dialed within 5 minutes of lead opening">≤ 5 min</th>
-          <th class="px-4 py-3 text-right font-medium" title="% dialed within 1 hour of lead opening">≤ 1 hr</th>
-          <th class="px-4 py-3 text-right font-medium" title="% of leads with no outbound call after booking">Never Dialed</th>
+  <div class="bg-white rounded-lg overflow-x-auto">
+    <table class="w-full text-sm" id="rep-table">
+      <thead>
+        <tr class="text-[10px] uppercase font-normal text-slate-400 tracking-[0.06em]">
+          <th class="px-4 py-2.5 text-left font-normal">Rep</th>
+          <th class="px-4 py-2.5 text-right font-normal">Leads</th>
+          <th class="px-4 py-2.5 text-right font-normal">Median STL</th>
+          <th class="px-4 py-2.5 text-right font-normal">≤ 5 min</th>
+          <th class="px-4 py-2.5 text-right font-normal">≤ 1 hr</th>
+          <th class="px-4 py-2.5 text-right font-normal">Never Dialed</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="rep-tbody">
         {% for row in data.rep_rows %}
         {# ── Rep summary row ── #}
-        <tr class="border-t border-gray-100 hover:bg-slate-50 transition-colors duration-100 cursor-pointer select-none"
+        <tr class="rep-summary-row cursor-pointer select-none transition-colors duration-100 hover:bg-[#F4F5F8]"
+            style="border-bottom: 0.5px solid rgba(0,0,0,0.05);"
+            data-median="{{ row.median_stl_seconds if row.median_stl_seconds is not none else 999999 }}"
+            data-pctnd="{{ row.pct_never_dialed }}"
+            data-leads="{{ row.lead_count }}"
+            data-owner="{{ row.owner_id }}"
             onclick="toggleRepDetail('rep-{{ row.owner_id }}', this)">
-          <td class="px-4 py-3 font-medium flex items-center gap-2">
+          <td class="px-4 py-2 font-medium flex items-center gap-2" style="color:#1A1F36;">
             <svg class="rep-arrow w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
             </svg>
             {{ row.rep_name or "—" }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ row.lead_count }}</td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if row.median_stl_seconds is none %}text-gray-400
-            {% elif row.median_stl_seconds <= 900 %}text-green-600
-            {% elif row.median_stl_seconds <= 3600 %}text-yellow-600
-            {% else %}text-red-500{% endif %}">{{ row.median_stl_display }}</td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_within_5min >= 50 %}text-green-600{% elif row.pct_within_5min >= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums" style="color:#1A1F36;">{{ row.lead_count }}</td>
+          <td class="px-4 py-2 text-right">
+            {% if row.median_stl_seconds is none %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F0F0F2;color:#6B7280;">—</span>
+            {% elif row.median_stl_seconds <= 300 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#E6F5EF;color:#1D9E75;">{{ row.median_stl_display }}</span>
+            {% elif row.median_stl_seconds <= 7200 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#FDF3E3;color:#BA7517;">{{ row.median_stl_display }}</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style="background:#F5E6E6;color:#A32D2D;">{{ row.median_stl_display }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_within_5min >= 50 %}#1D9E75{% elif row.pct_within_5min >= 25 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_within_5min) }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_within_1hr >= 75 %}text-green-600{% elif row.pct_within_1hr >= 50 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_within_1hr >= 75 %}#1D9E75{% elif row.pct_within_1hr >= 50 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_within_1hr) }}
           </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if row.pct_never_dialed == 0 %}text-green-600{% elif row.pct_never_dialed <= 20 %}text-yellow-600{% else %}text-red-500{% endif %}">
+          <td class="px-4 py-2 text-right tabular-nums text-[12px] font-medium"
+            style="color:{% if row.pct_never_dialed == 0 %}#1D9E75{% elif row.pct_never_dialed <= 20 %}#BA7517{% else %}#A32D2D{% endif %};">
             {{ fmt_pct(row.pct_never_dialed) }}
           </td>
         </tr>
         {# ── Rep drill-down detail row ── #}
-        <tr id="rep-{{ row.owner_id }}" class="hidden">
+        <tr id="rep-{{ row.owner_id }}" class="hidden" data-detail-for="{{ row.owner_id }}">
           <td colspan="6" class="px-0 py-0 bg-slate-50 border-t border-b border-slate-100">
 
             {# Outcome mini-table #}
@@ -243,59 +258,6 @@
 </div>
 {% endif %}
 
-{# ── Outcome by dial status ── #}
-{% if data.outcome_buckets %}
-<div class="mb-8">
-  <div class="flex items-center gap-2.5 mb-4">
-    <span class="w-1 h-3.5 rounded-full bg-violet-400 shrink-0"></span>
-    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.12em]">Outcome by Dial Status</h2>
-    <span class="text-[11px] text-slate-400 cursor-help" data-tip="Qualified leads only (disqualified contacts excluded). Show/No-Show/Cancelled rates use only meetings with a known outcome — upcoming meetings are excluded from those three columns. Show + No-Show + Cancelled = 100%.">ⓘ</span>
-  </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
-        <tr>
-          <th class="px-4 py-3 text-left font-medium">Group</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Qualified leads (disqualified excluded) in this group">Leads</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome (show + no-show + cancelled), % that showed up">Show Rate</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were no-shows">No-Show Rate</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="Of meetings with a known outcome, % that were cancelled. Show + No-Show + Cancelled = 100%.">Cancelled</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where any New Business deal was created in HubSpot">Deal Created</th>
-          <th class="px-4 py-3 text-right font-medium" data-tip="% of leads where a deal reached Stage 2 or beyond">Reached S2+</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-100">
-        {% for b in data.outcome_buckets %}
-        <tr class="hover:bg-slate-50 transition-colors duration-100">
-          <td class="px-4 py-3 font-medium">{{ b.label }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-gray-500">{{ b.lead_count }}</td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_completed >= 60 %}text-green-600{% elif b.pct_completed >= 40 %}text-yellow-600{% else %}text-red-500{% endif %}">
-            {{ fmt_pct(b.pct_completed) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums
-            {% if b.pct_no_show <= 10 %}text-green-600{% elif b.pct_no_show <= 25 %}text-yellow-600{% else %}text-red-500{% endif %}">
-            {{ fmt_pct(b.pct_no_show) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums text-gray-500">
-            {{ fmt_pct(b.pct_cancelled) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_deal >= 40 %}text-green-600{% elif b.pct_deal >= 20 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-            {{ fmt_pct(b.pct_deal) }}
-          </td>
-          <td class="px-4 py-3 text-right tabular-nums font-semibold
-            {% if b.pct_s2 >= 25 %}text-green-600{% elif b.pct_s2 >= 10 %}text-yellow-600{% else %}text-gray-500{% endif %}">
-            {{ fmt_pct(b.pct_s2) }}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-
 
 <script>
 window.toggleRepDetail = function (rowId, triggerRow) {
@@ -306,6 +268,52 @@ window.toggleRepDetail = function (rowId, triggerRow) {
   detailRow.classList.toggle('hidden', !isHidden);
   if (arrow) arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
 };
+
+// ── Sort rep table ──────────────────────────────────────────────────────────
+window.sortRepTable = function (mode) {
+  var tbody = document.getElementById('rep-tbody');
+  if (!tbody) return;
+
+  // Update pill active states
+  document.querySelectorAll('.sort-pill').forEach(function (btn) {
+    if (btn.getAttribute('data-sort') === mode) {
+      btn.className = 'sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer bg-white';
+      btn.style.color = '#1A1F36';
+    } else {
+      btn.className = 'sort-pill px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer text-slate-400 hover:text-slate-600';
+      btn.style.color = '';
+    }
+  });
+
+  // Collect summary rows with their detail rows
+  var pairs = [];
+  var summaryRows = tbody.querySelectorAll('.rep-summary-row');
+  summaryRows.forEach(function (row) {
+    var oid = row.getAttribute('data-owner');
+    var detail = tbody.querySelector('[data-detail-for="' + oid + '"]');
+    pairs.push({ summary: row, detail: detail });
+  });
+
+  // Sort
+  pairs.sort(function (a, b) {
+    if (mode === 'worst_median') {
+      return parseFloat(b.summary.dataset.median) - parseFloat(a.summary.dataset.median);
+    } else if (mode === 'most_nd') {
+      return parseFloat(b.summary.dataset.pctnd) - parseFloat(a.summary.dataset.pctnd);
+    } else {
+      return parseFloat(b.summary.dataset.leads) - parseFloat(a.summary.dataset.leads);
+    }
+  });
+
+  // Re-append in sorted order
+  pairs.forEach(function (p) {
+    tbody.appendChild(p.summary);
+    if (p.detail) tbody.appendChild(p.detail);
+  });
+};
+
+// Apply default sort on page load
+sortRepTable('worst_median');
 
 // ── Team Scatter Plot ─────────────────────────────────────────────────────────
 (function () {
