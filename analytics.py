@@ -10,7 +10,8 @@ from cache_utils import ttl_cache
 from hubspot import (
     get_owners, get_deals, get_all_open_deals, get_calls, get_meetings,
     get_contacts_inbound, get_list_contacts, get_date_range, NB_STAGES, DEAL_STAGES,
-    get_deal_contact_windows, get_call_to_contact_map, get_team_owner_ids,
+    get_deal_contact_windows, get_call_to_contact_map, get_call_to_company_map,
+    get_team_owner_ids,
     get_scoped_team_owner_ids,
     apply_manual_owner_overrides,
     get_owner_team_map, TEAM_MANAGER,
@@ -326,7 +327,36 @@ def _working_days_between(start_date, end_date, holiday_map):
     )
 
 
-def _call_daily_series(calls, owners, scope_end, contact_windows, call_to_contact):
+def _call_excluded_by_deal_window(call_props, contact_id, contact_windows,
+                                   company_id, company_windows):
+    """Return True if a deal was open for the contact or company at call time."""
+    windows = []
+    if contact_id and contact_id in contact_windows:
+        windows = contact_windows[contact_id]
+    elif not contact_id and company_id and company_id in company_windows:
+        windows = company_windows[company_id]
+    if not windows:
+        return False
+    ts_raw = call_props.get("hs_timestamp") or call_props.get("hs_createdate")
+    if not ts_raw:
+        return False
+    try:
+        call_ts_ms = int(datetime.fromisoformat(
+            str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
+    except Exception:
+        return False
+    return any(s <= call_ts_ms and (e is None or call_ts_ms <= e) for s, e in windows)
+
+
+def _unpack_deal_windows(raw):
+    """Unpack get_deal_contact_windows() result with backward-compat for stale cache."""
+    if isinstance(raw, tuple):
+        return raw
+    return raw, {}
+
+
+def _call_daily_series(calls, owners, scope_end, contact_windows, company_windows,
+                       call_to_contact, call_to_company):
     daily_dials = defaultdict(int)
     daily_conversations = defaultdict(int)
     for call in calls:
@@ -338,20 +368,10 @@ def _call_daily_series(calls, owners, scope_end, contact_windows, call_to_contac
         if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         contact_id = call_to_contact.get(call["id"])
-        if contact_id and contact_id in contact_windows:
-            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-            if ts_raw:
-                try:
-                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
-                    skip = False
-                    for (open_start, open_end) in contact_windows[contact_id]:
-                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
-                            skip = True
-                            break
-                    if skip:
-                        continue
-                except Exception:
-                    pass
+        company_id = call_to_company.get(call["id"]) if not contact_id else None
+        if _call_excluded_by_deal_window(call["properties"], contact_id, contact_windows,
+                                          company_id, company_windows):
+            continue
         ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
         if not ts_raw:
             continue
@@ -406,8 +426,10 @@ def compute_call_stats(period: str) -> dict:
     deals_created = get_deals(start, end, "createdate")
 
     # Build time-aware exclusion: {contact_id: [(open_start_ms, open_end_ms_or_None), ...]}
-    contact_windows = get_deal_contact_windows()
+    contact_windows, company_windows = _unpack_deal_windows(get_deal_contact_windows())
     call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
+    no_contact_call_ids = [c["id"] for c in calls if c["id"] not in call_to_contact]
+    call_to_company = get_call_to_company_map(no_contact_call_ids)
 
     # Map deals to owner
     owner_deals_created = defaultdict(set)
@@ -437,22 +459,12 @@ def compute_call_stats(period: str) -> dict:
             continue
         if (call["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
-        # Exclude calls where a deal was open for that contact at the time of the call
+        # Exclude calls where a deal was open for that contact/company at call time
         contact_id = call_to_contact.get(call["id"])
-        if contact_id and contact_id in contact_windows:
-            ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
-            if ts_raw:
-                try:
-                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
-                    skip = False
-                    for (open_start, open_end) in contact_windows[contact_id]:
-                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
-                            skip = True
-                            break
-                    if skip:
-                        continue
-                except Exception:
-                    pass
+        company_id = call_to_company.get(call["id"]) if not contact_id else None
+        if _call_excluded_by_deal_window(call["properties"], contact_id, contact_windows,
+                                          company_id, company_windows):
+            continue
         disposition = (call["properties"].get("hs_call_disposition") or "").strip()
         ts_raw = call["properties"].get("hs_timestamp") or call["properties"].get("hs_createdate")
         if ts_raw:
@@ -588,8 +600,8 @@ def compute_connect_diagnostics(period: str) -> dict:
 
     # Same exclusion logic as compute_call_stats:
     # - outbound only, permitted reps only
-    # - exclude calls where a deal was open for that contact at call time
-    contact_windows = get_deal_contact_windows()
+    # - exclude calls where a deal was open for that contact/company at call time
+    contact_windows, company_windows = _unpack_deal_windows(get_deal_contact_windows())
     filtered = []
     for c in calls:
         if not c["properties"].get("hubspot_owner_id"):
@@ -599,20 +611,10 @@ def compute_connect_diagnostics(period: str) -> dict:
         if (c["properties"].get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         contact_id = c.get("_contact_id")
-        if contact_id and contact_id in contact_windows:
-            ts_raw = c["properties"].get("hs_timestamp") or c["properties"].get("hs_createdate")
-            if ts_raw:
-                try:
-                    call_ts_ms = int(datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp() * 1000)
-                    skip = False
-                    for (open_start, open_end) in contact_windows[contact_id]:
-                        if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
-                            skip = True
-                            break
-                    if skip:
-                        continue
-                except Exception:
-                    pass
+        company_id = c.get("_company_id")
+        if _call_excluded_by_deal_window(c["properties"], contact_id, contact_windows,
+                                          company_id, company_windows):
+            continue
         filtered.append(c)
 
     _empty_hourly = [
@@ -1268,7 +1270,7 @@ def compute_connect_rate_drivers(
     start, end = get_date_range(period)
     owners = apply_manual_owner_overrides(get_owners())
     owner_team_map = get_owner_team_map()
-    contact_windows = get_deal_contact_windows()
+    contact_windows, company_windows = _unpack_deal_windows(get_deal_contact_windows())
     calls = get_calls_enriched(start, end)
 
     prepared_calls = []
@@ -1280,20 +1282,10 @@ def compute_connect_rate_drivers(
         if (props.get("hs_call_direction") or "").upper() == "INBOUND":
             continue
         contact_id = call.get("_contact_id")
-        ts_raw = props.get("hs_timestamp") or props.get("hs_createdate") or ""
-        try:
-            ts = _parse_hs_datetime(ts_raw)
-        except (ValueError, AttributeError):
-            ts = None
-        if contact_id and contact_id in contact_windows and ts is not None:
-            call_ts_ms = int(ts.timestamp() * 1000)
-            skip = False
-            for open_start, open_end in contact_windows[contact_id]:
-                if open_start <= call_ts_ms and (open_end is None or call_ts_ms <= open_end):
-                    skip = True
-                    break
-            if skip:
-                continue
+        company_id = call.get("_company_id")
+        if _call_excluded_by_deal_window(props, contact_id, contact_windows,
+                                          company_id, company_windows):
+            continue
 
         owner = owners.get(owner_id, {})
         email = call.get("_email") or ""
@@ -1796,10 +1788,13 @@ def compute_dial_pipeline(period: str) -> dict:
     scope_end = end_dt
     calls = get_calls(start_dt, end_dt)
     deals_created = get_deals(start_dt, end_dt, "createdate")
-    contact_windows = get_deal_contact_windows()
+    contact_windows, company_windows = _unpack_deal_windows(get_deal_contact_windows())
     call_to_contact = get_call_to_contact_map([c["id"] for c in calls])
+    no_contact_call_ids = [c["id"] for c in calls if c["id"] not in call_to_contact]
+    call_to_company = get_call_to_company_map(no_contact_call_ids)
     daily_dials, daily_conversations = _call_daily_series(
-        calls, owners, scope_end, contact_windows, call_to_contact
+        calls, owners, scope_end, contact_windows, company_windows,
+        call_to_contact, call_to_company
     )
     daily_cold_outreach = _deal_daily_series(deals_created, owners, scope_end)
 
@@ -1815,8 +1810,11 @@ def compute_dial_pipeline(period: str) -> dict:
         historical_calls = get_calls(historical_start_dt, historical_end_dt)
         historical_deals = get_deals(historical_start_dt, historical_end_dt, "createdate")
         historical_call_to_contact = get_call_to_contact_map([c["id"] for c in historical_calls])
+        historical_no_contact_ids = [c["id"] for c in historical_calls if c["id"] not in historical_call_to_contact]
+        historical_call_to_company = get_call_to_company_map(historical_no_contact_ids)
         hist_dials, hist_conversations = _call_daily_series(
-            historical_calls, owners, historical_end_dt, contact_windows, historical_call_to_contact
+            historical_calls, owners, historical_end_dt, contact_windows, company_windows,
+            historical_call_to_contact, historical_call_to_company
         )
         hist_cold = _deal_daily_series(historical_deals, owners, historical_end_dt)
 

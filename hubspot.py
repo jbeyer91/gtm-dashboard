@@ -1033,7 +1033,7 @@ def get_deal_contact_windows() -> dict:
         for contact_id in contacts:
             contact_windows.setdefault(contact_id, []).extend(windows)
 
-    return contact_windows
+    return contact_windows, company_windows
 
 
 @ttl_cache
@@ -1166,6 +1166,18 @@ def get_call_to_contact_map(call_ids: list) -> dict:
     """
     call_to_contacts = _batch_associations("calls", "contacts", call_ids)
     return {call_id: contacts[0] for call_id, contacts in call_to_contacts.items() if contacts}
+
+
+def get_call_to_company_map(call_ids: list) -> dict:
+    """Return {call_id: company_id} for calls that have a company association.
+
+    Not cached — called from within cached compute functions.
+    Only pass call IDs that lack a contact association to minimise API calls.
+    """
+    if not call_ids:
+        return {}
+    call_to_companies = _batch_associations("calls", "companies", call_ids)
+    return {call_id: cos[0] for call_id, cos in call_to_companies.items() if cos}
 
 
 def get_contacts_for_drilldown(contact_ids: list) -> dict:
@@ -1333,6 +1345,7 @@ def get_calls_enriched(start: datetime, end: datetime) -> list:
             "_icp_rank":              cp.get("company_icp_rank") or company_icp or ("__co_not_scored__" if from_company_object else "—"),
             "_contact_id":            contact_id,
             "_from_company_object":   from_company_object,
+            "_company_id":            call_to_company.get(call["id"], [None])[0] if from_company_object else None,
             "_email":                 cp.get("email") or "",
             "_phone":                 cp.get("phone") or "",
             "_mobilephone":           cp.get("mobilephone") or "",
