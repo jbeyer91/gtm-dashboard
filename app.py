@@ -20,7 +20,7 @@ import analytics
 import calls_drilldown as calls_drilldown_bp
 import monthly_store
 from cache_utils import clear_cache, get_cached, last_refreshed_str, last_refreshed_ts, is_cached
-from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map
+from hubspot import get_prior_range, get_owners, OWNER_EXCLUDE, get_team_owner_ids, get_owner_team_map, HUBSPOT_PORTAL_ID
 
 # On-demand scorecard warming: when a user hits a cold cache, spawn a background
 # thread to compute the scorecard immediately instead of waiting for the scheduler.
@@ -1013,9 +1013,10 @@ def forecast():
         t  = data["totals"]
         pt = (prior_data or {}).get("totals")
         deltas = {
-            "won_amt":       _d(t, pt, "won_amt"),
-            "attain_pct":    _d(t, pt, "attain_pct"),
-            "submitted_amt": _d(t, pt, "submitted_amt"),
+            "won_amt":        _d(t, pt, "won_amt"),
+            "attain_pct":     _d(t, pt, "attain_pct"),
+            "submitted_amt":  _d(t, pt, "submitted_amt"),
+            "projected_amt":  _d(t, pt, "projected_amt"),
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="forecast")
@@ -1023,6 +1024,7 @@ def forecast():
     return render_template("forecast.html", data=data, periods=FORECAST_PERIODS,
                            period=period, deltas=deltas, prior_label=prior_label,
                            this_month_label=this_month_label,
+                           portal_id=HUBSPOT_PORTAL_ID,
                            nav=NAV, active="forecast")
 
 
@@ -1661,16 +1663,19 @@ def forecast_csv():
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(["Rep", "Won $", "Commit $", "Commit #", "Submitted Forecast $",
-                "Best Case $", "Best Case #", "Weighted $", "Quota $", "Gap $", "Attain %"])
+                "Best Case $", "Best Case #", "Weighted $", "Projected $",
+                "Quota $", "Gap $", "Attain %"])
     for r in data["rows"]:
         w.writerow([r["ae"], r["won_amt"], r["commit_amt"], r["commit_n"],
                     r["submitted_amt"] or "", r["bestcase_amt"], r["bestcase_n"],
-                    r["weighted_amt"], r["quota_amt"], r["gap_amt"],
+                    r["weighted_amt"], r["projected_amt"],
+                    r["quota_amt"], r["gap_amt"],
                     f"{r['attain_pct']:.1f}%" if r["attain_pct"] is not None else ""])
     t = data["totals"]
     w.writerow(["TOTAL", t["won_amt"], t["commit_amt"], t["commit_n"],
                 t["submitted_amt"] or "", t["bestcase_amt"], t["bestcase_n"],
-                t["weighted_amt"], t["quota_amt"], t["gap_amt"],
+                t["weighted_amt"], t["projected_amt"],
+                t["quota_amt"], t["gap_amt"],
                 f"{t['attain_pct']:.1f}%" if t["attain_pct"] is not None else ""])
     return Response(out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=forecast-{period}.csv"})
