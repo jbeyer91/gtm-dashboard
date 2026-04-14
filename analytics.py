@@ -2897,6 +2897,220 @@ def compute_inbound_funnel(period: str, size: str = "All Sizes") -> dict:
     return {"rows": rows, "totals": totals, "period": period}
 
 
+# ── Deal Flow Sankey ──────────────────────────────────────────────────────────
+
+# Stage progression order for determining highest stage reached by lost deals
+_STAGE_ORDER = [
+    ("stage1", NB_STAGES["stage1"], "hs_date_entered_71300357"),
+    ("stage2", NB_STAGES["stage2"], "hs_date_entered_71300358"),
+    ("stage3", NB_STAGES["stage3"], "hs_date_entered_1294419353"),
+    ("stage4", NB_STAGES["stage4"], "hs_date_entered_71300359"),
+]
+
+_STAGE_LABELS = {
+    NB_STAGES["stage1"]: "Stage 1",
+    NB_STAGES["stage2"]: "Stage 2",
+    NB_STAGES["stage3"]: "Stage 3",
+    NB_STAGES["stage4"]: "Stage 4",
+    NB_STAGES["won"]:    "Won",
+    NB_STAGES["lost"]:   "Lost",
+}
+
+# Ordered list of stage IDs for progression logic
+_PROGRESSION = [NB_STAGES["stage1"], NB_STAGES["stage2"],
+                NB_STAGES["stage3"], NB_STAGES["stage4"]]
+
+
+def _highest_stage_reached(props):
+    """Return the highest stage a deal reached, using hs_date_entered_* fields."""
+    highest = NB_STAGES["stage1"]
+    for _key, stage_id, field in _STAGE_ORDER:
+        if props.get(field):
+            highest = stage_id
+    return highest
+
+
+def _build_deal_links(deals):
+    """Build Sankey link counts from a list of deals.
+
+    Returns list of {from, to, flow} dicts and summary totals.
+    """
+    _s1 = NB_STAGES["stage1"]
+    _won = NB_STAGES["won"]
+    _lost = NB_STAGES["lost"]
+
+    flow = defaultdict(int)
+    totals = {"deal_created": 0, "won": 0, "lost": 0, "open": 0}
+
+    for d in deals:
+        props = d["properties"]
+        stage = props.get("dealstage", "")
+        is_won = props.get("hs_is_closed_won") == "true"
+        is_lost = props.get("hs_is_closed_lost") == "true"
+        totals["deal_created"] += 1
+
+        if is_won:
+            totals["won"] += 1
+            # Won deals passed through all stages
+            for i in range(len(_PROGRESSION) - 1):
+                flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
+            flow[("Stage 4", "Won")] += 1
+
+        elif is_lost:
+            totals["lost"] += 1
+            highest = _highest_stage_reached(props)
+            highest_idx = _PROGRESSION.index(highest) if highest in _PROGRESSION else 0
+            # Flow through stages up to the highest reached
+            for i in range(highest_idx):
+                flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
+            # Then exit to Lost
+            flow[(_STAGE_LABELS[highest], "Lost")] += 1
+
+        else:
+            totals["open"] += 1
+            # Still open — determine current stage
+            current_idx = _PROGRESSION.index(stage) if stage in _PROGRESSION else 0
+            current_label = _STAGE_LABELS.get(stage, "Stage 1")
+            # Flow through stages up to current
+            for i in range(current_idx):
+                flow[(_STAGE_LABELS[_PROGRESSION[i]], _STAGE_LABELS[_PROGRESSION[i + 1]])] += 1
+            # Then to "Still Open"
+            flow[(current_label, "Still Open")] += 1
+
+    links = [{"from": k[0], "to": k[1], "flow": v} for k, v in flow.items() if v > 0]
+    return links, totals
+
+
+@ttl_cache
+def compute_deal_flow(period: str) -> dict:
+    """Compute Sankey flow data for inbound and cold outreach deal progression."""
+    start, end = get_date_range(period)
+
+    # ── All NB deals created in period ────────────────────────────────────────
+    all_deals = get_deals(start, end, "createdate")
+
+    inbound_deals = [d for d in all_deals
+                     if _deal_source(d) == "Inbound"]
+    cold_deals    = [d for d in all_deals
+                     if _deal_source(d) == "Cold outreach"]
+
+    # ── Inbound pre-deal funnel ───────────────────────────────────────────────
+    # Form submissions from list 1082
+    list_contacts = get_list_contacts(1082, start, end)
+    form_submitted = len(list_contacts)
+
+    # Build contact-id → meeting type map from list contacts
+    # (rh_meeting_type was added to get_list_contacts props)
+    contact_meeting_type = {}
+    meeting_type_counts = defaultdict(int)
+    no_meeting_count = 0
+
+    for c in list_contacts:
+        cid = c["id"]
+        mtg_type = (c["properties"].get("rh_meeting_type") or "").strip()
+        mtg_status = (c["properties"].get("rh_meeting_status") or "").strip()
+        if mtg_type and mtg_status != "not_booked":
+            contact_meeting_type[cid] = mtg_type
+            meeting_type_counts[mtg_type] += 1
+        else:
+            no_meeting_count += 1
+
+    meeting_booked = sum(meeting_type_counts.values())
+
+    # ── Cross-reference inbound deals with contacts to get meeting type ───────
+    # Get deal-to-contact associations for inbound deals
+    # We approximate: count inbound deals grouped by their associated contact's
+    # meeting type.  For deals we can't match, bucket as "Unknown".
+    inbound_deal_by_type = defaultdict(int)
+    inbound_deal_count = len(inbound_deals)
+
+    # Use the RH contacts to build an owner → meeting type lookup as a fallback
+    rh_contacts = get_rh_contacts(start, end)
+    rh_by_id = {}
+    for rc in rh_contacts:
+        mt = (rc["properties"].get("rh_meeting_type") or "").strip()
+        if mt:
+            rh_by_id[rc["id"]] = mt
+
+    # Merge both lookups
+    all_mtg_types = {**rh_by_id, **contact_meeting_type}
+
+    # Try to associate deals to contacts via the deals_for_contacts flow
+    # Since we already have the contact list, fetch their deal associations
+    contact_ids = [c["id"] for c in list_contacts]
+    if contact_ids:
+        contact_deals_map = get_deals_for_contacts(contact_ids)
+    else:
+        contact_deals_map = {}
+
+    # Map deal IDs to meeting types
+    deal_id_to_mtg_type = {}
+    for cid, cdeals in contact_deals_map.items():
+        mtg_type = all_mtg_types.get(cid, "")
+        for cd in cdeals:
+            if mtg_type:
+                deal_id_to_mtg_type[cd["id"]] = mtg_type
+
+    # Build meeting-type → deal count and meeting-type → no-deal count
+    mtg_type_deal_count = defaultdict(int)
+    matched_deal_ids = set()
+    for d in inbound_deals:
+        did = d["id"]
+        mt = deal_id_to_mtg_type.get(did, "")
+        if mt:
+            mtg_type_deal_count[mt] += 1
+            matched_deal_ids.add(did)
+        else:
+            mtg_type_deal_count["Other"] += 1
+
+    # ── Build inbound Sankey links ────────────────────────────────────────────
+    inbound_links = []
+
+    # Layer 1: Form Submitted → Meeting Types / No Meeting
+    for mt, count in sorted(meeting_type_counts.items(), key=lambda x: -x[1]):
+        if count > 0:
+            inbound_links.append({"from": "Form Submitted", "to": mt, "flow": count})
+    if no_meeting_count > 0:
+        inbound_links.append({"from": "Form Submitted", "to": "No Meeting", "flow": no_meeting_count})
+
+    # Layer 2: Meeting Types → Deal Created / No Deal
+    for mt, booked in meeting_type_counts.items():
+        deals_from_mt = mtg_type_deal_count.get(mt, 0)
+        no_deal = booked - deals_from_mt
+        if deals_from_mt > 0:
+            inbound_links.append({"from": mt, "to": "Deal Created", "flow": deals_from_mt})
+        if no_deal > 0:
+            inbound_links.append({"from": mt, "to": "No Deal", "flow": no_deal})
+
+    # Layer 3+: Deal stage progression
+    deal_stage_links, inbound_deal_totals = _build_deal_links(inbound_deals)
+
+    # Rename "Stage 1" in deal links to connect from "Deal Created"
+    for link in deal_stage_links:
+        if link["from"] == "Stage 1":
+            link["from"] = "Deal Created"
+    inbound_links.extend(deal_stage_links)
+
+    inbound_totals = {
+        "form_submitted": form_submitted,
+        "meeting_booked": meeting_booked,
+        **inbound_deal_totals,
+    }
+
+    # ── Cold outreach Sankey links ────────────────────────────────────────────
+    cold_stage_links, cold_totals = _build_deal_links(cold_deals)
+    # For cold outreach, deals start at "Deal Created" (= Stage 1)
+    for link in cold_stage_links:
+        if link["from"] == "Stage 1":
+            link["from"] = "Deal Created"
+
+    return {
+        "inbound": {"links": inbound_links, "totals": inbound_totals},
+        "cold_outreach": {"links": cold_stage_links, "totals": cold_totals},
+        "period": period,
+    }
+
+
 @ttl_cache
 def compute_book_coverage() -> dict:
     """Compute point-in-time book coverage metrics per AE at the account (company) level.

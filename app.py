@@ -154,6 +154,7 @@ NAV = [
         {"endpoint": "deals_won",       "label": "Won"},
         {"endpoint": "deals_lost",      "label": "Lost"},
         {"endpoint": "deal_advancement","label": "Stage Advancement"},
+        {"endpoint": "deal_flow",       "label": "Deal Flow"},
         {"endpoint": "forecast",        "label": "Forecast"},
     ]},
     {"type": "group", "label": "Pipeline", "children": [
@@ -919,6 +920,19 @@ def deal_advancement():
                            sources=SOURCES, source=source,
                            deltas=deltas, prior_label=prior_label,
                            nav=NAV, active="deal_advancement")
+
+
+@app.route("/deal-flow")
+@login_required
+def deal_flow():
+    period = request.args.get("period", "last_90")
+    try:
+        data = analytics.compute_deal_flow(period)
+    except Exception as e:
+        return render_template("error.html", message=str(e), nav=NAV, active="deal_flow")
+    return render_template("deal_flow.html", data=data, periods=DEAL_PERIODS,
+                           period=period,
+                           nav=NAV, active="deal_flow")
 
 
 @app.route("/deals-won")
