@@ -3187,6 +3187,58 @@ def compute_forecast(period: str) -> dict:
     }
 
 
+# ── Scenario thresholds for forecast page ────────────────────────────────────
+SCENARIO_THRESHOLDS = {
+    "conservative": 0.90,
+    "moderate":     0.75,
+    "aggressive":   0.60,
+}
+
+
+def compute_scenario_forecast(deal_details: list[dict]) -> dict:
+    """Bucket scored deals into conservative / moderate / aggressive scenarios.
+
+    Each scenario sums ``amount × projected_prob`` only for deals whose
+    ``projected_prob`` meets the scenario's threshold.  Results are keyed by
+    owner_id at the rep level so callers can attach them to existing row dicts.
+
+    Parameters
+    ----------
+    deal_details : list[dict]
+        The ``deal_detail_groups`` list returned by ``compute_forecast()``.
+        Each entry has ``owner_id``, ``ae``, ``projected_amt``, and ``deals``
+        (a list of per-deal dicts from ``deal_details_raw``).
+
+    Returns
+    -------
+    dict with keys:
+        ``by_owner``  – {owner_id: {conservative, moderate, aggressive}}
+        ``totals``    – {conservative, moderate, aggressive}
+    """
+    by_owner: dict[str, dict[str, float]] = {}
+    grand = {k: 0.0 for k in SCENARIO_THRESHOLDS}
+
+    for group in deal_details:
+        oid = group["owner_id"]
+        owner_scenarios = {k: 0.0 for k in SCENARIO_THRESHOLDS}
+        for deal in group["deals"]:
+            prob = deal.get("projected_prob", 0)
+            amt  = deal.get("amount", 0)
+            contrib = amt * prob
+            for scenario, threshold in SCENARIO_THRESHOLDS.items():
+                if prob >= threshold:
+                    owner_scenarios[scenario] += contrib
+        for k in SCENARIO_THRESHOLDS:
+            owner_scenarios[k] = round(owner_scenarios[k], 2)
+            grand[k] += owner_scenarios[k]
+        by_owner[oid] = owner_scenarios
+
+    for k in grand:
+        grand[k] = round(grand[k], 2)
+
+    return {"by_owner": by_owner, "totals": grand}
+
+
 @ttl_cache
 def compute_deals_lost(period: str) -> dict:
     start, end = get_date_range(period)
