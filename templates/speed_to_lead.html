@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import period_filter, team_filter, stat_card, fmt_pct %}
+{% from "macros.html" import period_filter, team_filter, fmt_pct %}
 {% block title %} — Speed to Lead{% endblock %}
 {% block content %}
 
@@ -19,19 +19,43 @@
 
 {% set s = data.summary %}
 
-{# ── Summary cards ── #}
+{# ── Hero KPI cards ── #}
+{# Macro-free inline cards: no border, 8px radius, sentiment-aware deltas #}
+{% macro _kpi(label, value, delta, invert=false, fmt='num') %}
+<div class="bg-white rounded-lg px-5 py-4">
+  <p class="text-[22px] font-medium tabular-nums leading-none" style="color:#1A1F36;">{{ value }}</p>
+  <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-400 mt-1">{{ label }}</p>
+  {% if delta is not none and delta != 0 %}
+    {% set pos   = delta > 0 %}
+    {% set good  = (pos and not invert) or (not pos and invert) %}
+    {% set arrow = '↑' if pos else '↓' %}
+    {% set color = '#1D9E75' if good else '#A32D2D' %}
+    {% if fmt == 'pct' %}
+      <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ delta|abs|round(1) }}%</p>
+    {% elif fmt == 'stl' %}
+      {# Convert absolute seconds delta to readable duration #}
+      {% set abs_s = delta|abs|int %}
+      {% if abs_s < 60 %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ abs_s }}s</p>
+      {% elif abs_s < 3600 %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ (abs_s // 60) }}m {{ (abs_s % 60) }}s</p>
+      {% else %}
+        <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ (abs_s // 3600) }}h {{ ((abs_s % 3600) // 60) }}m</p>
+      {% endif %}
+    {% else %}
+      <p class="text-[12px] font-medium mt-1.5" style="color:{{ color }};">{{ arrow }} {{ delta|abs|int }}</p>
+    {% endif %}
+  {% elif delta == 0 %}
+    <p class="text-[12px] text-slate-400 mt-1.5">— vs prior</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  {{ stat_card("Inbound Leads", s.lead_count,
-               delta=deltas.lead_count,
-               tip="Qualified leads (not_booked and disqualified excluded) with a booking in this period.") }}
-  {{ stat_card("Median Speed to Lead", s.median_stl_display,
-               tip="Median time from business-hours open to first outbound call, across dialed leads only. Adjusted for after-hours bookings.") }}
-  {{ stat_card("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min),
-               delta=deltas.pct_within_5min, delta_fmt='pct',
-               tip="% of qualified leads reached with an outbound call within 5 minutes of business-hours open.") }}
-  {{ stat_card("Never Dialed", fmt_pct(s.pct_never_dialed),
-               delta=deltas.pct_never_dialed, delta_fmt='pct', invert=true,
-               tip="% of qualified leads with no outbound call logged after the booking timestamp.") }}
+  {{ _kpi("Total Leads", s.lead_count, deltas.lead_count) }}
+  {{ _kpi("Median STL", s.median_stl_display, deltas.median_stl_seconds, invert=true, fmt='stl') }}
+  {{ _kpi("Dialed ≤ 5 min", fmt_pct(s.pct_within_5min), deltas.pct_within_5min, fmt='pct') }}
+  {{ _kpi("Never Dialed", fmt_pct(s.pct_never_dialed), deltas.pct_never_dialed, invert=true, fmt='pct') }}
 </div>
 
 {# ── By Rep table (expandable) ── #}

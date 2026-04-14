@@ -1074,9 +1074,10 @@ def speed_to_lead():
         s  = data["summary"]
         ps = (prior_data or {}).get("summary")
         deltas = {
-            "lead_count":       _d(s, ps, "lead_count"),
-            "pct_within_5min":  _d(s, ps, "pct_within_5min"),
-            "pct_never_dialed": _d(s, ps, "pct_never_dialed"),
+            "lead_count":          _d(s, ps, "lead_count"),
+            "median_stl_seconds":  _d(s, ps, "median_stl_seconds"),
+            "pct_within_5min":     _d(s, ps, "pct_within_5min"),
+            "pct_never_dialed":    _d(s, ps, "pct_never_dialed"),
         }
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="speed_to_lead")
