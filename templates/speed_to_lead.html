@@ -203,66 +203,71 @@
             {% endif %}
 
             {# ── Element 3: Contact-level lead table ── #}
-            <table class="w-full text-xs">
-              <thead class="border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-[0.05em] uppercase">
-                <tr>
-                  <th class="pl-3 pr-3 py-2 text-left font-medium">Contact</th>
-                  <th class="px-3 py-2 text-left font-medium">Booking</th>
-                  <th class="px-3 py-2 text-left font-medium">First Dial</th>
-                  <th class="px-3 py-2 text-right font-medium">STL</th>
-                  <th class="px-3 py-2 text-left font-medium">Status</th>
-                  <th class="px-3 py-2 text-left font-medium">Deal</th>
+            <table class="w-full bg-white rounded-lg overflow-hidden">
+              <thead>
+                <tr class="text-[10px] uppercase font-normal text-slate-400 tracking-[0.06em]">
+                  <th class="pl-3 pr-2 py-2 text-left font-normal">Contact</th>
+                  <th class="px-2 py-2 text-left font-normal">Booking (CT)</th>
+                  <th class="px-2 py-2 text-left font-normal">First Dial (CT)</th>
+                  <th class="px-2 py-2 text-right font-normal">STL</th>
+                  <th class="px-2 py-2 text-left font-normal">Status</th>
+                  <th class="px-2 py-2 text-left font-normal">Deal</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 {% for lead in data.rows if lead.owner_id == row.owner_id %}
-                <tr class="hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
-                  <td class="pl-3 pr-3 py-2 font-medium">
+                <tr class="text-[11px] hover:bg-slate-50/80 {{ 'opacity-50' if lead.disqualified else '' }}">
+                  <td class="pl-3 pr-2 py-1.5 font-medium" style="color:#1A1F36;">
                     {% if lead.contact_url %}
                       <a href="{{ lead.contact_url }}" target="_blank" rel="noopener"
-                         class="text-blue-600 hover:underline">{{ lead.contact_name }}</a>
+                         class="hover:underline" style="color:#534AB7;">{{ lead.contact_name }}</a>
                     {% else %}{{ lead.contact_name }}{% endif %}
                   </td>
-                  <td class="px-3 py-2 text-gray-500 tabular-nums">
+                  <td class="px-2 py-1.5 text-gray-500 tabular-nums">
                     {{ lead.booking_dt }}
-                    {% if lead.off_hours %}<span data-tip="Booked outside business hours — STL clock starts at next 9 am CT" class="ml-0.5 cursor-help">🌙</span>{% endif %}
+                    {% if lead.off_hours %}<span class="inline-flex items-center ml-1 px-1 rounded-[3px] text-[9px] font-medium" style="background:#FAEEDA;color:#854F0B;padding-top:1px;padding-bottom:1px;">after hrs</span>{% endif %}
                   </td>
-                  <td class="px-3 py-2 text-gray-500 tabular-nums">{{ lead.first_dial_dt or "—" }}</td>
-                  <td class="px-3 py-2 text-right tabular-nums font-semibold
-                    {% if lead.disqualified or lead.stl_seconds is none %}text-gray-400
-                    {% elif lead.stl_seconds == 0 %}text-green-600
-                    {% elif lead.stl_seconds <= 300 %}text-green-600
-                    {% elif lead.stl_seconds <= 3600 %}text-yellow-600
-                    {% else %}text-red-500{% endif %}">
-                    {% if lead.stl_seconds == 0 %}&lt; 1m{% else %}{{ lead.stl_display }}{% endif %}
+                  <td class="px-2 py-1.5 tabular-nums">
+                    {% if lead.first_dial_dt %}<span class="text-gray-500">{{ lead.first_dial_dt }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
                   </td>
-                  <td class="px-3 py-2">
-                    {% set status = lead.meeting_status %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
-                      {% if status == 'completed' %}bg-emerald-50 text-emerald-700
-                      {% elif status == 'upcoming' %}bg-indigo-50 text-indigo-700
-                      {% elif status in ['cancelled', 'no_show'] %}bg-red-50 text-red-700
-                      {% else %}bg-slate-100 text-slate-500{% endif %}">
-                      {{ status | replace('_', ' ') | title if status else '—' }}
-                    </span>
-                    {% if lead.disqualified %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 ml-1">DQ</span>
+                  <td class="px-2 py-1.5 text-right tabular-nums font-medium">
+                    {% if lead.disqualified or lead.stl_seconds is none %}
+                      <span class="text-slate-300">—</span>
+                    {% else %}
+                      {% set stl_h = lead.stl_seconds // 3600 %}
+                      {% set stl_m = (lead.stl_seconds % 3600) // 60 %}
+                      <span style="color:{% if lead.stl_seconds <= 300 %}#1D9E75{% elif lead.stl_seconds <= 3600 %}#BA7517{% else %}#A32D2D{% endif %};">{{ stl_h }}h {{ '%02d'|format(stl_m) }}m</span>
                     {% endif %}
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-2 py-1.5">
+                    {% set status = lead.meeting_status %}
+                    {% if status == 'completed' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#E6F5EF;color:#1D9E75;">Completed</span>
+                    {% elif status == 'no_show' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F5E6E6;color:#A32D2D;">No Show</span>
+                    {% elif status == 'cancelled' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#FDF3E3;color:#BA7517;">Cancelled</span>
+                    {% elif status == 'lost' %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F0F0F2;color:#6B7280;">Lost</span>
+                    {% elif status %}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#F0F0F2;color:#6B7280;">{{ status | replace('_', ' ') | title }}</span>
+                    {% else %}
+                      <span class="text-slate-300">—</span>
+                    {% endif %}
+                    {% if lead.disqualified %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold ml-1" style="background:#FDF3E3;color:#BA7517;">DQ</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-2 py-1.5">
                     {% if lead.deal_label %}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold
-                        {% if lead.deal_label == 'Won' %}bg-emerald-50 text-emerald-700
-                        {% elif lead.deal_reached_s2 %}bg-violet-50 text-violet-700
-                        {% else %}bg-indigo-50 text-indigo-600{% endif %}">
-                        {{ lead.deal_label }}
-                      </span>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold" style="background:#EEEDFE;color:#3C3489;">{{ lead.deal_label }}</span>
                     {% else %}<span class="text-slate-300">—</span>{% endif %}
                   </td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
+            <p class="text-[10px] text-slate-400 mt-2">After-hours = booking between 10pm–6am CT · STL measured from booking timestamp</p>
 
             </div>{# end padding wrapper #}
           </td>
