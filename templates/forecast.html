@@ -19,9 +19,9 @@
 {% set vs_mod = sub_amt - mod_amt %}
 <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
   {{ stat_card("Team Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
-  {{ stat_card("Conservative", fmt_money(st.conservative) if st else "—", "proj % ≥ 90%", tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.") }}
-  {{ stat_card("Moderate", fmt_money(st.moderate) if st else "—", "proj % ≥ 75%", tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.") }}
-  {{ stat_card("Aggressive", fmt_money(st.aggressive) if st else "—", "proj % ≥ 60%", tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.") }}
+  {{ stat_card("Conservative", fmt_money(st.conservative) if st else "—", "proj % ≥ 90%", tip="Sum of amount × projected % for deals with projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
+  {{ stat_card("Moderate", fmt_money(st.moderate) if st else "—", "proj % ≥ 75%", tip="Sum of amount × projected % for deals with projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
+  {{ stat_card("Aggressive", fmt_money(st.aggressive) if st else "—", "proj % ≥ 60%", tip="Sum of amount × projected % for deals with projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
   {% if period == "this_month" %}
   {% if vs_mod != 0 %}
     {% set vs_label %}{% if vs_mod > 0 %}+{{ fmt_money(vs_mod) }} over model{% else %}-{{ fmt_money(vs_mod|abs) }} under model{% endif %}{% endset %}
@@ -63,17 +63,14 @@
     {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
-  <td class="px-4 py-3 text-right tabular-nums font-semibold
+  <td class="px-4 py-3 text-right tabular-nums
     {% if row.attain_pct is none %}text-gray-400
-    {% elif row.attain_pct >= 100 %}text-green-600
-    {% elif row.attain_pct >= 75 %}text-yellow-600
-    {% else %}text-red-500{% endif %}">
+    {% elif row.attain_pct >= 100 %}text-gray-800 font-semibold
+    {% else %}text-gray-600{% endif %}">
     {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
   </td>
-  <td class="px-4 py-3 text-right tabular-nums font-semibold
-    {% if row.gap_amt is none %}text-gray-400
-    {% elif row.gap_amt <= 0 %}text-green-600
-    {% else %}text-red-500{% endif %}">
+  <td class="px-4 py-3 text-right tabular-nums
+    {% if row.gap_amt is none %}text-gray-400{% else %}text-gray-600{% endif %}">
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold" style="color:#185FA5;">
@@ -112,10 +109,9 @@
               <th class="px-4 py-2 text-left">Stage</th>
               <th class="px-4 py-2 text-right">Close</th>
               <th class="px-4 py-2 text-right">Biz Days</th>
-              <th class="px-4 py-2 text-right" data-tip="Signal-adjusted close probability. Derived from 6 signals: time feasibility, activity, deal size, source, rep history and employee segment. Benchmarked against trailing 180-day closed deals.">Proj %</th>
-              <th class="px-4 py-2 text-right" style="color:#185FA5;" data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">Conservative</th>
-              <th class="px-4 py-2 text-right" style="color:#3B6D11;" data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">Moderate</th>
-              <th class="px-4 py-2 text-right" style="color:#BA7517;" data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">Aggressive</th>
+              <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
+              <th class="px-4 py-2 text-right" data-tip="Deal amount × projected %. Rolls up into the rep's scenario totals based on the deal's tier (C / M / A).">Projected $</th>
+              <th class="px-4 py-2 text-center" data-tip="Which scenario bucket this deal rolls up into. C = Conservative (≥90%), M = Moderate (≥75%), A = Aggressive (≥60%), — = below all thresholds.">Tier</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
           </thead>
@@ -130,46 +126,57 @@
                 {% endif %}
               </td>
               <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
-              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
+              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in deal.stage else deal.stage }}</td>
               <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
               </td>
-              <td class="px-4 py-2 text-right tabular-nums
-                {% if deal.biz_days_remaining is not none and deal.biz_days_remaining <= 3 %}text-red-600 font-semibold
-                {% elif deal.biz_days_remaining is not none and deal.biz_days_remaining <= 7 %}text-amber-600
-                {% else %}text-gray-600{% endif %}">
+              <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
               </td>
-              <td class="px-4 py-2 text-right tabular-nums font-semibold
-                {% if deal.projected_prob >= 0.75 %}text-green-600
-                {% elif deal.projected_prob >= 0.50 %}text-amber-600
-                {% else %}text-red-500{% endif %}">
+              {% set tip_parts = [] %}
+              {% set _ = tip_parts.append("Stage " ~ ((deal.base_prob * 100) | round(0) | int) ~ "%") %}
+              {% set _ = tip_parts.append("Time ×" ~ ("%.2f" | format(deal.time_mult))) %}
+              {% set _ = tip_parts.append("Activity ×" ~ ("%.2f" | format(deal.activity_mult))) %}
+              {% set _ = tip_parts.append("Size ×" ~ ("%.2f" | format(deal.size_mult))) %}
+              {% set _ = tip_parts.append("Source ×" ~ ("%.2f" | format(deal.source_mult))) %}
+              {% set _ = tip_parts.append("Rep ×" ~ ("%.2f" | format(deal.rep_mult))) %}
+              {% set _ = tip_parts.append("Emp ×" ~ ("%.2f" | format(deal.emp_seg_mult))) %}
+              {% set deal_tip = (tip_parts | join(" × ")) ~ " = " ~ ((deal.projected_prob * 100) | round(0) | int) ~ "%" %}
+              {# Proj % — color aligned to scenario thresholds (≥90 = Conservative blue, ≥75 = Moderate green, ≥60 = Aggressive orange, else muted red) #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold"
+                  style="{% if deal.projected_prob >= 0.90 %}color:#185FA5;{% elif deal.projected_prob >= 0.75 %}color:#3B6D11;{% elif deal.projected_prob >= 0.60 %}color:#BA7517;{% else %}color:#9CA3AF;{% endif %}"
+                  data-tip="{{ deal_tip }}">
                 {{ "%.0f" | format(deal.projected_prob * 100) }}%
               </td>
-              {# Conservative: show $ if prob >= 0.90, else dimmed dash #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#185FA5;">
-                {% if deal.projected_prob >= 0.90 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              {# Single Projected $ column #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold text-gray-800">
+                {{ fmt_money(deal.amount * deal.projected_prob) }}
               </td>
-              {# Moderate: show $ if prob >= 0.75 #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#3B6D11;">
-                {% if deal.projected_prob >= 0.75 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
-              </td>
-              {# Aggressive: show $ if prob >= 0.60 #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#BA7517;">
-                {% if deal.projected_prob >= 0.60 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              {# Tier badge — single compact letter in the scenario color #}
+              <td class="px-4 py-2 text-center">
+                {% if deal.projected_prob >= 0.90 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#185FA5;" data-tip="Conservative (≥90%) — rolls into all three scenarios">C</span>
+                {% elif deal.projected_prob >= 0.75 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#3B6D11;" data-tip="Moderate (≥75%) — rolls into Moderate and Aggressive">M</span>
+                {% elif deal.projected_prob >= 0.60 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#BA7517;" data-tip="Aggressive (≥60%) — rolls into Aggressive only">A</span>
+                {% else %}
+                <span class="text-gray-300 text-sm" data-tip="Below all thresholds — does not roll into any scenario">—</span>
+                {% endif %}
               </td>
               <td class="px-4 py-2">
-                <div class="flex flex-wrap gap-1">
+                <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">
                   {% for severity, msg in deal.risk_flags %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border
-                    {% if severity == 'high' %}bg-red-50 text-red-700 border-red-200
-                    {% elif severity == 'medium' %}bg-amber-50 text-amber-700 border-amber-200
-                    {% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0
+                      {% if severity == 'high' %}bg-red-500
+                      {% elif severity == 'medium' %}bg-amber-400
+                      {% else %}bg-slate-400{% endif %}"></span>
                     {{ msg }}
                   </span>
                   {% endfor %}
                   {% if not deal.risk_flags %}
-                  <span class="text-gray-400 text-[10px]">No flags</span>
+                  <span class="text-gray-400">—</span>
                   {% endif %}
                 </div>
               </td>
@@ -233,17 +240,17 @@
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200" style="color:#185FA5;"
-            data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Conservative
           <span class="block font-normal normal-case tracking-normal" style="color:#185FA5; opacity:0.6;">≥ 90%</span>
         </th>
         <th class="px-4 py-3 text-right font-semibold" style="color:#3B6D11;"
-            data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Moderate
           <span class="block font-normal normal-case tracking-normal" style="color:#3B6D11; opacity:0.6;">≥ 75%</span>
         </th>
         <th class="px-4 py-3 text-right font-semibold" style="color:#BA7517;"
-            data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Aggressive
           <span class="block font-normal normal-case tracking-normal" style="color:#BA7517; opacity:0.6;">≥ 60%</span>
         </th>
@@ -287,17 +294,14 @@
           {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}
         </td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.won_amt) }}</td>
-        <td class="px-4 py-3 text-right font-semibold
+        <td class="px-4 py-3 text-right
           {% if t.attain_pct is none %}text-gray-400
-          {% elif t.attain_pct >= 100 %}text-green-600
-          {% elif t.attain_pct >= 75 %}text-yellow-600
-          {% else %}text-red-500{% endif %}">
+          {% elif t.attain_pct >= 100 %}text-gray-800 font-semibold
+          {% else %}text-gray-700{% endif %}">
           {% if t.attain_pct is not none %}{{ fmt_pct(t.attain_pct) }}{% else %}—{% endif %}
         </td>
-        <td class="px-4 py-3 text-right font-semibold
-          {% if t.gap_amt is none %}text-gray-400
-          {% elif t.gap_amt <= 0 %}text-green-600
-          {% else %}text-red-500{% endif %}">
+        <td class="px-4 py-3 text-right
+          {% if t.gap_amt is none %}text-gray-400{% else %}text-gray-700{% endif %}">
           {% if t.gap_amt is not none %}{{ fmt_money(t.gap_amt) }}{% else %}—{% endif %}
         </td>
         <td class="px-4 py-3 text-right border-l border-gray-100 font-semibold" style="color:#185FA5;">
