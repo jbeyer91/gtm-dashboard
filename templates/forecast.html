@@ -130,7 +130,7 @@
                 {% endif %}
               </td>
               <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
-              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "1") | replace(" - Solution Review", "2") | replace(" - Stake Holder Alignment", "3") | replace(" - Contract Sent", "4") if "Stage" in deal.stage else deal.stage }}</td>
+              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in deal.stage else deal.stage }}</td>
               <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
               </td>
