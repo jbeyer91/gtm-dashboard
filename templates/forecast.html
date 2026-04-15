@@ -202,7 +202,8 @@
       {% set cons_deals = [] %}
       {% set mod_deals = [] %}
       {% set agg_deals = [] %}
-      {% for d in rep_deals if not d.is_won %}
+      {# Won deals have projected_prob = 1.0, so they qualify for all tiers. #}
+      {% for d in rep_deals %}
         {% if d.projected_prob >= 0.90 %}{% set _ = cons_deals.append(d) %}{% endif %}
         {% if d.projected_prob >= 0.75 %}{% set _ = mod_deals.append(d) %}{% endif %}
         {% if d.projected_prob >= 0.60 %}{% set _ = agg_deals.append(d) %}{% endif %}
@@ -234,15 +235,17 @@
             <table class="w-full text-xs">
               <tbody class="divide-y divide-gray-100">
               {% for d in tier.deals %}
-              <tr>
+              <tr {% if d.is_won %}class="bg-green-50/40"{% endif %}>
                 <td class="pl-12 pr-4 py-1.5 text-gray-700 truncate max-w-[260px]">
                   {% if portal_id and d.deal_id %}
                   <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ d.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ d.deal_name }}</a>
                   {% else %}{{ d.deal_name }}{% endif %}
                 </td>
-                <td class="px-4 py-1.5 text-gray-500 text-[11px]">{{ d.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in d.stage else d.stage }}</td>
+                <td class="px-4 py-1.5 text-[11px] {% if d.is_won %}text-green-700 font-medium{% else %}text-gray-500{% endif %}">
+                  {% if d.is_won %}Won{% else %}{{ d.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in d.stage else d.stage }}{% endif %}
+                </td>
                 <td class="px-4 py-1.5 text-right tabular-nums text-gray-500">{% if d.closedate %}{{ d.closedate[:10] }}{% endif %}</td>
-                <td class="px-4 py-1.5 text-right tabular-nums text-gray-500">{{ "%.0f" | format(d.projected_prob * 100) }}%</td>
+                <td class="px-4 py-1.5 text-right tabular-nums {% if d.is_won %}text-green-700{% else %}text-gray-500{% endif %}">{% if d.is_won %}<span class="text-[10px]">closed</span>{% else %}{{ "%.0f" | format(d.projected_prob * 100) }}%{% endif %}</td>
                 <td class="px-4 py-1.5 text-right tabular-nums font-semibold text-gray-800 w-24">{{ fmt_money(d.amount) }}</td>
               </tr>
               {% endfor %}
