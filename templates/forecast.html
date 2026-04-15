@@ -110,9 +110,8 @@
               <th class="px-4 py-2 text-right">Close</th>
               <th class="px-4 py-2 text-right">Biz Days</th>
               <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
-              <th class="px-4 py-2 text-right" style="color:#185FA5;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Conservative</th>
-              <th class="px-4 py-2 text-right" style="color:#3B6D11;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Moderate</th>
-              <th class="px-4 py-2 text-right" style="color:#BA7517;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Aggressive</th>
+              <th class="px-4 py-2 text-right" data-tip="Deal amount × projected %. Rolls up into the rep's scenario totals based on the deal's tier (C / M / A).">Projected $</th>
+              <th class="px-4 py-2 text-center" data-tip="Which scenario bucket this deal rolls up into. C = Conservative (≥90%), M = Moderate (≥75%), A = Aggressive (≥60%), — = below all thresholds.">Tier</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
           </thead>
@@ -143,24 +142,27 @@
               {% set _ = tip_parts.append("Rep ×" ~ ("%.2f" | format(deal.rep_mult))) %}
               {% set _ = tip_parts.append("Emp ×" ~ ("%.2f" | format(deal.emp_seg_mult))) %}
               {% set deal_tip = (tip_parts | join(" × ")) ~ " = " ~ ((deal.projected_prob * 100) | round(0) | int) ~ "%" %}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold
-                {% if deal.projected_prob >= 0.75 %}text-green-600
-                {% elif deal.projected_prob >= 0.50 %}text-amber-600
-                {% else %}text-red-500{% endif %}"
-                data-tip="{{ deal_tip }}">
+              {# Proj % — color aligned to scenario thresholds (≥90 = Conservative blue, ≥75 = Moderate green, ≥60 = Aggressive orange, else muted red) #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold"
+                  style="{% if deal.projected_prob >= 0.90 %}color:#185FA5;{% elif deal.projected_prob >= 0.75 %}color:#3B6D11;{% elif deal.projected_prob >= 0.60 %}color:#BA7517;{% else %}color:#9CA3AF;{% endif %}"
+                  data-tip="{{ deal_tip }}">
                 {{ "%.0f" | format(deal.projected_prob * 100) }}%
               </td>
-              {# Conservative: show $ if prob >= 0.90, else dimmed dash #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#185FA5;">
-                {% if deal.projected_prob >= 0.90 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              {# Single Projected $ column #}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold text-gray-800">
+                {{ fmt_money(deal.amount * deal.projected_prob) }}
               </td>
-              {# Moderate: show $ if prob >= 0.75 #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#3B6D11;">
-                {% if deal.projected_prob >= 0.75 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
-              </td>
-              {# Aggressive: show $ if prob >= 0.60 #}
-              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#BA7517;">
-                {% if deal.projected_prob >= 0.60 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+              {# Tier badge — single compact letter in the scenario color #}
+              <td class="px-4 py-2 text-center">
+                {% if deal.projected_prob >= 0.90 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#185FA5;" data-tip="Conservative (≥90%) — rolls into all three scenarios">C</span>
+                {% elif deal.projected_prob >= 0.75 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#3B6D11;" data-tip="Moderate (≥75%) — rolls into Moderate and Aggressive">M</span>
+                {% elif deal.projected_prob >= 0.60 %}
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white" style="background:#BA7517;" data-tip="Aggressive (≥60%) — rolls into Aggressive only">A</span>
+                {% else %}
+                <span class="text-gray-300 text-sm" data-tip="Below all thresholds — does not roll into any scenario">—</span>
+                {% endif %}
               </td>
               <td class="px-4 py-2">
                 <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">
