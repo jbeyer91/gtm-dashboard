@@ -190,25 +190,29 @@
           {% endif %}
         </div>
       </div>
-      {# Scenario breakdown — one fold-out per tier, deals grouped into non-overlapping bands #}
+      {# Scenario breakdown — one fold-out per tier. Tiers are cumulative pools: #}
+      {# Moderate includes Conservative, Aggressive includes both — matching how the #}
+      {# Projected rollup is computed. #}
       {% set cons_deals = [] %}
       {% set mod_deals = [] %}
       {% set agg_deals = [] %}
       {% for d in rep_deals %}
-        {% if d.projected_prob >= 0.90 %}{% set _ = cons_deals.append(d) %}
-        {% elif d.projected_prob >= 0.75 %}{% set _ = mod_deals.append(d) %}
-        {% elif d.projected_prob >= 0.60 %}{% set _ = agg_deals.append(d) %}
-        {% endif %}
+        {% if d.projected_prob >= 0.90 %}{% set _ = cons_deals.append(d) %}{% endif %}
+        {% if d.projected_prob >= 0.75 %}{% set _ = mod_deals.append(d) %}{% endif %}
+        {% if d.projected_prob >= 0.60 %}{% set _ = agg_deals.append(d) %}{% endif %}
       {% endfor %}
       {% set cons_total = cons_deals | sum(attribute="amount") %}
       {% set mod_total  = mod_deals  | sum(attribute="amount") %}
       {% set agg_total  = agg_deals  | sum(attribute="amount") %}
       <div class="bg-white border-t border-gray-200">
-        <div class="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-100">Scenario breakdown</div>
+        <div class="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-baseline gap-2">
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Scenario breakdown</span>
+          <span class="text-[10px] text-gray-400 italic">Cumulative — higher-confidence deals appear in every lower tier</span>
+        </div>
         {% for tier in [
-          {"name": "Conservative", "label": "≥90% confidence", "deals": cons_deals, "total": cons_total, "color": "#15803D"},
-          {"name": "Moderate",     "label": "75-89% confidence", "deals": mod_deals,  "total": mod_total,  "color": "#BA7517"},
-          {"name": "Aggressive",   "label": "60-74% confidence", "deals": agg_deals,  "total": agg_total,  "color": "#64748B"}
+          {"name": "Conservative", "label": "Deals ≥90% confidence", "deals": cons_deals, "total": cons_total, "color": "#15803D"},
+          {"name": "Moderate",     "label": "Deals ≥75% confidence", "deals": mod_deals,  "total": mod_total,  "color": "#BA7517"},
+          {"name": "Aggressive",   "label": "Deals ≥60% confidence", "deals": agg_deals,  "total": agg_total,  "color": "#64748B"}
         ] %}
         <details class="scenario-tier border-b border-gray-100 last:border-b-0">
           <summary class="px-4 py-2 cursor-pointer hover:bg-slate-50 select-none flex items-center gap-3 text-xs">
