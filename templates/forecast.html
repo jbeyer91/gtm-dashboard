@@ -99,6 +99,7 @@
               <th class="px-4 py-2 text-left">Stage</th>
               <th class="px-4 py-2 text-right">Close</th>
               <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
+              <th class="px-4 py-2 text-left">Tailwinds</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
           </thead>
@@ -121,6 +122,7 @@
               </td>
               {% if deal.is_won %}
               <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#15803D;">✓</td>
+              <td class="px-4 py-2 text-[10px] text-gray-400">—</td>
               <td class="px-4 py-2 text-[10px] text-gray-400 italic">closed</td>
               {% else %}
               {% set tip_parts = [] %}
@@ -137,6 +139,22 @@
                   style="{% if deal.projected_prob >= 0.75 %}color:#15803D;{% elif deal.projected_prob >= 0.60 %}color:#BA7517;{% else %}color:#9CA3AF;{% endif %}"
                   data-tip="{{ deal_tip }}">
                 {{ "%.0f" | format(deal.projected_prob * 100) }}%
+              </td>
+              <td class="px-4 py-2">
+                <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">
+                  {% for severity, msg in deal.tailwinds %}
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0
+                      {% if severity == 'high' %}bg-green-600
+                      {% elif severity == 'medium' %}bg-green-500
+                      {% else %}bg-green-300{% endif %}"></span>
+                    {{ msg }}
+                  </span>
+                  {% endfor %}
+                  {% if not deal.tailwinds %}
+                  <span class="text-gray-400">—</span>
+                  {% endif %}
+                </div>
               </td>
               <td class="px-4 py-2">
                 <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">

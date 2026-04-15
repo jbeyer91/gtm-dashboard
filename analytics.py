@@ -2789,6 +2789,7 @@ def _score_deal_projected(
     Returns dict with projected_prob, individual multipliers, risk_flags, etc.
     """
     risk_flags = []  # list of (severity, message)
+    tailwinds  = []  # list of (severity, message) — positive signals
     bm = benchmarks or {}
 
     base_prob = float(props.get("hs_deal_stage_probability") or 0)
@@ -2854,6 +2855,7 @@ def _score_deal_projected(
                 time_mult = 0.85
             elif ratio >= 2.00:
                 time_mult = 1.05
+                tailwinds.append(("low", f"Ample runway: {biz_days_remaining} biz days left"))
             else:
                 time_mult = 1.00
 
@@ -2876,8 +2878,10 @@ def _score_deal_projected(
 
     if has_next_meeting and has_next_steps:
         activity_mult = 1.10
+        tailwinds.append(("high", "Meeting + next steps defined"))
     elif has_next_meeting:
         activity_mult = 1.00
+        tailwinds.append(("low", "Next meeting scheduled"))
     elif has_next_steps:
         activity_mult = 0.85
         risk_flags.append(("medium", "No meeting/call scheduled"))
@@ -2896,6 +2900,8 @@ def _score_deal_projected(
     src_mults = bm.get("source_multipliers") or _SOURCE_MULT_FALLBACK
     src_default = bm.get("source_mult_default", 0.95)
     source_mult = src_mults.get(source, src_default)
+    if source_mult > 1.0 and source:
+        tailwinds.append(("medium", f"{source} lead (above-avg win rate)"))
 
     # ── Signal 5: Rep history (overall + segment-specific) ──────────────────
     emp_seg = _emp_segment(props)
@@ -2917,12 +2923,18 @@ def _score_deal_projected(
         else:
             rep_mult = rep_stats["win_rate_s2"] / STAGE2_WIN_RATE if STAGE2_WIN_RATE else 1.0
         rep_mult = max(0.5, min(1.5, rep_mult))
+        if rep_mult >= 1.20:
+            tailwinds.append(("medium", "Rep outperforms avg in this segment"))
+        elif rep_mult >= 1.10:
+            tailwinds.append(("low", "Rep has above-avg track record"))
     else:
         rep_mult = 1.0
 
     # ── Signal 6: Employee-size segment (org-wide) ───────────────────────────
     emp_seg_mults = bm.get("emp_seg_multipliers") or {}
     emp_seg_mult = emp_seg_mults.get(emp_seg, 1.0)
+    if emp_seg_mult >= 1.05 and emp_seg:
+        tailwinds.append(("low", f"Favorable segment fit ({emp_seg})"))
 
     # ── Final projected probability ──────────────────────────────────────────
     projected_prob = (base_prob * time_mult * activity_mult * size_mult
@@ -2940,6 +2952,7 @@ def _score_deal_projected(
         "emp_seg_mult":   round(emp_seg_mult, 2),
         "emp_segment":    emp_seg,
         "risk_flags":     risk_flags,
+        "tailwinds":      tailwinds,
         "biz_days_remaining": biz_days_remaining if closedate_dt is not None else None,
     }
 
@@ -3065,6 +3078,7 @@ def compute_forecast(period: str) -> dict:
             "projected_prob":   score["projected_prob"],
             "projected_amt":    round(proj_amt, 2),
             "risk_flags":       score["risk_flags"],
+            "tailwinds":        score["tailwinds"],
             "biz_days_remaining": score["biz_days_remaining"],
             "time_mult":        score["time_mult"],
             "activity_mult":    score["activity_mult"],
@@ -3096,6 +3110,7 @@ def compute_forecast(period: str) -> dict:
             "projected_prob":   1.0,
             "projected_amt":    round(amt, 2),
             "risk_flags":       [],
+            "tailwinds":        [],
             "biz_days_remaining": None,
             "time_mult":        1.0,
             "activity_mult":    1.0,
