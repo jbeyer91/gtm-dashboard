@@ -3198,12 +3198,19 @@ SCENARIO_THRESHOLDS = {
 }
 
 
-def compute_scenario_forecast(deal_details: list[dict]) -> dict:
+def compute_scenario_forecast(deal_details: list[dict], won_by_owner: dict | None = None) -> dict:
     """Bucket scored deals into conservative / moderate / aggressive scenarios.
 
-    Each scenario sums ``amount × projected_prob`` only for deals whose
-    ``projected_prob`` meets the scenario's threshold.  Results are keyed by
-    owner_id at the rep level so callers can attach them to existing row dicts.
+    Each scenario sums ``amount × projected_prob`` for deals whose
+    ``projected_prob`` meets the scenario's threshold, PLUS already-won
+    revenue (which is 100% certain and therefore rolls into every scenario).
+    Results are keyed by owner_id at the rep level so callers can attach them
+    to existing row dicts.
+
+    A ``projected`` convenience value is also returned per owner and in totals,
+    computed as the midpoint of ``conservative`` and ``moderate``.  When a rep
+    has no deals in the 75-89% band, moderate equals conservative and the
+    midpoint collapses to conservative.
 
     Parameters
     ----------
@@ -3211,33 +3218,48 @@ def compute_scenario_forecast(deal_details: list[dict]) -> dict:
         The ``deal_detail_groups`` list returned by ``compute_forecast()``.
         Each entry has ``owner_id``, ``ae``, ``projected_amt``, and ``deals``
         (a list of per-deal dicts from ``deal_details_raw``).
+    won_by_owner : dict | None
+        Optional ``{owner_id: won_amt}`` mapping.  Each owner's won revenue is
+        added to every scenario (won deals are 100% certain).  Reps with won
+        revenue but no open deals still appear in ``by_owner``.
 
     Returns
     -------
     dict with keys:
-        ``by_owner``  – {owner_id: {conservative, moderate, aggressive}}
-        ``totals``    – {conservative, moderate, aggressive}
+        ``by_owner``  – {owner_id: {conservative, moderate, aggressive, projected}}
+        ``totals``    – {conservative, moderate, aggressive, projected}
     """
     by_owner: dict[str, dict[str, float]] = {}
-    grand = {k: 0.0 for k in SCENARIO_THRESHOLDS}
+    won_by_owner = won_by_owner or {}
 
+    # Seed every owner with won revenue — it counts toward every scenario.
+    for oid, won_amt in won_by_owner.items():
+        by_owner[oid] = {k: float(won_amt or 0) for k in SCENARIO_THRESHOLDS}
+
+    # Add open-deal contributions by threshold.
     for group in deal_details:
         oid = group["owner_id"]
-        owner_scenarios = {k: 0.0 for k in SCENARIO_THRESHOLDS}
+        if oid not in by_owner:
+            by_owner[oid] = {k: 0.0 for k in SCENARIO_THRESHOLDS}
         for deal in group["deals"]:
             prob = deal.get("projected_prob", 0)
             amt  = deal.get("amount", 0)
             contrib = amt * prob
             for scenario, threshold in SCENARIO_THRESHOLDS.items():
                 if prob >= threshold:
-                    owner_scenarios[scenario] += contrib
+                    by_owner[oid][scenario] += contrib
+
+    # Round, compute midpoint, and accumulate grand totals.
+    grand = {k: 0.0 for k in SCENARIO_THRESHOLDS}
+    for sc in by_owner.values():
         for k in SCENARIO_THRESHOLDS:
-            owner_scenarios[k] = round(owner_scenarios[k], 2)
-            grand[k] += owner_scenarios[k]
-        by_owner[oid] = owner_scenarios
+            sc[k] = round(sc[k], 2)
+            grand[k] += sc[k]
+        sc["projected"] = round((sc["conservative"] + sc["moderate"]) / 2, 2)
 
     for k in grand:
         grand[k] = round(grand[k], 2)
+    grand["projected"] = round((grand["conservative"] + grand["moderate"]) / 2, 2)
 
     return {"by_owner": by_owner, "totals": grand}
 
