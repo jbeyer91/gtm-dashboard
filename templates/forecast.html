@@ -100,7 +100,6 @@
               <th class="px-4 py-2 text-right">Amount</th>
               <th class="px-4 py-2 text-left">Stage</th>
               <th class="px-4 py-2 text-right">Close</th>
-              <th class="px-4 py-2 text-right">Biz Days</th>
               <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
@@ -119,9 +118,6 @@
               <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in deal.stage else deal.stage }}</td>
               <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
-              </td>
-              <td class="px-4 py-2 text-right tabular-nums text-gray-600">
-                {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
               </td>
               {% set tip_parts = [] %}
               {% set _ = tip_parts.append("Stage " ~ ((deal.base_prob * 100) | round(0) | int) ~ "%") %}
@@ -194,34 +190,61 @@
           {% endif %}
         </div>
       </div>
-      {# Scenario breakdown fold-out — shows Conservative / Moderate / Aggressive pools #}
-      <details class="bg-white border-t border-gray-200 text-xs scenario-fold">
-        <summary class="px-4 py-2.5 cursor-pointer text-slate-500 hover:text-slate-700 font-medium select-none flex items-center gap-2">
-          <span class="scenario-chevron inline-block text-[10px] transition-transform">&#9654;</span>
-          Scenario breakdown
-          <span class="text-[10px] text-gray-400 font-normal normal-case">Conservative / Moderate / Aggressive rollups</span>
-        </summary>
-        <div class="grid grid-cols-3 gap-px bg-gray-200 border-t border-gray-100">
-          <div class="bg-white px-4 py-3">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Conservative</p>
-            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥90% confidence</p>
-            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('conservative', 0)) }}</p>
+      {# Scenario breakdown — one fold-out per tier, deals grouped into non-overlapping bands #}
+      {% set cons_deals = [] %}
+      {% set mod_deals = [] %}
+      {% set agg_deals = [] %}
+      {% for d in rep_deals %}
+        {% if d.projected_prob >= 0.90 %}{% set _ = cons_deals.append(d) %}
+        {% elif d.projected_prob >= 0.75 %}{% set _ = mod_deals.append(d) %}
+        {% elif d.projected_prob >= 0.60 %}{% set _ = agg_deals.append(d) %}
+        {% endif %}
+      {% endfor %}
+      {% set cons_total = cons_deals | sum(attribute="amount") %}
+      {% set mod_total  = mod_deals  | sum(attribute="amount") %}
+      {% set agg_total  = agg_deals  | sum(attribute="amount") %}
+      <div class="bg-white border-t border-gray-200">
+        <div class="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-100">Scenario breakdown</div>
+        {% for tier in [
+          {"name": "Conservative", "label": "≥90% confidence", "deals": cons_deals, "total": cons_total, "color": "#15803D"},
+          {"name": "Moderate",     "label": "75-89% confidence", "deals": mod_deals,  "total": mod_total,  "color": "#BA7517"},
+          {"name": "Aggressive",   "label": "60-74% confidence", "deals": agg_deals,  "total": agg_total,  "color": "#64748B"}
+        ] %}
+        <details class="scenario-tier border-b border-gray-100 last:border-b-0">
+          <summary class="px-4 py-2 cursor-pointer hover:bg-slate-50 select-none flex items-center gap-3 text-xs">
+            <span class="scenario-chevron inline-block text-[9px] transition-transform text-slate-400">&#9654;</span>
+            <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ tier.color }};"></span>
+            <span class="font-semibold text-slate-700">{{ tier.name }}</span>
+            <span class="text-[10px] text-gray-400">{{ tier.label }}</span>
+            <span class="ml-auto text-[10px] text-gray-500">{{ tier.deals|length }} deal{% if tier.deals|length != 1 %}s{% endif %}</span>
+            <span class="font-bold tabular-nums text-gray-800 w-24 text-right">{{ fmt_money(tier.total) }}</span>
+          </summary>
+          {% if tier.deals %}
+          <div class="bg-slate-50 border-t border-gray-100">
+            <table class="w-full text-xs">
+              <tbody class="divide-y divide-gray-100">
+              {% for d in tier.deals %}
+              <tr>
+                <td class="pl-12 pr-4 py-1.5 text-gray-700 truncate max-w-[260px]">
+                  {% if portal_id and d.deal_id %}
+                  <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ d.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ d.deal_name }}</a>
+                  {% else %}{{ d.deal_name }}{% endif %}
+                </td>
+                <td class="px-4 py-1.5 text-gray-500 text-[11px]">{{ d.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in d.stage else d.stage }}</td>
+                <td class="px-4 py-1.5 text-right tabular-nums text-gray-500">{% if d.closedate %}{{ d.closedate[:10] }}{% endif %}</td>
+                <td class="px-4 py-1.5 text-right tabular-nums text-gray-500">{{ "%.0f" | format(d.projected_prob * 100) }}%</td>
+                <td class="px-4 py-1.5 text-right tabular-nums font-semibold text-gray-800 w-24">{{ fmt_money(d.amount) }}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
           </div>
-          <div class="bg-white px-4 py-3">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Moderate</p>
-            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥75% confidence</p>
-            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('moderate', 0)) }}</p>
-          </div>
-          <div class="bg-white px-4 py-3">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Aggressive</p>
-            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥60% confidence</p>
-            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('aggressive', 0)) }}</p>
-          </div>
-        </div>
-        <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-500 italic">
-          Projected ({{ fmt_money(os.get('projected', 0)) }}) = midpoint of Conservative and Moderate.
-        </div>
-      </details>
+          {% else %}
+          <div class="pl-12 pr-4 py-2 bg-slate-50 text-[10px] text-gray-400 italic border-t border-gray-100">No deals in this tier.</div>
+          {% endif %}
+        </details>
+        {% endfor %}
+      </div>
     </div>
   </td>
 </tr>
@@ -324,8 +347,8 @@
 </script>
 <style>
   .rep-chevron { display: inline-block; transition: transform 0.15s; font-size: 8px; }
-  details.scenario-fold[open] .scenario-chevron { transform: rotate(90deg); }
-  details.scenario-fold > summary { list-style: none; }
-  details.scenario-fold > summary::-webkit-details-marker { display: none; }
+  details.scenario-tier[open] .scenario-chevron { transform: rotate(90deg); }
+  details.scenario-tier > summary { list-style: none; }
+  details.scenario-tier > summary::-webkit-details-marker { display: none; }
 </style>
 {% endblock %}
