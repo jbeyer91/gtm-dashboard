@@ -3073,6 +3073,38 @@ def compute_forecast(period: str) -> dict:
             "rep_mult":         score["rep_mult"],
             "emp_seg_mult":     score["emp_seg_mult"],
             "emp_segment":      score["emp_segment"],
+            "is_won":           False,
+        })
+
+    # Include won deals in the per-rep drill-down so managers can see what's
+    # already banked alongside what's still open.  Won deals are 100% confidence
+    # by definition so projected_prob=1.0 and all multipliers are neutral.
+    for d in won_deals:
+        props = d["properties"]
+        oid = props.get("hubspot_owner_id") or ""
+        amt = float(props.get("amount") or 0)
+        deal_details_raw.append({
+            "deal_id":          d.get("id", ""),
+            "deal_name":        props.get("dealname") or "(unnamed)",
+            "owner_id":         oid,
+            "amount":           amt,
+            "stage":            DEAL_STAGES.get(props.get("dealstage", ""), props.get("dealstage", "Closed Won")),
+            "stage_id":         props.get("dealstage", ""),
+            "source":           _deal_source(d),
+            "closedate":        props.get("closedate") or "",
+            "base_prob":        1.0,
+            "projected_prob":   1.0,
+            "projected_amt":    round(amt, 2),
+            "risk_flags":       [],
+            "biz_days_remaining": None,
+            "time_mult":        1.0,
+            "activity_mult":    1.0,
+            "size_mult":        1.0,
+            "source_mult":      1.0,
+            "rep_mult":         1.0,
+            "emp_seg_mult":     1.0,
+            "emp_segment":      "",
+            "is_won":           True,
         })
 
     owner_team = get_owner_team_map()  # {owner_id: "Rising" | "Veterans"}
@@ -3236,12 +3268,15 @@ def compute_scenario_forecast(deal_details: list[dict], won_by_owner: dict | Non
     for oid, won_amt in won_by_owner.items():
         by_owner[oid] = {k: float(won_amt or 0) for k in SCENARIO_THRESHOLDS}
 
-    # Add open-deal contributions by threshold.
+    # Add open-deal contributions by threshold.  Skip is_won entries — those
+    # are already seeded via won_by_owner and would otherwise double-count.
     for group in deal_details:
         oid = group["owner_id"]
         if oid not in by_owner:
             by_owner[oid] = {k: 0.0 for k in SCENARIO_THRESHOLDS}
         for deal in group["deals"]:
+            if deal.get("is_won"):
+                continue
             prob = deal.get("projected_prob", 0)
             amt  = deal.get("amount", 0)
             contrib = amt * prob

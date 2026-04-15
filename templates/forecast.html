@@ -85,8 +85,6 @@
 {% for g in group_deals if g.owner_id == row.owner_id %}{% set _ = rep_deals.extend(g.deals) %}{% endfor %}
 {% if rep_deals or row.won_amt %}
 {% set rep_proj = os.get('projected', 0) %}
-{% set rep_sub  = row.submitted_amt if row.submitted_amt is not none else 0 %}
-{% set rep_vs   = rep_sub - rep_proj %}
 <tr class="rep-detail hidden" data-detail-for="{{ row.owner_id }}">
   <td colspan="{{ col_count }}" class="p-0">
     <div class="bg-slate-50 border-t border-b border-gray-200">
@@ -106,7 +104,7 @@
           </thead>
           <tbody class="divide-y divide-gray-100 bg-white">
             {% for deal in rep_deals %}
-            <tr class="hover:bg-slate-50 transition-colors duration-100">
+            <tr class="hover:bg-slate-50 transition-colors duration-100 {% if deal.is_won %}bg-green-50/40{% endif %}">
               <td class="px-4 py-2 font-medium text-gray-800 max-w-[200px] truncate">
                 {% if portal_id and deal.deal_id %}
                 <a href="https://app.hubspot.com/contacts/{{ portal_id }}/deal/{{ deal.deal_id }}" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">{{ deal.deal_name }}</a>
@@ -115,10 +113,16 @@
                 {% endif %}
               </td>
               <td class="px-4 py-2 text-right tabular-nums">{{ fmt_money(deal.amount) }}</td>
-              <td class="px-4 py-2 text-gray-600">{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in deal.stage else deal.stage }}</td>
+              <td class="px-4 py-2 {% if deal.is_won %}text-green-700 font-medium{% else %}text-gray-600{% endif %}">
+                {% if deal.is_won %}Won{% else %}{{ deal.stage | replace("Stage ", "S") | replace(" - Initial Demo", "") | replace(" - Solution Review", "") | replace(" - Stake Holder Alignment", "") | replace(" - Contract Sent", "") if "Stage" in deal.stage else deal.stage }}{% endif %}
+              </td>
               <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
               </td>
+              {% if deal.is_won %}
+              <td class="px-4 py-2 text-right tabular-nums font-semibold" style="color:#15803D;">✓</td>
+              <td class="px-4 py-2 text-[10px] text-gray-400 italic">closed</td>
+              {% else %}
               {% set tip_parts = [] %}
               {% set _ = tip_parts.append("Stage " ~ ((deal.base_prob * 100) | round(0) | int) ~ "%") %}
               {% set _ = tip_parts.append("Time ×" ~ ("%.2f" | format(deal.time_mult))) %}
@@ -150,14 +154,15 @@
                   {% endif %}
                 </div>
               </td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       {% endif %}
-      {# Gap summary bar — 4 cells: Won / Projected / Manual Submission / vs Projected #}
-      <div class="grid grid-cols-4 gap-px bg-gray-200 border-t border-gray-200 text-xs">
+      {# Gap summary bar — 3 cells: Won / Projected / Manual Submission #}
+      <div class="grid grid-cols-3 gap-px bg-gray-200 border-t border-gray-200 text-xs">
         <div class="bg-white px-4 py-3 text-center">
           <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Won</p>
           <p class="font-bold tabular-nums text-gray-800">{{ fmt_money(row.won_amt) }}</p>
@@ -172,23 +177,6 @@
             {% if row.submitted_amt is not none %}{{ fmt_money(row.submitted_amt) }}{% else %}<span class="text-gray-400 italic font-normal">—</span>{% endif %}
           </p>
         </div>
-        <div class="bg-white px-4 py-3 text-center">
-          <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">vs Projected</p>
-          {% if row.submitted_amt is not none %}
-            {% if rep_vs > 0 %}
-            <p class="font-bold tabular-nums text-red-600">+{{ fmt_money(rep_vs) }}</p>
-            <p class="text-[10px] text-red-500 mt-0.5">Rep is over model</p>
-            {% elif rep_vs < 0 %}
-            <p class="font-bold tabular-nums text-green-600">-{{ fmt_money(rep_vs|abs) }}</p>
-            <p class="text-[10px] text-green-500 mt-0.5">Rep is under model</p>
-            {% else %}
-            <p class="font-bold tabular-nums text-gray-500">$0</p>
-            <p class="text-[10px] text-gray-400 mt-0.5">Matches model</p>
-            {% endif %}
-          {% else %}
-          <p class="text-gray-400 italic font-normal">—</p>
-          {% endif %}
-        </div>
       </div>
       {# Scenario breakdown — one fold-out per tier. Tiers are cumulative pools: #}
       {# Moderate includes Conservative, Aggressive includes both — matching how the #}
@@ -196,7 +184,7 @@
       {% set cons_deals = [] %}
       {% set mod_deals = [] %}
       {% set agg_deals = [] %}
-      {% for d in rep_deals %}
+      {% for d in rep_deals if not d.is_won %}
         {% if d.projected_prob >= 0.90 %}{% set _ = cons_deals.append(d) %}{% endif %}
         {% if d.projected_prob >= 0.75 %}{% set _ = mod_deals.append(d) %}{% endif %}
         {% if d.projected_prob >= 0.60 %}{% set _ = agg_deals.append(d) %}{% endif %}
