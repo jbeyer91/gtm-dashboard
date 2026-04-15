@@ -63,17 +63,14 @@
     {% if row.quota_amt %}{{ fmt_money(row.quota_amt) }}{% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100">{{ fmt_money(row.won_amt) }}</td>
-  <td class="px-4 py-3 text-right tabular-nums font-semibold
+  <td class="px-4 py-3 text-right tabular-nums
     {% if row.attain_pct is none %}text-gray-400
-    {% elif row.attain_pct >= 100 %}text-green-600
-    {% elif row.attain_pct >= 75 %}text-yellow-600
-    {% else %}text-red-500{% endif %}">
+    {% elif row.attain_pct >= 100 %}text-gray-800 font-semibold
+    {% else %}text-gray-600{% endif %}">
     {% if row.attain_pct is not none %}{{ fmt_pct(row.attain_pct) }}{% else %}—{% endif %}
   </td>
-  <td class="px-4 py-3 text-right tabular-nums font-semibold
-    {% if row.gap_amt is none %}text-gray-400
-    {% elif row.gap_amt <= 0 %}text-green-600
-    {% else %}text-red-500{% endif %}">
+  <td class="px-4 py-3 text-right tabular-nums
+    {% if row.gap_amt is none %}text-gray-400{% else %}text-gray-600{% endif %}">
     {% if row.gap_amt is not none %}{{ fmt_money(row.gap_amt) }}{% else %}—{% endif %}
   </td>
   <td class="px-4 py-3 text-right tabular-nums border-l border-gray-100 font-semibold" style="color:#185FA5;">
@@ -134,10 +131,7 @@
               <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.closedate %}{{ deal.closedate[:10] }}{% else %}—{% endif %}
               </td>
-              <td class="px-4 py-2 text-right tabular-nums
-                {% if deal.biz_days_remaining is not none and deal.biz_days_remaining <= 3 %}text-red-600 font-semibold
-                {% elif deal.biz_days_remaining is not none and deal.biz_days_remaining <= 7 %}text-amber-600
-                {% else %}text-gray-600{% endif %}">
+              <td class="px-4 py-2 text-right tabular-nums text-gray-600">
                 {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
               </td>
               {% set tip_parts = [] %}
@@ -169,17 +163,18 @@
                 {% if deal.projected_prob >= 0.60 %}{{ fmt_money(deal.amount * deal.projected_prob) }}{% else %}<span class="text-gray-300">—</span>{% endif %}
               </td>
               <td class="px-4 py-2">
-                <div class="flex flex-wrap gap-1">
+                <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">
                   {% for severity, msg in deal.risk_flags %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border
-                    {% if severity == 'high' %}bg-red-50 text-red-700 border-red-200
-                    {% elif severity == 'medium' %}bg-amber-50 text-amber-700 border-amber-200
-                    {% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0
+                      {% if severity == 'high' %}bg-red-500
+                      {% elif severity == 'medium' %}bg-amber-400
+                      {% else %}bg-slate-400{% endif %}"></span>
                     {{ msg }}
                   </span>
                   {% endfor %}
                   {% if not deal.risk_flags %}
-                  <span class="text-gray-400 text-[10px]">No flags</span>
+                  <span class="text-gray-400">—</span>
                   {% endif %}
                 </div>
               </td>
@@ -297,17 +292,14 @@
           {% if t.quota_amt %}{{ fmt_money(t.quota_amt) }}{% else %}—{% endif %}
         </td>
         <td class="px-4 py-3 text-right border-l border-gray-100">{{ fmt_money(t.won_amt) }}</td>
-        <td class="px-4 py-3 text-right font-semibold
+        <td class="px-4 py-3 text-right
           {% if t.attain_pct is none %}text-gray-400
-          {% elif t.attain_pct >= 100 %}text-green-600
-          {% elif t.attain_pct >= 75 %}text-yellow-600
-          {% else %}text-red-500{% endif %}">
+          {% elif t.attain_pct >= 100 %}text-gray-800 font-semibold
+          {% else %}text-gray-700{% endif %}">
           {% if t.attain_pct is not none %}{{ fmt_pct(t.attain_pct) }}{% else %}—{% endif %}
         </td>
-        <td class="px-4 py-3 text-right font-semibold
-          {% if t.gap_amt is none %}text-gray-400
-          {% elif t.gap_amt <= 0 %}text-green-600
-          {% else %}text-red-500{% endif %}">
+        <td class="px-4 py-3 text-right
+          {% if t.gap_amt is none %}text-gray-400{% else %}text-gray-700{% endif %}">
           {% if t.gap_amt is not none %}{{ fmt_money(t.gap_amt) }}{% else %}—{% endif %}
         </td>
         <td class="px-4 py-3 text-right border-l border-gray-100 font-semibold" style="color:#185FA5;">
