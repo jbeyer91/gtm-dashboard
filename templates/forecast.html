@@ -19,9 +19,9 @@
 {% set vs_mod = sub_amt - mod_amt %}
 <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
   {{ stat_card("Team Quota", fmt_money(t.quota_amt) if t.quota_amt else "—") }}
-  {{ stat_card("Conservative", fmt_money(st.conservative) if st else "—", "proj % ≥ 90%", tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.") }}
-  {{ stat_card("Moderate", fmt_money(st.moderate) if st else "—", "proj % ≥ 75%", tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.") }}
-  {{ stat_card("Aggressive", fmt_money(st.aggressive) if st else "—", "proj % ≥ 60%", tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.") }}
+  {{ stat_card("Conservative", fmt_money(st.conservative) if st else "—", "proj % ≥ 90%", tip="Sum of amount × projected % for deals with projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
+  {{ stat_card("Moderate", fmt_money(st.moderate) if st else "—", "proj % ≥ 75%", tip="Sum of amount × projected % for deals with projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
+  {{ stat_card("Aggressive", fmt_money(st.aggressive) if st else "—", "proj % ≥ 60%", tip="Sum of amount × projected % for deals with projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Multipliers derived from trailing 180-day CRM benchmarks.") }}
   {% if period == "this_month" %}
   {% if vs_mod != 0 %}
     {% set vs_label %}{% if vs_mod > 0 %}+{{ fmt_money(vs_mod) }} over model{% else %}-{{ fmt_money(vs_mod|abs) }} under model{% endif %}{% endset %}
@@ -112,10 +112,10 @@
               <th class="px-4 py-2 text-left">Stage</th>
               <th class="px-4 py-2 text-right">Close</th>
               <th class="px-4 py-2 text-right">Biz Days</th>
-              <th class="px-4 py-2 text-right" data-tip="Signal-adjusted close probability. Derived from 6 signals: time feasibility, activity, deal size, source, rep history and employee segment. Benchmarked against trailing 180-day closed deals.">Proj %</th>
-              <th class="px-4 py-2 text-right" style="color:#185FA5;" data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">Conservative</th>
-              <th class="px-4 py-2 text-right" style="color:#3B6D11;" data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">Moderate</th>
-              <th class="px-4 py-2 text-right" style="color:#BA7517;" data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">Aggressive</th>
+              <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
+              <th class="px-4 py-2 text-right" style="color:#185FA5;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Conservative</th>
+              <th class="px-4 py-2 text-right" style="color:#3B6D11;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Moderate</th>
+              <th class="px-4 py-2 text-right" style="color:#BA7517;" data-tip="Deal amount × projected % — shown only if deal's projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment.">Aggressive</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
           </thead>
@@ -140,10 +140,20 @@
                 {% else %}text-gray-600{% endif %}">
                 {% if deal.biz_days_remaining is not none %}{{ deal.biz_days_remaining }}{% else %}—{% endif %}
               </td>
+              {% set tip_parts = [] %}
+              {% set _ = tip_parts.append("Stage " ~ ((deal.base_prob * 100) | round(0) | int) ~ "%") %}
+              {% set _ = tip_parts.append("Time ×" ~ ("%.2f" | format(deal.time_mult))) %}
+              {% set _ = tip_parts.append("Activity ×" ~ ("%.2f" | format(deal.activity_mult))) %}
+              {% set _ = tip_parts.append("Size ×" ~ ("%.2f" | format(deal.size_mult))) %}
+              {% set _ = tip_parts.append("Source ×" ~ ("%.2f" | format(deal.source_mult))) %}
+              {% set _ = tip_parts.append("Rep ×" ~ ("%.2f" | format(deal.rep_mult))) %}
+              {% set _ = tip_parts.append("Emp ×" ~ ("%.2f" | format(deal.emp_seg_mult))) %}
+              {% set deal_tip = (tip_parts | join(" × ")) ~ " = " ~ ((deal.projected_prob * 100) | round(0) | int) ~ "%" %}
               <td class="px-4 py-2 text-right tabular-nums font-semibold
                 {% if deal.projected_prob >= 0.75 %}text-green-600
                 {% elif deal.projected_prob >= 0.50 %}text-amber-600
-                {% else %}text-red-500{% endif %}">
+                {% else %}text-red-500{% endif %}"
+                data-tip="{{ deal_tip }}">
                 {{ "%.0f" | format(deal.projected_prob * 100) }}%
               </td>
               {# Conservative: show $ if prob >= 0.90, else dimmed dash #}
@@ -233,17 +243,17 @@
         <th class="px-4 py-3 text-right font-semibold">Attain %</th>
         <th class="px-4 py-3 text-right font-semibold">Gap $</th>
         <th class="px-4 py-3 text-right font-semibold border-l border-gray-200" style="color:#185FA5;"
-            data-tip="Includes deals where projected probability ≥ 90%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 90%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Conservative
           <span class="block font-normal normal-case tracking-normal" style="color:#185FA5; opacity:0.6;">≥ 90%</span>
         </th>
         <th class="px-4 py-3 text-right font-semibold" style="color:#3B6D11;"
-            data-tip="Includes deals where projected probability ≥ 75%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 75%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Moderate
           <span class="block font-normal normal-case tracking-normal" style="color:#3B6D11; opacity:0.6;">≥ 75%</span>
         </th>
         <th class="px-4 py-3 text-right font-semibold" style="color:#BA7517;"
-            data-tip="Includes deals where projected probability ≥ 60%. Each deal contributes amount × projected probability.">
+            data-tip="Sum of amount × projected % for deals with projected % ≥ 60%. Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment (multipliers calibrated from trailing 180-day CRM benchmarks).">
           Aggressive
           <span class="block font-normal normal-case tracking-normal" style="color:#BA7517; opacity:0.6;">≥ 60%</span>
         </th>
