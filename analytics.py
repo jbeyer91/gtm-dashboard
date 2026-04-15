@@ -3740,6 +3740,9 @@ def compute_book_coverage() -> dict:
       - Total Named Accounts : all companies owned by the AE
       - A+ to C Accounts     : companies with icp_rank in {A+, A, B, C}
       - % within ROE         : A-C companies where active_since_transfer is TRUE
+      - % outside ROE        : A-C companies where active_since_transfer is FALSE
+                               (accounts where the property is null/unset are
+                               excluded from both within and outside counts)
       - % in sequence        : A-C companies with at least one contact in a sequence
       - Overdue tasks        : past-due not-started tasks owned by the AE
     """
@@ -3756,12 +3759,16 @@ def compute_book_coverage() -> dict:
         "total": 0,
         "ac_accounts": 0,
         "within_roe": 0,
+        "outside_roe": 0,
         "in_sequence": 0,
         "overdue_tasks": 0,
     })
 
     def _is_truthy(val) -> bool:
         return str(val).strip().lower() in ("true", "yes", "1")
+
+    def _is_falsy(val) -> bool:
+        return str(val).strip().lower() in ("false", "no", "0")
 
     for company in companies:
         props = company["properties"]
@@ -3777,9 +3784,12 @@ def compute_book_coverage() -> dict:
             owner_data[oid]["ac_accounts"] += 1
 
             # Within ROE: active_since_transfer == TRUE
+            # Outside ROE: active_since_transfer == FALSE (null/unset excluded)
             active_since = props.get("active_since_transfer")
             if active_since is not None and _is_truthy(active_since):
                 owner_data[oid]["within_roe"] += 1
+            elif active_since is not None and _is_falsy(active_since):
+                owner_data[oid]["outside_roe"] += 1
 
             # In active sequence
             custom_seq = props.get("in_active_sequence")
@@ -3807,10 +3817,10 @@ def compute_book_coverage() -> dict:
             "total_accounts": data["total"],
             "ac_accounts": ac,
             "within_roe": data["within_roe"],
-            "outside_roe": ac - data["within_roe"],
+            "outside_roe": data["outside_roe"],
             "in_sequence": data["in_sequence"],
             "pct_within_roe": _pct(data["within_roe"], ac),
-            "pct_outside_roe": _pct(ac - data["within_roe"], ac),
+            "pct_outside_roe": _pct(data["outside_roe"], ac),
             "pct_in_sequence": _pct(data["in_sequence"], ac),
             "overdue_tasks": data["overdue_tasks"],
         })
