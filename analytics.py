@@ -2917,24 +2917,33 @@ def _score_deal_projected(
         if seg_wr is not None and STAGE2_WIN_RATE:
             # Segment-specific: use the rep's win rate in this employee-size bucket
             rep_mult = seg_wr / STAGE2_WIN_RATE
-        elif stage == _s1:
-            rep_combined = rep_stats["s1_to_s2"] * rep_stats["win_rate_s2"]
-            rep_mult = rep_combined / global_combined if global_combined else 1.0
+            rep_mult = max(0.5, min(1.5, rep_mult))
+            if rep_mult >= 1.20:
+                tailwinds.append(("medium", f"Rep strong in {emp_seg} segment"))
+            elif rep_mult >= 1.10:
+                tailwinds.append(("low", f"Rep above-avg in {emp_seg} segment"))
         else:
-            rep_mult = rep_stats["win_rate_s2"] / STAGE2_WIN_RATE if STAGE2_WIN_RATE else 1.0
-        rep_mult = max(0.5, min(1.5, rep_mult))
-        if rep_mult >= 1.20:
-            tailwinds.append(("medium", "Rep outperforms avg in this segment"))
-        elif rep_mult >= 1.10:
-            tailwinds.append(("low", "Rep has above-avg track record"))
+            if stage == _s1:
+                rep_combined = rep_stats["s1_to_s2"] * rep_stats["win_rate_s2"]
+                rep_mult = rep_combined / global_combined if global_combined else 1.0
+            else:
+                rep_mult = rep_stats["win_rate_s2"] / STAGE2_WIN_RATE if STAGE2_WIN_RATE else 1.0
+            rep_mult = max(0.5, min(1.5, rep_mult))
+            if rep_mult >= 1.20:
+                tailwinds.append(("medium", "Rep's overall win rate above avg"))
+            elif rep_mult >= 1.10:
+                tailwinds.append(("low", "Rep's overall win rate above avg"))
     else:
         rep_mult = 1.0
 
     # ── Signal 6: Employee-size segment (org-wide) ───────────────────────────
+    # Used in the scoring multiplier chain but NOT surfaced as a tailwind —
+    # the org-wide segment win rate is biased by top performers, so flagging
+    # it as a positive signal for a junior rep would be misleading.  Segment
+    # strength only shows up as a tailwind via Signal 5 above, which uses the
+    # individual rep's own segment win rate.
     emp_seg_mults = bm.get("emp_seg_multipliers") or {}
     emp_seg_mult = emp_seg_mults.get(emp_seg, 1.0)
-    if emp_seg_mult >= 1.05 and emp_seg:
-        tailwinds.append(("low", f"Favorable segment fit ({emp_seg})"))
 
     # ── Final projected probability ──────────────────────────────────────────
     projected_prob = (base_prob * time_mult * activity_mult * size_mult
