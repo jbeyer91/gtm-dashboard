@@ -102,7 +102,6 @@
               <th class="px-4 py-2 text-right">Close</th>
               <th class="px-4 py-2 text-right">Biz Days</th>
               <th class="px-4 py-2 text-right" data-tip="Projected % = Stage % × Time × Activity × Size × Source × Rep × Employee Segment. Hover any deal's Proj % to see its exact multiplier breakdown. Multipliers derived from trailing 180-day closed deals.">Proj %</th>
-              <th class="px-4 py-2 text-right" data-tip="Deal amount × projected %. Deals with projected % ≥ 75% roll into the rep's Projected total (along with won revenue and half of any 75-89% deal contributions).">Projected $</th>
               <th class="px-4 py-2 text-left">Risk Flags</th>
             </tr>
           </thead>
@@ -138,9 +137,6 @@
                   style="{% if deal.projected_prob >= 0.75 %}color:#15803D;{% elif deal.projected_prob >= 0.60 %}color:#BA7517;{% else %}color:#9CA3AF;{% endif %}"
                   data-tip="{{ deal_tip }}">
                 {{ "%.0f" | format(deal.projected_prob * 100) }}%
-              </td>
-              <td class="px-4 py-2 text-right tabular-nums font-semibold text-gray-800">
-                {{ fmt_money(deal.amount * deal.projected_prob) }}
               </td>
               <td class="px-4 py-2">
                 <div class="flex flex-col gap-0.5 text-[10px] text-gray-600">
@@ -198,6 +194,34 @@
           {% endif %}
         </div>
       </div>
+      {# Scenario breakdown fold-out — shows Conservative / Moderate / Aggressive pools #}
+      <details class="bg-white border-t border-gray-200 text-xs scenario-fold">
+        <summary class="px-4 py-2.5 cursor-pointer text-slate-500 hover:text-slate-700 font-medium select-none flex items-center gap-2">
+          <span class="scenario-chevron inline-block text-[10px] transition-transform">&#9654;</span>
+          Scenario breakdown
+          <span class="text-[10px] text-gray-400 font-normal normal-case">Conservative / Moderate / Aggressive rollups</span>
+        </summary>
+        <div class="grid grid-cols-3 gap-px bg-gray-200 border-t border-gray-100">
+          <div class="bg-white px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Conservative</p>
+            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥90% confidence</p>
+            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('conservative', 0)) }}</p>
+          </div>
+          <div class="bg-white px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Moderate</p>
+            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥75% confidence</p>
+            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('moderate', 0)) }}</p>
+          </div>
+          <div class="bg-white px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Aggressive</p>
+            <p class="text-[10px] text-gray-400 mb-1.5">Won + deals ≥60% confidence</p>
+            <p class="font-bold tabular-nums text-gray-800 text-sm">{{ fmt_money(os.get('aggressive', 0)) }}</p>
+          </div>
+        </div>
+        <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-500 italic">
+          Projected ({{ fmt_money(os.get('projected', 0)) }}) = midpoint of Conservative and Moderate.
+        </div>
+      </details>
     </div>
   </td>
 </tr>
@@ -298,5 +322,10 @@
   });
 })();
 </script>
-<style>.rep-chevron { display: inline-block; transition: transform 0.15s; font-size: 8px; }</style>
+<style>
+  .rep-chevron { display: inline-block; transition: transform 0.15s; font-size: 8px; }
+  details.scenario-fold[open] .scenario-chevron { transform: rotate(90deg); }
+  details.scenario-fold > summary { list-style: none; }
+  details.scenario-fold > summary::-webkit-details-marker { display: none; }
+</style>
 {% endblock %}
