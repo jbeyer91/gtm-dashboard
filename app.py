@@ -1018,7 +1018,8 @@ def forecast():
             "submitted_amt":  _d(t, pt, "submitted_amt"),
             "projected_amt":  _d(t, pt, "projected_amt"),
         }
-        scenarios = analytics.compute_scenario_forecast(data.get("deal_details", []))
+        won_by_owner = {r["owner_id"]: r.get("won_amt", 0) for r in data.get("rows", []) if r.get("owner_id")}
+        scenarios = analytics.compute_scenario_forecast(data.get("deal_details", []), won_by_owner)
     except Exception as e:
         return render_template("error.html", message=str(e), nav=NAV, active="forecast")
     this_month_label = date.today().strftime("%B %Y")
@@ -1662,29 +1663,33 @@ def deals_lost_csv():
 def forecast_csv():
     period = request.args.get("period", "this_month")
     data = analytics.compute_forecast(period)
-    scenarios = analytics.compute_scenario_forecast(data.get("deal_details", []))
+    won_by_owner = {r["owner_id"]: r.get("won_amt", 0) for r in data.get("rows", []) if r.get("owner_id")}
+    scenarios = analytics.compute_scenario_forecast(data.get("deal_details", []), won_by_owner)
     by_owner = scenarios.get("by_owner", {})
     out = io.StringIO()
     w = csv.writer(out)
+    # Scenario columns include won revenue.  Projected = midpoint of Conservative
+    # and Moderate, which is what the UI surfaces.  Conservative/Moderate/
+    # Aggressive retained for power users who want the underlying band.
     w.writerow(["Rep", "Won $", "Commit $", "Commit #", "Submitted Forecast $",
-                "Best Case $", "Best Case #", "Weighted $", "Projected $",
-                "Conservative $", "Moderate $", "Aggressive $",
+                "Best Case $", "Best Case #", "Weighted $",
+                "Projected $", "Conservative $", "Moderate $", "Aggressive $",
                 "Quota $", "Gap $", "Attain %"])
     for r in data["rows"]:
         oid = r.get("owner_id", "")
         os = by_owner.get(oid, {})
         w.writerow([r["ae"], r["won_amt"], r["commit_amt"], r["commit_n"],
                     r["submitted_amt"] or "", r["bestcase_amt"], r["bestcase_n"],
-                    r["weighted_amt"], r["projected_amt"],
-                    os.get("conservative", 0), os.get("moderate", 0), os.get("aggressive", 0),
+                    r["weighted_amt"],
+                    os.get("projected", 0), os.get("conservative", 0), os.get("moderate", 0), os.get("aggressive", 0),
                     r["quota_amt"], r["gap_amt"],
                     f"{r['attain_pct']:.1f}%" if r["attain_pct"] is not None else ""])
     t = data["totals"]
     st = scenarios.get("totals", {})
     w.writerow(["TOTAL", t["won_amt"], t["commit_amt"], t["commit_n"],
                 t["submitted_amt"] or "", t["bestcase_amt"], t["bestcase_n"],
-                t["weighted_amt"], t["projected_amt"],
-                st.get("conservative", 0), st.get("moderate", 0), st.get("aggressive", 0),
+                t["weighted_amt"],
+                st.get("projected", 0), st.get("conservative", 0), st.get("moderate", 0), st.get("aggressive", 0),
                 t["quota_amt"], t["gap_amt"],
                 f"{t['attain_pct']:.1f}%" if t["attain_pct"] is not None else ""])
     return Response(out.getvalue(), mimetype="text/csv",
