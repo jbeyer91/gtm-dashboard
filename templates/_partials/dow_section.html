@@ -63,7 +63,8 @@
     {{ _dow_table(dow_data.deals,        "Deals Created") }}
   {% else %}
     <div class="py-6 text-center">
-      <p class="text-sm text-slate-500">Day-of-week data is being computed — refresh in a moment.</p>
+      <p class="text-sm text-slate-500">Day-of-week data is being computed…</p>
     </div>
+    <script>setTimeout(function(){ window.location.reload(); }, 5000);</script>
   {% endif %}
 </section>
