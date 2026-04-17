@@ -280,10 +280,15 @@ def calls_drilldown():
         from app import NAV
         return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.calls_drilldown")
 
-    try:
+    # DOW tables require a fresh HubSpot call on cold miss — run in background
+    # to avoid blocking/timing out the request thread.  The partial auto-reloads
+    # the page until the data is ready.
+    if is_cached(_dow.build_dow_tables, "all", period):
         dow_data = _dow.build_dow_tables("all", period)
-    except Exception as e:
-        log.warning("build_dow_tables(%s) failed: %s", period, e)
+    else:
+        threading.Thread(
+            target=lambda p=period: _dow.build_dow_tables("all", p), daemon=True
+        ).start()
         dow_data = None
 
     from app import NAV
