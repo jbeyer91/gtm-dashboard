@@ -1,70 +1,137 @@
 {# Activity by Day of Week — included in calls_drilldown.html.
    Expects: dow_data (dict from build_dow_tables, or None while computing) #}
 
-{% macro _dow_table(table, title) %}
-<div class="mb-8 last:mb-0">
-  <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-3">{{ title }}</p>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm" style="table-layout: fixed; min-width: 480px;">
-      <colgroup>
-        <col style="width: 30%;">
-        <col style="width: 14%;">
-        <col style="width: 14%;">
-        <col style="width: 14%;">
-        <col style="width: 14%;">
-        <col style="width: 14%;">
-      </colgroup>
-      <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
-        <tr>
-          <th class="px-4 py-3 text-left font-semibold">Rep</th>
-          <th class="px-4 py-3 text-right font-semibold">Mon</th>
-          <th class="px-4 py-3 text-right font-semibold">Tue</th>
-          <th class="px-4 py-3 text-right font-semibold">Wed</th>
-          <th class="px-4 py-3 text-right font-semibold">Thu</th>
-          <th class="px-4 py-3 text-right font-semibold">Fri</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-100">
-        {% for row in table.rows %}
-        <tr class="hover:bg-slate-50 transition-colors duration-100">
-          <td class="px-4 py-3 font-medium text-slate-800">{{ row.rep }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ row.Mon }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ row.Tue }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ row.Wed }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ row.Thu }}</td>
-          <td class="px-4 py-3 text-right tabular-nums text-slate-700">{{ row.Fri }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr class="border-t-2 border-gray-200 font-semibold text-gray-700" style="background: var(--surface-sub);">
-          <td class="px-4 py-3">{{ table.team_avg.rep }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ table.team_avg.Mon }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ table.team_avg.Tue }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ table.team_avg.Wed }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ table.team_avg.Thu }}</td>
-          <td class="px-4 py-3 text-right tabular-nums">{{ table.team_avg.Fri }}</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-</div>
-{% endmacro %}
-
 <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
-  <div class="mb-6">
-    <h2 class="text-base font-semibold text-gray-800">Activity by Day of Week</h2>
-    <p class="text-xs text-gray-400 mt-0.5">Outbound dials, connect rate, and deals created by weekday.</p>
+  <div class="flex items-start justify-between mb-5">
+    <div>
+      <h2 class="text-base font-semibold text-gray-800">Activity by Day of Week</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Color intensity = volume · toggle metric below</p>
+    </div>
+    {% if dow_data %}
+    <div class="flex gap-0.5 bg-slate-100 rounded-lg p-0.5 shrink-0" role="group">
+      <button data-dow-metric="dials"        class="">Dials</button>
+      <button data-dow-metric="connect_rate" class="">Connect Rate</button>
+      <button data-dow-metric="deals"        class="">Deals</button>
+    </div>
+    {% endif %}
   </div>
 
   {% if dow_data %}
-    {{ _dow_table(dow_data.dials,        "Dials (daily avg)") }}
-    {{ _dow_table(dow_data.connect_rate, "Connect Rate") }}
-    {{ _dow_table(dow_data.deals,        "Deals Created (daily avg)") }}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" style="table-layout: fixed; min-width: 480px;">
+      <colgroup>
+        <col style="width: 28%;">
+        <col style="width: 14.4%;">
+        <col style="width: 14.4%;">
+        <col style="width: 14.4%;">
+        <col style="width: 14.4%;">
+        <col style="width: 14.4%;">
+      </colgroup>
+      <thead class="text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase border-b border-slate-200" style="background: var(--surface-sub);">
+        <tr>
+          <th class="px-4 py-3 text-left">Rep</th>
+          <th class="px-3 py-3 text-center">Mon</th>
+          <th class="px-3 py-3 text-center">Tue</th>
+          <th class="px-3 py-3 text-center">Wed</th>
+          <th class="px-3 py-3 text-center">Thu</th>
+          <th class="px-3 py-3 text-center">Fri</th>
+        </tr>
+      </thead>
+      <tbody id="dow-tbody"></tbody>
+      <tfoot id="dow-tfoot"></tfoot>
+    </table>
+  </div>
+
+  <script>
+  (function () {
+    var data = {{ dow_data | tojson }};
+    var days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    var RGB  = [109, 40, 217]; // violet — matches hourly heatmap
+
+    function toNum(v) { return typeof v === 'number' ? v : parseFloat(v) || 0; }
+
+    function render(metric) {
+      var table = data[metric];
+      var rows  = table.rows;
+      var avg   = table.team_avg;
+
+      var maxVal = 1;
+      rows.forEach(function (row) {
+        days.forEach(function (day) { var v = toNum(row[day]); if (v > maxVal) maxVal = v; });
+      });
+
+      // ── body rows ─────────────────────────────────────────────────────────
+      var tbody = document.getElementById('dow-tbody');
+      tbody.innerHTML = '';
+      rows.forEach(function (row) {
+        var tr = document.createElement('tr');
+        tr.className = 'border-b border-gray-100 hover:bg-slate-50/60 transition-colors';
+
+        var tdRep = document.createElement('td');
+        tdRep.className = 'px-4 py-2 font-medium text-slate-800';
+        tdRep.textContent = row.rep;
+        tr.appendChild(tdRep);
+
+        days.forEach(function (day) {
+          var raw   = row[day];
+          var alpha = toNum(raw) / maxVal;
+          var bg    = alpha > 0
+            ? 'rgba(' + RGB + ',' + alpha.toFixed(2) + ')'
+            : '#f1f5f9';
+          var fg = alpha > 0.5 ? 'white' : (alpha > 0 ? 'rgb(' + RGB + ')' : '#94a3b8');
+
+          var td = document.createElement('td');
+          td.className = 'px-2 py-1.5 text-center';
+          td.innerHTML =
+            '<div class="mx-auto h-7 rounded flex items-center justify-center text-xs font-semibold tabular-nums"' +
+            ' style="background:' + bg + ';color:' + fg + '">' + raw + '</div>';
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      // ── team avg footer ───────────────────────────────────────────────────
+      var tfoot = document.getElementById('dow-tfoot');
+      tfoot.innerHTML = '';
+      var tr = document.createElement('tr');
+      tr.className = 'border-t-2 border-gray-200';
+      tr.style.background = 'var(--surface-sub)';
+
+      var tdRep = document.createElement('td');
+      tdRep.className = 'px-4 py-2.5 text-sm font-semibold text-gray-600';
+      tdRep.textContent = avg.rep;
+      tr.appendChild(tdRep);
+
+      days.forEach(function (day) {
+        var td = document.createElement('td');
+        td.className = 'px-2 py-2.5 text-center text-sm font-semibold text-gray-600 tabular-nums';
+        td.textContent = avg[day];
+        tr.appendChild(td);
+      });
+      tfoot.appendChild(tr);
+
+      // ── toggle button styles ──────────────────────────────────────────────
+      document.querySelectorAll('[data-dow-metric]').forEach(function (btn) {
+        var active = btn.dataset.dowMetric === metric;
+        btn.className = active
+          ? 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-violet-700 shadow-sm transition-colors'
+          : 'px-3 py-1.5 text-xs font-semibold rounded-md text-slate-500 hover:text-slate-700 transition-colors';
+      });
+    }
+
+    document.querySelectorAll('[data-dow-metric]').forEach(function (btn) {
+      btn.addEventListener('click', function () { render(btn.dataset.dowMetric); });
+    });
+
+    render('dials');
+  }());
+  </script>
+
   {% else %}
-    <div class="py-6 text-center">
-      <p class="text-sm text-slate-500">Day-of-week data is being computed…</p>
-    </div>
-    <script>setTimeout(function(){ window.location.reload(); }, 5000);</script>
+  <div class="py-6 text-center">
+    <p class="text-sm text-slate-500">Day-of-week data is being computed…</p>
+  </div>
+  <script>setTimeout(function(){ window.location.reload(); }, 5000);</script>
   {% endif %}
 </section>
