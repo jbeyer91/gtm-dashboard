@@ -58,9 +58,9 @@
   </div>
 
   {% if dow_data %}
-    {{ _dow_table(dow_data.dials,        "Dials") }}
+    {{ _dow_table(dow_data.dials,        "Dials (daily avg)") }}
     {{ _dow_table(dow_data.connect_rate, "Connect Rate") }}
-    {{ _dow_table(dow_data.deals,        "Deals Created") }}
+    {{ _dow_table(dow_data.deals,        "Deals Created (daily avg)") }}
   {% else %}
     <div class="py-6 text-center">
       <p class="text-sm text-slate-500">Day-of-week data is being computed…</p>

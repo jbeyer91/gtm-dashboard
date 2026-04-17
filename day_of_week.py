@@ -1,7 +1,7 @@
 """Day-of-week activity tables for the Connect Rate Diagnostics page."""
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from cache_utils import ttl_cache
 from hubspot import (
@@ -32,6 +32,18 @@ def _is_outbound_deal(deal: dict) -> bool:
     src = (props.get("hs_analytics_source") or "").upper()
     return src not in _INBOUND_HS_SOURCES
 
+def _weekday_counts(start, end) -> list:
+    """Return [n_mon, n_tue, n_wed, n_thu, n_fri] in [start, end] inclusive."""
+    counts = [0] * 5
+    current = start
+    while current.date() <= end.date():
+        wd = current.weekday()
+        if wd < 5:
+            counts[wd] += 1
+        current += timedelta(days=1)
+    return counts
+
+
 DOW_TEAM_OPTIONS = [
     {"value": "all",      "label": "All"},
     {"value": "Veterans", "label": "Veterans"},
@@ -59,6 +71,7 @@ def build_dow_tables(team: str, period: str) -> dict:
     from analytics import CALL_CONNECTED_GUIDS
 
     start, end = get_date_range(period)
+    wd_counts = _weekday_counts(start, end)
 
     team_map = get_owner_team_map()  # {owner_id: "Veterans"|"Rising"}
     owners = apply_manual_owner_overrides(get_owners())
@@ -134,12 +147,13 @@ def build_dow_tables(team: str, period: str) -> dict:
         d_row: dict = {"rep": name}
         c_row: dict = {"rep": name}
         de_row: dict = {"rep": name}
-        for day in DAYS:
+        for day_idx, day in enumerate(DAYS):
+            n_days = wd_counts[day_idx]
             d = dials[oid][day]
             c = connects[oid][day]
-            d_row[day] = d
+            d_row[day] = round(d / n_days, 1) if n_days > 0 else 0
             c_row[day] = f"{100 * c / d:.1f}%" if d > 0 else "0.0%"
-            de_row[day] = deal_counts[oid][day]
+            de_row[day] = round(deal_counts[oid][day] / n_days, 1) if n_days > 0 else 0
         dials_rows.append(d_row)
         connect_rows.append(c_row)
         deals_rows.append(de_row)
@@ -149,15 +163,16 @@ def build_dow_tables(team: str, period: str) -> dict:
     dials_avg: dict = {"rep": "Team Avg"}
     connect_avg: dict = {"rep": "Team Avg"}
     deals_avg: dict = {"rep": "Team Avg"}
-    for day in DAYS:
+    for day_idx, day in enumerate(DAYS):
+        n_days = wd_counts[day_idx]
         total_d = sum(dials[oid][day] for oid, _ in sorted_reps)
         total_c = sum(connects[oid][day] for oid, _ in sorted_reps)
         total_de = sum(deal_counts[oid][day] for oid, _ in sorted_reps)
-        dials_avg[day] = round(total_d / n, 1) if n > 0 else 0
+        dials_avg[day] = round(total_d / (n * n_days), 1) if n > 0 and n_days > 0 else 0
         connect_avg[day] = (
             f"{100 * total_c / total_d:.1f}%" if total_d > 0 else "0.0%"
         )
-        deals_avg[day] = round(total_de / n, 1) if n > 0 else 0
+        deals_avg[day] = round(total_de / (n * n_days), 1) if n > 0 and n_days > 0 else 0
 
     log.info(
         "build_dow_tables(%s, %s): %d reps, %d calls, %d deals",
