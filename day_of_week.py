@@ -17,6 +17,21 @@ log = logging.getLogger(__name__)
 
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 
+# Mirrors analytics._deal_source / DEAL_SOURCE_MAP — "Cold outreach" = outbound
+_INBOUND_HS_SOURCES = frozenset({
+    "PAID_SEARCH", "ORGANIC_SEARCH", "SOCIAL_MEDIA", "PAID_SOCIAL",
+    "DIRECT_TRAFFIC", "EMAIL_MARKETING", "OFFLINE",
+})
+
+
+def _is_outbound_deal(deal: dict) -> bool:
+    props = deal.get("properties", {})
+    custom = (props.get("deal_source") or "").strip().lower()
+    if custom:
+        return custom == "cold outreach"
+    src = (props.get("hs_analytics_source") or "").upper()
+    return src not in _INBOUND_HS_SOURCES
+
 DOW_TEAM_OPTIONS = [
     {"value": "all",      "label": "All"},
     {"value": "Veterans", "label": "Veterans"},
@@ -94,6 +109,8 @@ def build_dow_tables(team: str, period: str) -> dict:
             connects[oid][day_abbr] += 1
 
     for deal in get_deals(start, end, "createdate"):
+        if not _is_outbound_deal(deal):
+            continue
         props = deal.get("properties", {})
         oid = props.get("hubspot_owner_id", "")
         if not oid or oid not in scope_ids:
