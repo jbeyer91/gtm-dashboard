@@ -1,7 +1,7 @@
 """Day-of-week activity tables for the Connect Rate Diagnostics page."""
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 from cache_utils import ttl_cache
 from hubspot import (
@@ -10,6 +10,7 @@ from hubspot import (
     get_calls,
     get_owner_team_map,
     apply_manual_owner_overrides,
+    get_date_range,
 )
 
 log = logging.getLogger(__name__)
@@ -24,10 +25,11 @@ DOW_TEAM_OPTIONS = [
 
 
 @ttl_cache
-def build_dow_tables(team: str) -> dict:
+def build_dow_tables(team: str, period: str) -> dict:
     """Return day-of-week activity data for the three DOW tables.
 
-    team: "all" | "Veterans" | "Rising"
+    team:   "all" | "Veterans" | "Rising"
+    period: any period key accepted by hubspot.get_date_range()
 
     Returns:
       {
@@ -41,9 +43,7 @@ def build_dow_tables(team: str) -> dict:
     # Imported here to avoid a top-level circular import (analytics imports hubspot)
     from analytics import CALL_CONNECTED_GUIDS
 
-    now = datetime.now(timezone.utc)
-    start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = now
+    start, end = get_date_range(period)
 
     team_map = get_owner_team_map()  # {owner_id: "Veterans"|"Rising"}
     owners = apply_manual_owner_overrides(get_owners())
@@ -143,8 +143,9 @@ def build_dow_tables(team: str) -> dict:
         deals_avg[day] = round(total_de / n, 1) if n > 0 else 0
 
     log.info(
-        "build_dow_tables(%s): %d reps, %d calls, %d deals",
+        "build_dow_tables(%s, %s): %d reps, %d calls, %d deals",
         team,
+        period,
         n,
         sum(sum(v.values()) for v in dials.values()),
         sum(sum(v.values()) for v in deal_counts.values()),

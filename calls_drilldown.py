@@ -360,6 +360,11 @@ def connect_rate_drivers():
     if dow_team not in {"all", "Veterans", "Rising"}:
         dow_team = "all"
 
+    dow_period = request.args.get("dow_period", "ytd")
+    _valid_periods = {p for p, _ in CALL_STATS_PERIODS}
+    if dow_period not in _valid_periods:
+        dow_period = "ytd"
+
     if not is_cached(analytics.compute_connect_rate_drivers, period, team, rep, segment):
         _warm_key = (period, team, rep, segment)
         with _crd_warming_lock:
@@ -379,7 +384,8 @@ def connect_rate_drivers():
             threading.Thread(target=_bg, daemon=True).start()
         # Also warm DOW tables in background so they're ready when the page loads.
         threading.Thread(
-            target=lambda dt=dow_team: _dow.build_dow_tables(dt), daemon=True
+            target=lambda dt=dow_team, dp=dow_period: _dow.build_dow_tables(dt, dp),
+            daemon=True,
         ).start()
         from app import NAV
         return render_template(
@@ -393,6 +399,8 @@ def connect_rate_drivers():
             table_sort=table_sort,
             dow_team=dow_team,
             dow_team_options=_dow.DOW_TEAM_OPTIONS,
+            dow_period=dow_period,
+            dow_period_options=CALL_STATS_PERIODS,
             periods=CONNECT_RATE_DRIVER_PERIODS,
             nav=NAV,
             active="calls_drilldown.connect_rate_drivers",
@@ -420,11 +428,12 @@ def connect_rate_drivers():
         return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
 
     # Fetch DOW tables from cache; trigger background build if not yet ready.
-    if is_cached(_dow.build_dow_tables, dow_team):
-        dow_data = _dow.build_dow_tables(dow_team)
+    if is_cached(_dow.build_dow_tables, dow_team, dow_period):
+        dow_data = _dow.build_dow_tables(dow_team, dow_period)
     else:
         threading.Thread(
-            target=lambda dt=dow_team: _dow.build_dow_tables(dt), daemon=True
+            target=lambda dt=dow_team, dp=dow_period: _dow.build_dow_tables(dt, dp),
+            daemon=True,
         ).start()
         dow_data = None
 
@@ -441,6 +450,8 @@ def connect_rate_drivers():
         dow_data=dow_data,
         dow_team=dow_team,
         dow_team_options=_dow.DOW_TEAM_OPTIONS,
+        dow_period=dow_period,
+        dow_period_options=CALL_STATS_PERIODS,
         periods=CONNECT_RATE_DRIVER_PERIODS,
         nav=NAV,
         active="calls_drilldown.connect_rate_drivers",
