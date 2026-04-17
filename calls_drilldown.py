@@ -265,6 +265,11 @@ def calls_drilldown():
                     with _cd_warming_lock:
                         _cd_warming.discard(k)
             threading.Thread(target=_bg, daemon=True).start()
+            # Warm DOW tables in parallel so they're ready when diagnostics finishes
+            if not is_cached(_dow.build_dow_tables, "all", period):
+                threading.Thread(
+                    target=lambda p=period: _dow.build_dow_tables("all", p), daemon=True
+                ).start()
         from app import NAV
         return render_template(
             "calls_drilldown.html",
