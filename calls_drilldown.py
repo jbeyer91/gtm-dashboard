@@ -6,6 +6,7 @@ from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, session
 
 import analytics
+import day_of_week as _dow
 from cache_utils import is_cached
 
 log = logging.getLogger(__name__)
@@ -355,6 +356,10 @@ def connect_rate_drivers():
     comparison_mode = request.args.get("comparison_mode", "connect_pct")
     table_sort = request.args.get("table_sort", "worst_delta_vs_team")
 
+    dow_team = request.args.get("dow_team", "all")
+    if dow_team not in {"all", "Veterans", "Rising"}:
+        dow_team = "all"
+
     if not is_cached(analytics.compute_connect_rate_drivers, period, team, rep, segment):
         _warm_key = (period, team, rep, segment)
         with _crd_warming_lock:
@@ -372,6 +377,10 @@ def connect_rate_drivers():
                     with _crd_warming_lock:
                         _crd_warming.discard(k)
             threading.Thread(target=_bg, daemon=True).start()
+        # Also warm DOW tables in background so they're ready when the page loads.
+        threading.Thread(
+            target=lambda dt=dow_team: _dow.build_dow_tables(dt), daemon=True
+        ).start()
         from app import NAV
         return render_template(
             "connect_rate_drivers.html",
@@ -382,6 +391,8 @@ def connect_rate_drivers():
             segment=segment,
             comparison_mode=comparison_mode,
             table_sort=table_sort,
+            dow_team=dow_team,
+            dow_team_options=_dow.DOW_TEAM_OPTIONS,
             periods=CONNECT_RATE_DRIVER_PERIODS,
             nav=NAV,
             active="calls_drilldown.connect_rate_drivers",
@@ -408,6 +419,15 @@ def connect_rate_drivers():
         from app import NAV
         return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.connect_rate_drivers")
 
+    # Fetch DOW tables from cache; trigger background build if not yet ready.
+    if is_cached(_dow.build_dow_tables, dow_team):
+        dow_data = _dow.build_dow_tables(dow_team)
+    else:
+        threading.Thread(
+            target=lambda dt=dow_team: _dow.build_dow_tables(dt), daemon=True
+        ).start()
+        dow_data = None
+
     from app import NAV
     return render_template(
         "connect_rate_drivers.html",
@@ -418,6 +438,9 @@ def connect_rate_drivers():
         segment=segment,
         comparison_mode=comparison_mode,
         table_sort=table_sort,
+        dow_data=dow_data,
+        dow_team=dow_team,
+        dow_team_options=_dow.DOW_TEAM_OPTIONS,
         periods=CONNECT_RATE_DRIVER_PERIODS,
         nav=NAV,
         active="calls_drilldown.connect_rate_drivers",
