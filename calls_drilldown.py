@@ -265,9 +265,6 @@ def calls_drilldown():
                     with _cd_warming_lock:
                         _cd_warming.discard(k)
             threading.Thread(target=_bg, daemon=True).start()
-        threading.Thread(
-            target=lambda p=period: _dow.build_dow_tables("all", p), daemon=True
-        ).start()
         from app import NAV
         return render_template(
             "calls_drilldown.html",
@@ -283,12 +280,10 @@ def calls_drilldown():
         from app import NAV
         return render_template("error.html", message=str(e), nav=NAV, active="calls_drilldown.calls_drilldown")
 
-    if is_cached(_dow.build_dow_tables, "all", period):
+    try:
         dow_data = _dow.build_dow_tables("all", period)
-    else:
-        threading.Thread(
-            target=lambda p=period: _dow.build_dow_tables("all", p), daemon=True
-        ).start()
+    except Exception as e:
+        log.warning("build_dow_tables(%s) failed: %s", period, e)
         dow_data = None
 
     from app import NAV
