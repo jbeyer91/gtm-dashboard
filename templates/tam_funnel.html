@@ -42,7 +42,7 @@
     ] %}
 
     {% for num, key, label, sub in layers %}
-    <div style="display:grid; grid-template-columns:28px 1fr 210px; align-items:center; gap:12px; height:44px;">
+    <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 210px; align-items:center; gap:12px; height:44px;">
       <span style="font-size:.6875rem; font-family:monospace; color:#d1d5db; text-align:right; user-select:none;">{{ num }}</span>
       <div style="display:flex; align-items:center; justify-content:center;">
         <div id="bar-{{ key }}"
@@ -110,9 +110,6 @@
       <p style="font-size:.6875rem; color:#9ca3af; margin-left:40px; margin-top:8px;">
         ⚠ 90-day closed-lost exclusion cannot be applied via the search API — apply manually in HubSpot if needed
       </p>
-      <p id="prime-portfolio-note" style="display:none; font-size:.6875rem; color:#b45309; font-weight:600; margin-left:40px; margin-top:4px;">
-        ★ Count is portfolio-wide (owner filter not available for this segment)
-      </p>
     </div>
 
   </div>
@@ -175,9 +172,9 @@
           setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
         }
 
-        // Show portfolio-wide note when a team is selected (prime ignores team filter)
-        var note = document.getElementById('prime-portfolio-note');
-        if (note) note.style.display = (team && team !== 'all') ? '' : 'none';
+        // Hide Customer row for team tabs (reps don't own customer accounts)
+        var customerRow = document.getElementById('row-layer9');
+        if (customerRow) customerRow.style.display = (team && team !== 'all') ? 'none' : '';
       })
       .catch(function () {
         LAYERS.forEach(function (key) { setCount('count-' + key, null); });
