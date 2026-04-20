@@ -3,6 +3,7 @@ import os
 import requests
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger(__name__)
 logger = log
@@ -1611,7 +1612,8 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
         sess.headers.update(HEADERS)
         val = None
         try:
-            for attempt in range(4):
+            # 6 attempts: 1, 2, 4, 8, 16, 32s — up to ~63s total to ride out sustained throttling
+            for attempt in range(6):
                 resp = sess.post(
                     f"{BASE_URL}/crm/v3/objects/companies/search",
                     json={"filterGroups": filter_groups, "limit": 1},
@@ -1632,7 +1634,7 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
         with lock:
             results[owner_id][key] = val
 
-    workers = []
+    tasks = []
     for owner_id in rep_ids:
         of = {"propertyName": "hubspot_owner_id", "operator": "IN", "values": [owner_id]}
 
@@ -1718,12 +1720,14 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
         }
 
         for key, fg in layer_searches.items():
-            workers.append(threading.Thread(target=_fetch, args=(owner_id, key, fg), daemon=True))
+            tasks.append((owner_id, key, fg))
 
-    for w in workers:
-        w.start()
-    for w in workers:
-        w.join(timeout=60)
+    # Cap concurrency at 6 — HubSpot search API throttles ~10 req/sec, and launching
+    # all N_reps × 9 = ~90 requests at once causes most to 429 past the retry budget.
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        for oid, k, fg in tasks:
+            executor.submit(_fetch, oid, k, fg)
+        # context exit waits for all submitted tasks to complete
 
     rows = []
     for owner_id in rep_ids:
