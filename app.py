@@ -1115,9 +1115,10 @@ def tam_funnel():
 @login_required
 def api_tam_funnel_counts():
     from hubspot import get_tam_funnel_counts
+    team = request.args.get("team", "all")
     try:
-        counts = get_tam_funnel_counts()
-        return jsonify({"status": "ok", "counts": counts})
+        counts = get_tam_funnel_counts(team=team)
+        return jsonify({"status": "ok", "counts": counts, "team": team})
     except Exception as exc:
         log.warning("api_tam_funnel_counts error: %s", exc)
         return jsonify({"status": "error", "counts": {}}), 500

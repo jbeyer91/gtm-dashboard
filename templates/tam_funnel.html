@@ -8,6 +8,19 @@
   <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Total Addressable Market · Company-Level Funnel</p>
 </div>
 
+<!-- Team tabs -->
+<div class="flex flex-wrap items-center gap-2 mb-4" id="team-tabs">
+  <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest self-center w-14 shrink-0">Team</span>
+  {% for val, label in [("all","All"),("Veterans","Veterans"),("Rising","Rising")] %}
+  <button data-team="{{ val }}"
+          class="team-tab px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-150
+                 {% if val == 'all' %}text-white shadow-sm{% else %}bg-white text-slate-600 border border-gray-200 hover:border-violet-300 hover:text-violet-700{% endif %}"
+          {% if val == 'all' %}style="background: var(--accent);"{% endif %}>
+    {{ label }}
+  </button>
+  {% endfor %}
+</div>
+
 <!-- ── Company Funnel card ─────────────────────────────────────────────────── -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
   <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -97,6 +110,9 @@
       <p style="font-size:.6875rem; color:#9ca3af; margin-left:40px; margin-top:8px;">
         ⚠ 90-day closed-lost exclusion cannot be applied via the search API — apply manually in HubSpot if needed
       </p>
+      <p id="prime-portfolio-note" style="display:none; font-size:.6875rem; color:#b45309; font-weight:600; margin-left:40px; margin-top:4px;">
+        ★ Count is portfolio-wide (owner filter not available for this segment)
+      </p>
     </div>
 
   </div>
@@ -106,6 +122,9 @@
 <script>
 (function () {
   var LAYERS = ['layer2','layer3','layer4','layer5','layer6','layer7','layer8','layer9'];
+  var SPINNER_HTML = '<svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/><path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+  var PRIME_SPINNER_HTML = '<svg style="width:16px;height:16px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="4"/><path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+  var currentTeam = 'all';
 
   function setCount(id, val, errColor) {
     var el = document.getElementById(id);
@@ -117,36 +136,83 @@
     }
   }
 
-  fetch('/api/tam-funnel/counts', { credentials: 'same-origin' })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      var counts = (data && data.counts) || {};
-      // Scale bars to ICP universe (layer2) as 100%
-      var max = counts['layer2'] || counts['layer1'] || 1;
+  function resetSpinners() {
+    LAYERS.forEach(function (key) {
+      var el = document.getElementById('count-' + key);
+      if (el) el.innerHTML = SPINNER_HTML;
+      var bar = document.getElementById('bar-' + key);
+      if (bar) bar.style.width = '0%';
+    });
+    var primeEl = document.getElementById('count-prime');
+    if (primeEl) primeEl.innerHTML = PRIME_SPINNER_HTML;
+    var primeBar = document.getElementById('bar-prime');
+    if (primeBar) primeBar.style.width = '0%';
+  }
 
-      LAYERS.forEach(function (key, i) {
-        var val = counts[key] !== undefined ? counts[key] : null;
-        setCount('count-' + key, val);
-        var bar = document.getElementById('bar-' + key);
-        if (bar && val !== null) {
-          var pct = Math.max((val / max) * 100, 0.4);
-          setTimeout(function () { bar.style.width = pct + '%'; }, i * 70);
+  function loadCounts(team) {
+    var url = '/api/tam-funnel/counts' + (team && team !== 'all' ? '?team=' + encodeURIComponent(team) : '');
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var counts = (data && data.counts) || {};
+        var max = counts['layer2'] || counts['layer1'] || 1;
+
+        LAYERS.forEach(function (key, i) {
+          var val = counts[key] !== undefined ? counts[key] : null;
+          setCount('count-' + key, val);
+          var bar = document.getElementById('bar-' + key);
+          if (bar && val !== null) {
+            var pct = Math.max((val / max) * 100, 0.4);
+            setTimeout(function () { bar.style.width = pct + '%'; }, i * 70);
+          }
+        });
+
+        var primeVal = counts['prime'] !== undefined ? counts['prime'] : null;
+        setCount('count-prime', primeVal, '#b45309');
+        var primeBar = document.getElementById('bar-prime');
+        if (primeBar && primeVal !== null) {
+          var primePct = Math.max((primeVal / max) * 100, 0.4);
+          setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
+        }
+
+        // Show portfolio-wide note when a team is selected (prime ignores team filter)
+        var note = document.getElementById('prime-portfolio-note');
+        if (note) note.style.display = (team && team !== 'all') ? '' : 'none';
+      })
+      .catch(function () {
+        LAYERS.forEach(function (key) { setCount('count-' + key, null); });
+        setCount('count-prime', null, '#b45309');
+      });
+  }
+
+  // Team tab click handling
+  document.querySelectorAll('.team-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var team = btn.getAttribute('data-team');
+      if (team === currentTeam) return;
+      currentTeam = team;
+
+      // Update tab styles
+      document.querySelectorAll('.team-tab').forEach(function (b) {
+        var active = b.getAttribute('data-team') === team;
+        b.style.background = active ? 'var(--accent)' : '';
+        b.className = b.className
+          .replace(/\btext-white\b|\btext-slate-600\b|\bborder\b|\bborder-gray-200\b|\bhover:border-violet-300\b|\bhover:text-violet-700\b|\bshadow-sm\b/g, '')
+          .trim();
+        if (active) {
+          b.className += ' text-white shadow-sm';
+        } else {
+          b.className += ' bg-white text-slate-600 border border-gray-200 hover:border-violet-300 hover:text-violet-700';
         }
       });
 
-      // Prime
-      var primeVal = counts['prime'] !== undefined ? counts['prime'] : null;
-      setCount('count-prime', primeVal, '#b45309');
-      var primeBar = document.getElementById('bar-prime');
-      if (primeBar && primeVal !== null) {
-        var primePct = Math.max((primeVal / max) * 100, 0.4);
-        setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
-      }
-    })
-    .catch(function () {
-      LAYERS.forEach(function (key) { setCount('count-' + key, null); });
-      setCount('count-prime', null, '#b45309');
+      resetSpinners();
+      loadCounts(team);
     });
+  });
+
+  // Initial load
+  loadCounts('all');
 })();
 </script>
 

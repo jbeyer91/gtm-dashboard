@@ -1401,17 +1401,32 @@ def get_forecast_submissions() -> list:
 
 
 @ttl_cache
-def get_tam_funnel_counts() -> dict:
+def get_tam_funnel_counts(team: str = "all") -> dict:
     """Return company counts for each TAM funnel layer and the prime box.
 
-    All 10 HubSpot company searches run in parallel threads, each with its
-    own requests.Session (the shared _session is not thread-safe for concurrent
+    All HubSpot company searches run in parallel threads, each with its own
+    requests.Session (the shared _session is not thread-safe for concurrent
     POSTs). "Suprress" is the exact value stored in HubSpot — do not correct.
+
+    When team != "all", an owner filter is appended to every layer except
+    "prime" (which is already at the 6-filter-per-group limit).
     """
     _SUPPRESS = "Suprress"
     _EMP_SRC = ["Demo Form", "AI", "Gong", "Rep"]
 
-    _searches = {
+    _owner_f: dict | None = None
+    if team and team != "all":
+        team_map = get_owner_team_map()
+        owner_ids = sorted(oid for oid, t in team_map.items() if t == team)
+        if owner_ids:
+            _owner_f = {"propertyName": "hubspot_owner_id", "operator": "IN", "values": owner_ids}
+
+    def _with_owner(groups: list) -> list:
+        if not _owner_f:
+            return groups
+        return [{"filters": g["filters"] + [_owner_f]} for g in groups]
+
+    _base: dict = {
         # Layer 1: hs_object_id HAS_PROPERTY always matches every record
         "layer1": [{"filters": [{"propertyName": "hs_object_id", "operator": "HAS_PROPERTY"}]}],
         "layer2": [{"filters": [
@@ -1490,6 +1505,8 @@ def get_tam_funnel_counts() -> dict:
             ]},
         ],
     }
+
+    _searches = {k: (_with_owner(v) if k != "prime" else v) for k, v in _base.items()}
 
     counts: dict = {}
     lock = threading.Lock()
