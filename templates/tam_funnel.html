@@ -207,8 +207,10 @@
         }
 
         // Hide Customer row for team tabs (reps don't own customer accounts)
+        // Must set 'grid' explicitly — clearing to '' removes the display property
+        // entirely and the row falls back to block, collapsing the grid columns.
         var customerRow = document.getElementById('row-layer9');
-        if (customerRow) customerRow.style.display = (team && team !== 'all') ? 'none' : '';
+        if (customerRow) customerRow.style.display = (team && team !== 'all') ? 'none' : 'grid';
       })
       .catch(function () {
         LAYERS.forEach(function (key) { setCount('count-' + key, null); });
