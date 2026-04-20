@@ -1404,14 +1404,16 @@ def get_forecast_submissions() -> list:
 def get_tam_funnel_counts() -> dict:
     """Return company counts for each TAM funnel layer and the prime box.
 
-    All 10 HubSpot company searches run in parallel threads.
-    "Suprress" is the exact value stored in HubSpot — do not correct the typo.
+    All 10 HubSpot company searches run in parallel threads, each with its
+    own requests.Session (the shared _session is not thread-safe for concurrent
+    POSTs). "Suprress" is the exact value stored in HubSpot — do not correct.
     """
     _SUPPRESS = "Suprress"
     _EMP_SRC = ["Demo Form", "AI", "Gong", "Rep"]
 
     _searches = {
-        "layer1": [{"filters": []}],
+        # Layer 1: no filterGroups at all — matches every company record
+        "layer1": [],
         "layer2": [{"filters": [
             {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
             {"propertyName": "icp_rank", "operator": "HAS_PROPERTY"},
@@ -1493,20 +1495,26 @@ def get_tam_funnel_counts() -> dict:
     lock = threading.Lock()
 
     def _fetch(key, filter_groups):
+        # Each thread gets its own session — requests.Session is not thread-safe
+        # for concurrent POST calls from multiple threads.
+        sess = requests.Session()
+        sess.headers.update(HEADERS)
         try:
-            resp = _session.post(
+            resp = sess.post(
                 f"{BASE_URL}/crm/v3/objects/companies/search",
-                json={"filterGroups": filter_groups, "limit": 1, "properties": ["hs_object_id"]},
+                json={"filterGroups": filter_groups, "limit": 1},
                 timeout=_TIMEOUT,
             )
             if resp.ok:
                 val = resp.json().get("total", 0)
             else:
-                log.warning("tam_funnel %s error %s: %s", key, resp.status_code, resp.text[:200])
+                log.warning("tam_funnel %s error %s: %s", key, resp.status_code, resp.text[:400])
                 val = None
         except Exception as exc:
             log.warning("tam_funnel %s: %s", key, exc)
             val = None
+        finally:
+            sess.close()
         with lock:
             counts[key] = val
 
