@@ -1,6 +1,7 @@
 import logging
 import os
 import requests
+import threading
 import time
 
 log = logging.getLogger(__name__)
@@ -1397,3 +1398,125 @@ def get_forecast_submissions() -> list:
     except Exception as exc:
         logger.warning("get_forecast_submissions: %s", exc)
         return []
+
+
+@ttl_cache
+def get_tam_funnel_counts() -> dict:
+    """Return company counts for each TAM funnel layer and the prime box.
+
+    All 10 HubSpot company searches run in parallel threads.
+    "Suprress" is the exact value stored in HubSpot — do not correct the typo.
+    """
+    _SUPPRESS = "Suprress"
+    _EMP_SRC = ["Demo Form", "AI", "Gong", "Rep"]
+
+    _searches = {
+        "layer1": [{"filters": []}],
+        "layer2": [{"filters": [
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "icp_rank", "operator": "HAS_PROPERTY"},
+        ]}],
+        "layer3": [{"filters": [
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+        ]}],
+        "layer4": [{"filters": [
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+            {"propertyName": "hs_last_logged_call_date", "operator": "HAS_PROPERTY"},
+        ]}],
+        "layer5": [
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "last_connected_call___not_interested", "operator": "HAS_PROPERTY"},
+                {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "num_associated_deals", "operator": "NOT_HAS_PROPERTY"},
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "last_connected_call___not_interested", "operator": "HAS_PROPERTY"},
+                {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "num_associated_deals", "operator": "LTE", "value": "0"},
+            ]},
+        ],
+        "layer6": [
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            ]},
+        ],
+        "layer7": [{"filters": [
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+            {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+        ]}],
+        "layer8": [{"filters": [
+            {"propertyName": "hs_num_open_deals", "operator": "GT", "value": "0"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+        ]}],
+        "layer9": [{"filters": [
+            {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
+        ]}],
+        "prime": [
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+            ]},
+        ],
+    }
+
+    counts: dict = {}
+    lock = threading.Lock()
+
+    def _fetch(key, filter_groups):
+        try:
+            resp = _session.post(
+                f"{BASE_URL}/crm/v3/objects/companies/search",
+                json={"filterGroups": filter_groups, "limit": 1, "properties": ["hs_object_id"]},
+                timeout=_TIMEOUT,
+            )
+            if resp.ok:
+                val = resp.json().get("total", 0)
+            else:
+                log.warning("tam_funnel %s error %s: %s", key, resp.status_code, resp.text[:200])
+                val = None
+        except Exception as exc:
+            log.warning("tam_funnel %s: %s", key, exc)
+            val = None
+        with lock:
+            counts[key] = val
+
+    workers = [
+        threading.Thread(target=_fetch, args=(k, fg), daemon=True)
+        for k, fg in _searches.items()
+    ]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(timeout=25)
+
+    return counts
