@@ -1506,7 +1506,33 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
         ],
     }
 
+    # Prime groups are at the 6-filter-per-group limit in the portfolio-wide form.
+    # When team-filtering, swap of_employees_source for hubspot_owner_id to keep
+    # prime counts team-scoped (employee-source validation is dropped as a trade-off).
+    if _owner_f:
+        _prime_groups = [
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _owner_f,
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                _owner_f,
+            ]},
+        ]
+    else:
+        _prime_groups = _base["prime"]
+
     _searches = {k: (_with_owner(v) if k != "prime" else v) for k, v in _base.items()}
+    _searches["prime"] = _prime_groups
 
     counts: dict = {}
     lock = threading.Lock()
