@@ -173,6 +173,7 @@ NAV = [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
         {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
+        {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
     ]},
 ]
 
@@ -1102,6 +1103,24 @@ def speed_to_lead():
                            period=period, team=team, teams=TEAMS,
                            prior_label=prior_label, deltas=deltas,
                            nav=NAV, active="speed_to_lead")
+
+
+@app.route("/tam-funnel")
+@login_required
+def tam_funnel():
+    return render_template("tam_funnel.html", nav=NAV, active="tam_funnel")
+
+
+@app.route("/api/tam-funnel/counts")
+@login_required
+def api_tam_funnel_counts():
+    from hubspot import get_tam_funnel_counts
+    try:
+        counts = get_tam_funnel_counts()
+        return jsonify({"status": "ok", "counts": counts})
+    except Exception as exc:
+        log.warning("api_tam_funnel_counts error: %s", exc)
+        return jsonify({"status": "error", "counts": {}}), 500
 
 
 @app.route("/book-coverage")
