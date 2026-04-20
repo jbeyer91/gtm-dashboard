@@ -1124,6 +1124,19 @@ def api_tam_funnel_counts():
         return jsonify({"status": "error", "counts": {}}), 500
 
 
+@app.route("/api/tam-funnel/rep-breakdown")
+@login_required
+def api_tam_funnel_rep_breakdown():
+    from hubspot import get_tam_funnel_rep_breakdown
+    team = request.args.get("team", "all")
+    try:
+        rows = get_tam_funnel_rep_breakdown(team=team)
+        return jsonify({"status": "ok", "rows": rows, "team": team})
+    except Exception as exc:
+        log.warning("api_tam_funnel_rep_breakdown error: %s", exc)
+        return jsonify({"status": "error", "rows": []}), 500
+
+
 @app.route("/book-coverage")
 @login_required
 def book_coverage():

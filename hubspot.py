@@ -1577,3 +1577,162 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
         w.join(timeout=25)
 
     return counts
+
+
+@ttl_cache
+def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
+    """Per-rep company counts for each TAM funnel layer.
+
+    Returns a list sorted by layer2 (ICP universe) descending:
+    [{"owner_id": str, "name": str, "team": str, "layer2": int|None, ...}]
+
+    Runs N_reps × 9 HubSpot queries in parallel threads. Each thread uses its
+    own requests.Session. Results are cached 1 hour per team.
+    """
+    _SUPPRESS = "Suprress"
+    _EMP_SRC = ["Demo Form", "AI", "Gong", "Rep"]
+
+    team_map = get_owner_team_map()   # {owner_id: team_name}
+    all_owners = get_owners()          # {owner_id: {name, ...}}
+
+    if team and team != "all":
+        rep_ids = [oid for oid, t in team_map.items() if t == team]
+    else:
+        rep_ids = list(team_map.keys())
+
+    if not rep_ids:
+        return []
+
+    results: dict = {oid: {} for oid in rep_ids}
+    lock = threading.Lock()
+
+    def _fetch(owner_id, key, filter_groups):
+        sess = requests.Session()
+        sess.headers.update(HEADERS)
+        val = None
+        try:
+            for attempt in range(4):
+                resp = sess.post(
+                    f"{BASE_URL}/crm/v3/objects/companies/search",
+                    json={"filterGroups": filter_groups, "limit": 1},
+                    timeout=_TIMEOUT,
+                )
+                if resp.status_code == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                break
+            if resp.ok:
+                val = resp.json().get("total", 0)
+            else:
+                log.warning("tam_rep_breakdown %s/%s error %s", owner_id, key, resp.status_code)
+        except Exception as exc:
+            log.warning("tam_rep_breakdown %s/%s: %s", owner_id, key, exc)
+        finally:
+            sess.close()
+        with lock:
+            results[owner_id][key] = val
+
+    workers = []
+    for owner_id in rep_ids:
+        of = {"propertyName": "hubspot_owner_id", "operator": "IN", "values": [owner_id]}
+
+        def _add(groups, _of=of):
+            return [{"filters": g["filters"] + [_of]} for g in groups]
+
+        layer_searches = {
+            "layer2": _add([{"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "icp_rank", "operator": "HAS_PROPERTY"},
+            ]}]),
+            "layer3": _add([{"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+            ]}]),
+            "layer4": _add([{"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "hs_last_logged_call_date", "operator": "HAS_PROPERTY"},
+            ]}]),
+            "layer5": _add([
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "HAS_PROPERTY"},
+                    {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "num_associated_deals", "operator": "NOT_HAS_PROPERTY"},
+                ]},
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "HAS_PROPERTY"},
+                    {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "num_associated_deals", "operator": "LTE", "value": "0"},
+                ]},
+            ]),
+            "layer6": _add([
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                    {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "hs_last_booked_meeting_date", "operator": "NOT_HAS_PROPERTY"},
+                ]},
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                ]},
+            ]),
+            "layer7": _add([{"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            ]}]),
+            "layer8": _add([{"filters": [
+                {"propertyName": "hs_num_open_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            ]}]),
+            "layer9": _add([{"filters": [
+                {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
+            ]}]),
+            "prime": [
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                    {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    of,
+                ]},
+                {"filters": [
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                    of,
+                ]},
+            ],
+        }
+
+        for key, fg in layer_searches.items():
+            workers.append(threading.Thread(target=_fetch, args=(owner_id, key, fg), daemon=True))
+
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(timeout=60)
+
+    rows = []
+    for owner_id in rep_ids:
+        rows.append({
+            "owner_id": owner_id,
+            "name": all_owners.get(owner_id, {}).get("name", owner_id),
+            "team": team_map.get(owner_id, ""),
+            **results[owner_id],
+        })
+
+    rows.sort(key=lambda r: r.get("layer2") or 0, reverse=True)
+    return rows
