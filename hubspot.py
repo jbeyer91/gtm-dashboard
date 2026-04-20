@@ -1412,8 +1412,8 @@ def get_tam_funnel_counts() -> dict:
     _EMP_SRC = ["Demo Form", "AI", "Gong", "Rep"]
 
     _searches = {
-        # Layer 1: no filterGroups at all — matches every company record
-        "layer1": [],
+        # Layer 1: hs_object_id HAS_PROPERTY always matches every record
+        "layer1": [{"filters": [{"propertyName": "hs_object_id", "operator": "HAS_PROPERTY"}]}],
         "layer2": [{"filters": [
             {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
             {"propertyName": "icp_rank", "operator": "HAS_PROPERTY"},
@@ -1499,20 +1499,26 @@ def get_tam_funnel_counts() -> dict:
         # for concurrent POST calls from multiple threads.
         sess = requests.Session()
         sess.headers.update(HEADERS)
+        val = None
         try:
-            resp = sess.post(
-                f"{BASE_URL}/crm/v3/objects/companies/search",
-                json={"filterGroups": filter_groups, "limit": 1},
-                timeout=_TIMEOUT,
-            )
+            for attempt in range(4):
+                resp = sess.post(
+                    f"{BASE_URL}/crm/v3/objects/companies/search",
+                    json={"filterGroups": filter_groups, "limit": 1},
+                    timeout=_TIMEOUT,
+                )
+                if resp.status_code == 429:
+                    wait = 2 ** attempt
+                    log.warning("tam_funnel %s rate-limited (attempt %d/4), retrying in %ds", key, attempt + 1, wait)
+                    time.sleep(wait)
+                    continue
+                break
             if resp.ok:
                 val = resp.json().get("total", 0)
             else:
                 log.warning("tam_funnel %s error %s: %s", key, resp.status_code, resp.text[:400])
-                val = None
         except Exception as exc:
             log.warning("tam_funnel %s: %s", key, exc)
-            val = None
         finally:
             sess.close()
         with lock:
