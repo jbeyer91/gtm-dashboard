@@ -550,15 +550,19 @@ def home():
     try:
         won_data = get_cached(analytics.compute_deals_won, "this_month")
         if won_data is None:
+            # Kick off a background computation so the next reload has data.
+            def _bg_warm_deals_won():
+                try:
+                    analytics.compute_deals_won("this_month")
+                except Exception as exc:
+                    log.warning("bg deals_won warm failed: %s", exc)
+            threading.Thread(target=_bg_warm_deals_won, daemon=True).start()
             raise RuntimeError("deals_won cache warming")
         won_data = _filter_by_team(won_data, team)
         wt = won_data["totals"]
         win_rate = wt["win_rate"]
         acv = wt["acv"]
     except Exception:
-        # Deals-won data is secondary on the landing page. If HubSpot is slow
-        # or rate-limiting, render Home with scorecard data and let these KPIs
-        # fill in on a later request.
         home_metrics_warming = True
 
     month_label = datetime.now(timezone.utc).strftime("%B %Y")
