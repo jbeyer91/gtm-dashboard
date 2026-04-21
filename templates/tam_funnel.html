@@ -2,31 +2,6 @@
 {% block title %} — TAM Funnel{% endblock %}
 {% block content %}
 
-<style>
-/* Custom tooltip — more reliable than browser title attribute */
-[data-tip] { position: relative; }
-[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 7px);
-  right: 0;
-  left: auto;
-  background: #1e293b;
-  color: #f8fafc;
-  font-size: .7rem;
-  font-weight: 400;
-  line-height: 1.5;
-  padding: 6px 10px;
-  border-radius: 6px;
-  width: max-content;
-  max-width: 260px;
-  white-space: normal;
-  z-index: 999;
-  pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
-}
-th[data-tip] { overflow: visible; }
-</style>
 
 <!-- Page header -->
 <div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
