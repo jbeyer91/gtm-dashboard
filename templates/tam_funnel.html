@@ -2,6 +2,31 @@
 {% block title %} — TAM Funnel{% endblock %}
 {% block content %}
 
+<style>
+/* Custom tooltip — more reliable than browser title attribute */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 0;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: .7rem;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 6px 10px;
+  border-radius: 6px;
+  width: max-content;
+  max-width: 260px;
+  white-space: normal;
+  z-index: 999;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+th[data-tip] { overflow: visible; }
+</style>
+
 <!-- Page header -->
 <div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #5b21b6 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
   <h1 class="text-2xl font-bold text-white tracking-tight">TAM Funnel</h1>
@@ -59,7 +84,7 @@
             <path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </span>
-        <span title="{{ tooltip }}" style="font-size:.8125rem; font-weight:600; color:#374151; white-space:nowrap; cursor:help;">{{ label }}</span>
+        <span data-tip="{{ tooltip }}" style="font-size:.8125rem; font-weight:600; color:#374151; white-space:nowrap; cursor:help;">{{ label }}</span>
       </div>
     </div>
     {% endfor %}
@@ -90,7 +115,7 @@
               <path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span title="ICP ranked, employee count &gt;10, connected &amp; interested or has had a deal, no open deal, not a customer, not closed-lost in the past 90 days" style="font-size:.8125rem; font-weight:600; color:#92400e; cursor:help;">Can call now</span>
+          <span data-tip="ICP ranked, employee count &gt;10, connected &amp; interested or has had a deal, no open deal, not a customer, not closed-lost in the past 90 days" style="font-size:.8125rem; font-weight:600; color:#92400e; cursor:help;">Can call now</span>
         </div>
       </div>
 
@@ -114,7 +139,7 @@
               <path style="opacity:.75" fill="#f97316" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span title="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not called in 30+ days</span>
+          <span data-tip="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not called in 30+ days</span>
         </div>
       </div>
 
@@ -139,14 +164,14 @@
     <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
       <tr>
         <th class="px-4 py-3 text-left">Rep</th>
-        <th class="px-4 py-3 text-right" title="All companies with an ICP rank (A+ through D), excluding Suppressed">ICP Universe</th>
-        <th class="px-4 py-3 text-right" title="Employee count confirmed via Demo Form, AI, Gong, or Rep entry">Emp. Verified</th>
-        <th class="px-4 py-3 text-right" title="Has at least one logged call in HubSpot">Called</th>
-        <th class="px-4 py-3 text-right" title="Connected and not marked Not Interested, or has an associated deal">Interested</th>
-        <th class="px-4 py-3 text-right" title="Has at least one associated deal ever (won, lost, or active)">Had a Deal</th>
-        <th class="px-4 py-3 text-right" title="Has at least one currently active open deal">Open Deal</th>
-        <th class="px-4 py-3 text-right" title="ICP ranked, emp &gt;10, connected &amp; interested or has a deal, no open deal, not a customer, not closed-lost in last 90 days" style="color:#b45309;">★ Can Call</th>
-        <th class="px-4 py-3 text-right" title="Can Call Now companies with no call logged in the last 30 days (any outcome)" style="color:#c2410c;">Not Called 30d+</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="All companies with an ICP rank (A+ through D), excluding Suppressed">ICP Universe</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="Employee count confirmed via Demo Form, AI, Gong, or Rep entry">Emp. Verified</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="Has at least one logged call in HubSpot">Called</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="Connected and not marked Not Interested, or has an associated deal">Interested</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="Has at least one associated deal ever (won, lost, or active)">Had a Deal</th>
+        <th class="px-4 py-3 text-right" style="position:relative;" data-tip="Has at least one currently active open deal">Open Deal</th>
+        <th class="px-4 py-3 text-right" style="position:relative;color:#b45309;" data-tip="ICP ranked, emp &gt;10, connected &amp; interested or has a deal, no open deal, not a customer, not closed-lost in last 90 days">★ Can Call</th>
+        <th class="px-4 py-3 text-right" style="position:relative;color:#c2410c;" data-tip="Can Call Now companies with no call logged in the last 30 days (any outcome)">Not Called 30d+</th>
       </tr>
     </thead>
     <tbody id="rep-tbody" class="divide-y divide-gray-100">
@@ -252,15 +277,21 @@
     return (v === null || v === undefined) ? '<span class="text-gray-300">—</span>' : Number(v).toLocaleString();
   }
 
-  // ICP rank badge colours
+  // ICP rank badge colours — covers both letter grades and qualitative labels
   var ICP_COLORS = {
-    'A+': ['#ede9fe','#6d28d9'], 'A': ['#dbeafe','#1d4ed8'],
-    'B':  ['#dcfce7','#15803d'], 'C': ['#fef9c3','#a16207'],
-    'D':  ['#fee2e2','#b91c1c'],
+    'A+':       ['#ede9fe','#6d28d9'],
+    'A':        ['#dbeafe','#1d4ed8'],
+    'B':        ['#dcfce7','#15803d'],
+    'C':        ['#fef9c3','#a16207'],
+    'D':        ['#fee2e2','#b91c1c'],
+    'Superior': ['#ede9fe','#6d28d9'],
+    'Strong':   ['#dbeafe','#1d4ed8'],
+    'Moderate': ['#dcfce7','#15803d'],
+    'Weak':     ['#fef9c3','#a16207'],
   };
   function icpBadge(rank) {
-    var c = ICP_COLORS[rank];
-    if (!c) return rank ? '<span style="font-size:.7rem;color:#6b7280;">' + rank + '</span>' : '<span style="color:#d1d5db;">—</span>';
+    if (!rank) return '<span style="color:#d1d5db;">—</span>';
+    var c = ICP_COLORS[rank] || ['#f1f5f9','#64748b'];
     return '<span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:9999px;background:' + c[0] + ';color:' + c[1] + ';">' + rank + '</span>';
   }
 
@@ -273,6 +304,7 @@
       + '<thead><tr style="background:#f1f5f9;">'
       + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
       + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP</th>'
+      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Employees</th>'
       + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Call</th>'
       + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">Status</th>'
       + '</tr></thead><tbody>';
@@ -284,6 +316,7 @@
       html += '<tr class="border-t border-slate-100 hover:bg-white">'
         + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
         + '<td class="px-4 py-2 text-center">' + icpBadge(a.icp_rank) + '</td>'
+        + '<td class="px-4 py-2 text-right tabular-nums text-slate-500">' + (a.employees ? Number(a.employees).toLocaleString() : '<span style="color:#d1d5db;">—</span>') + '</td>'
         + '<td class="px-4 py-2 text-right text-slate-500">' + (a.last_connected_call_display || '<span style="color:#d1d5db;">Never</span>') + '</td>'
         + '<td class="px-4 py-2 text-center">' + badge + '</td>'
         + '</tr>';
