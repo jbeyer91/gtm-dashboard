@@ -1497,8 +1497,11 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
     _no_recent_cl = {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"}
     _stale_cl     = {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": _cl_cutoff_ms}
 
-    # Portfolio-wide prime: 4 groups (2 paths × 2 closed-lost states = 4 total, within the 5-group max).
-    # of_employees_source dropped to stay at 6 filters per group after adding the 90-day split.
+    # Portfolio-wide prime: 3 groups max (HubSpot CRM Search allows ≤3 filterGroups per request).
+    # G1+G2: connected-interested path split by closed-lost state (OR'd).
+    # G3: has-deal path — requires never closed-lost (NOT_HAS_PROPERTY) to stay at 6 filters;
+    #     companies with a stale CL and only a deal history (no connected call) are a rare edge
+    #     case and a minor undercount trade-off vs. keeping the query valid.
     _prime_all = [
         {"filters": [  # connected-interested · never closed-lost
             {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
@@ -1516,7 +1519,7 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
             {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
             _stale_cl,
         ]},
-        {"filters": [  # has-deal · never closed-lost
+        {"filters": [  # has-deal (no open deal) · never closed-lost
             {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
             {"propertyName": "of_officers", "operator": "GT", "value": "10"},
             {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
@@ -1524,21 +1527,12 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
             {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
             _no_recent_cl,
         ]},
-        {"filters": [  # has-deal · closed-lost 90+ days ago
-            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-            {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-            {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-            {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-            _stale_cl,
-        ]},
     ]
 
-    # Team-filtered prime: owner filter replaces emp>10 to stay at 6 filters
-    # while still applying the full 90-day closed-lost split.
+    # Team-filtered prime: owner filter replaces emp>10 (6-filter limit).
     if _owner_f:
         _prime_groups = [
-            {"filters": [
+            {"filters": [  # connected-interested · never closed-lost · owner
                 {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                 {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
@@ -1546,7 +1540,7 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
                 _no_recent_cl,
                 _owner_f,
             ]},
-            {"filters": [
+            {"filters": [  # connected-interested · stale closed-lost · owner
                 {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                 {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
@@ -1554,20 +1548,12 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
                 _stale_cl,
                 _owner_f,
             ]},
-            {"filters": [
+            {"filters": [  # has-deal · never closed-lost · owner
                 {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                 {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
                 {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                 {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
                 _no_recent_cl,
-                _owner_f,
-            ]},
-            {"filters": [
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-                _stale_cl,
                 _owner_f,
             ]},
         ]
@@ -1750,7 +1736,7 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                     {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
                     of,
                 ]},
-                {"filters": [  # connected-interested · closed-lost 90+ days ago
+                {"filters": [  # connected-interested · stale closed-lost
                     {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                     {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
@@ -1758,20 +1744,12 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                     {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
                     of,
                 ]},
-                {"filters": [  # has-deal · never closed-lost
+                {"filters": [  # has-deal (no open deal) · never closed-lost
                     {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                     {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                     {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
                     {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
-                    of,
-                ]},
-                {"filters": [  # has-deal · closed-lost 90+ days ago
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                    {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
                     of,
                 ]},
             ],

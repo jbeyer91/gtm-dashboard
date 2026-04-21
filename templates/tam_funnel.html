@@ -30,39 +30,36 @@
 
   <div class="px-6 py-6 space-y-2" style="padding-bottom: 8px;">
 
-    {# dead_end=true → gray bar + muted text; signals a branch off the main calling path #}
     {% set layers = [
-      ("02", "layer2", "ICP Universe",      false),
-      ("03", "layer3", "Employee Verified", false),
-      ("04", "layer4", "Called",            false),
-      ("05", "layer5", "Not Interested",    true),
-      ("06", "layer6", "Interested",        false),
-      ("07", "layer7", "Had a Deal",        false),
-      ("08", "layer8", "Open Deal",         false),
-      ("09", "layer9", "Customer",          false),
+      ("02", "layer2", "ICP Universe",      "All companies with an ICP rank (A+ through D), excluding Suppressed"),
+      ("03", "layer3", "Employee Verified", "ICP companies whose employee count has been confirmed via Demo Form, AI, Gong, or Rep entry"),
+      ("04", "layer4", "Called",            "Employee-verified companies with at least one logged call in HubSpot"),
+      ("06", "layer6", "Interested",        "Called companies connected and not marked Not Interested, or who have an associated deal"),
+      ("07", "layer7", "Had a Deal",        "ICP companies with at least one associated deal ever (won, lost, or active)"),
+      ("08", "layer8", "Open Deal",         "Companies with at least one currently active open deal"),
     ] %}
 
-    {% for num, key, label, dead_end in layers %}
+    {% for num, key, label, tooltip in layers %}
     <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 220px; align-items:center; gap:12px; height:44px;">
       <span style="font-size:.6875rem; font-family:monospace; color:#d1d5db; text-align:right; user-select:none;">{{ num }}</span>
       <div style="display:flex; align-items:center; justify-content:center;">
         <div id="bar-{{ key }}"
              style="height:32px; width:0%; min-width:0; border-radius:6px;
-                    background:{% if dead_end %}linear-gradient(90deg,#d1d5db,#9ca3af){% else %}linear-gradient(90deg,#6366f1,#7c3aed){% endif %};
+                    background:linear-gradient(90deg,#6366f1,#7c3aed);
                     transition:width 0.75s cubic-bezier(0.4,0,0.2,1);
-                    box-shadow:{% if dead_end %}none{% else %}0 1px 4px rgba(99,102,241,0.2){% endif %};">
+                    box-shadow:0 1px 4px rgba(99,102,241,0.2);">
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:10px; min-width:0;">
         <span id="count-{{ key }}"
-              style="font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; color:{% if dead_end %}#9ca3af{% else %}#111827{% endif %}; white-space:nowrap; flex-shrink:0;">
+              style="font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; color:#111827; white-space:nowrap; flex-shrink:0;">
           <svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;"
                fill="none" viewBox="0 0 24 24">
-            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="{% if dead_end %}#9ca3af{% else %}#6366f1{% endif %}" stroke-width="4"/>
-            <path style="opacity:.75" fill="{% if dead_end %}#9ca3af{% else %}#6366f1{% endif %}" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>
+            <path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </span>
-        <span style="font-size:.8125rem; font-weight:600; color:{% if dead_end %}#9ca3af{% else %}#374151{% endif %}; white-space:nowrap;">{{ label }}</span>
+        <span title="{{ tooltip }}" style="font-size:.8125rem; font-weight:600; color:#374151; white-space:nowrap; cursor:help;">{{ label }}</span>
       </div>
     </div>
     {% endfor %}
@@ -93,7 +90,7 @@
               <path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span style="font-size:.8125rem; font-weight:600; color:#92400e;">Can call now</span>
+          <span title="ICP ranked, employee count &gt;10, connected &amp; interested or has had a deal, no open deal, not a customer, not closed-lost in the past 90 days" style="font-size:.8125rem; font-weight:600; color:#92400e; cursor:help;">Can call now</span>
         </div>
       </div>
 
@@ -118,19 +115,18 @@
     <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
       <tr>
         <th class="px-4 py-3 text-left">Rep</th>
-        <th class="px-4 py-3 text-right" title="ICP ranked companies assigned to this rep">ICP Universe</th>
-        <th class="px-4 py-3 text-right" title="Employee count source-validated (Demo, AI, Gong, or Rep)">Emp. Verified</th>
-        <th class="px-4 py-3 text-right" title="Has a logged call date">Called</th>
-        <th class="px-4 py-3 text-right" title="Connected but marked not interested" style="line-height:1.25;">Connected<br><span style="font-weight:400;opacity:.7;">Not Interested</span></th>
-        <th class="px-4 py-3 text-right" title="Connected and engaged, or has a deal" style="line-height:1.25;">Connected<br><span style="font-weight:400;opacity:.7;">Interested</span></th>
-        <th class="px-4 py-3 text-right" title="Has ≥1 associated deal, ever">Had a Deal</th>
-        <th class="px-4 py-3 text-right" title="Has an active open deal">Open Deal</th>
-        <th class="px-4 py-3 text-right" title="No-excuse calling list: ICP ranked, emp >10, engaged, no open deal" style="color:#b45309;">★ Can Call</th>
+        <th class="px-4 py-3 text-right" title="All companies with an ICP rank (A+ through D), excluding Suppressed">ICP Universe</th>
+        <th class="px-4 py-3 text-right" title="Employee count confirmed via Demo Form, AI, Gong, or Rep entry">Emp. Verified</th>
+        <th class="px-4 py-3 text-right" title="Has at least one logged call in HubSpot">Called</th>
+        <th class="px-4 py-3 text-right" title="Connected and not marked Not Interested, or has an associated deal">Interested</th>
+        <th class="px-4 py-3 text-right" title="Has at least one associated deal ever (won, lost, or active)">Had a Deal</th>
+        <th class="px-4 py-3 text-right" title="Has at least one currently active open deal">Open Deal</th>
+        <th class="px-4 py-3 text-right" title="ICP ranked, emp &gt;10, connected &amp; interested or has a deal, no open deal, not a customer, not closed-lost in last 90 days" style="color:#b45309;">★ Can Call</th>
       </tr>
     </thead>
     <tbody id="rep-tbody" class="divide-y divide-gray-100">
       <tr id="rep-loading-row">
-        <td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">
+        <td colspan="8" class="px-4 py-8 text-center text-gray-400 text-xs">
           <svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;"
                fill="none" viewBox="0 0 24 24">
             <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>
@@ -145,12 +141,10 @@
 <!-- ── AJAX loader + bar animation ────────────────────────────────────────── -->
 <script>
 (function () {
-  var LAYERS = ['layer2','layer3','layer4','layer5','layer6','layer7','layer8','layer9'];
+  var LAYERS = ['layer2','layer3','layer4','layer6','layer7','layer8'];
   var SPINNER_HTML = '<svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/><path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
   var PRIME_SPINNER_HTML = '<svg style="width:16px;height:16px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="4"/><path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
   var currentTeam = 'all';
-
-  var DEAD_END_COUNTS = {'count-layer5': true};
 
   function setCount(id, val, errColor) {
     var el = document.getElementById(id);
@@ -158,8 +152,7 @@
     if (val === null || val === undefined) {
       el.innerHTML = '<span style="color:' + (errColor || '#ef4444') + '">—</span>';
     } else {
-      // Preserve the inline color set by Jinja for dead-end rows (layer5 = gray)
-      if (!DEAD_END_COUNTS[id]) el.style.color = '#111827';
+      if (id !== 'count-prime') el.style.color = '#111827';
       el.textContent = val.toLocaleString();
     }
   }
@@ -203,11 +196,6 @@
           setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
         }
 
-        // Hide Customer row for team tabs (reps don't own customer accounts)
-        // Must set 'grid' explicitly — clearing to '' removes the display property
-        // entirely and the row falls back to block, collapsing the grid columns.
-        var customerRow = document.getElementById('row-layer9');
-        if (customerRow) customerRow.style.display = (team && team !== 'all') ? 'none' : 'grid';
       })
       .catch(function () {
         LAYERS.forEach(function (key) { setCount('count-' + key, null); });
@@ -221,7 +209,7 @@
 
   function loadRepBreakdown(team) {
     var tbody = document.getElementById('rep-tbody');
-    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">'
+    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="8" class="px-4 py-8 text-center text-gray-400 text-xs">'
       + SPINNER_HTML
       + ' Loading rep data…</td></tr>';
 
@@ -231,7 +219,7 @@
       .then(function (data) {
         var rows = (data && data.rows) || [];
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
           return;
         }
         var html = '';
@@ -241,7 +229,6 @@
             + '<td class="px-4 py-2.5 text-right tabular-nums font-semibold">' + fmtN(row.layer2) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer3) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer4) + '</td>'
-            + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer5) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer6) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer7) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer8) + '</td>'
@@ -251,7 +238,7 @@
         tbody.innerHTML = html;
       })
       .catch(function () {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
       });
   }
 
