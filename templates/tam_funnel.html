@@ -279,36 +279,101 @@
     return '<span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:9999px;background:' + c[0] + ';color:' + c[1] + ';">' + rank + '</span>';
   }
 
-  function buildAccountsTable(accounts) {
-    if (!accounts.length) {
-      return '<td colspan="9" class="px-6 py-4 text-center text-gray-400 text-xs bg-slate-50">No accounts found</td>';
-    }
-    var html = '<td colspan="9" class="p-0 bg-slate-50">'
-      + '<table class="w-full text-xs border-t border-slate-200">'
-      + '<thead><tr style="background:#f1f5f9;">'
-      + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
-      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP Rank</th>'
-      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Employees</th>'
-      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Call</th>'
-      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">Status</th>'
-      + '</tr></thead><tbody>';
+  // ── Accounts sub-table with sortable columns ─────────────────────────────
+  var _acctData = {};   // owner_id → accounts[]
+  var _acctSort = {};   // owner_id → { col, dir }
+  var ICP_SORT_ORDER = { 'A+': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'Least Priority': 5 };
 
-    accounts.forEach(function (a) {
+  function _sortAccounts(accounts, col, dir) {
+    return accounts.slice().sort(function (a, b) {
+      var av, bv;
+      if (col === 'icp') {
+        var ag = ICP_QUAL_TO_GRADE[a.icp_rank] || a.icp_rank;
+        var bg = ICP_QUAL_TO_GRADE[b.icp_rank] || b.icp_rank;
+        av = ICP_SORT_ORDER[ag] !== undefined ? ICP_SORT_ORDER[ag] : 99;
+        bv = ICP_SORT_ORDER[bg] !== undefined ? ICP_SORT_ORDER[bg] : 99;
+      } else if (col === 'employees') {
+        av = parseInt(a.employees) || 0;
+        bv = parseInt(b.employees) || 0;
+      } else if (col === 'last_call') {
+        av = a.last_connected_call_ms || 0;
+        bv = b.last_connected_call_ms || 0;
+      } else { // status: overdue first by default
+        av = a.overdue ? 0 : 1;
+        bv = b.overdue ? 0 : 1;
+      }
+      var d = av < bv ? -1 : av > bv ? 1 : 0;
+      return dir === 'asc' ? d : -d;
+    });
+  }
+
+  function _renderAccountsRows(accounts) {
+    if (!accounts.length) return '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-400 text-xs">No accounts found</td></tr>';
+    return accounts.map(function (a) {
       var badge = a.overdue
         ? '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#fee2e2;color:#b91c1c;">Not called 30d+</span>'
         : '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#dcfce7;color:#15803d;">Called recently</span>';
-      html += '<tr class="border-t border-slate-100 hover:bg-white">'
+      return '<tr class="border-t border-slate-100 hover:bg-white">'
         + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
         + '<td class="px-4 py-2 text-center">' + icpBadge(a.icp_rank) + '</td>'
         + '<td class="px-4 py-2 text-right tabular-nums text-slate-500">' + (a.employees ? Number(a.employees).toLocaleString() : '<span style="color:#d1d5db;">—</span>') + '</td>'
         + '<td class="px-4 py-2 text-right text-slate-500">' + (a.last_connected_call_display || '<span style="color:#d1d5db;">Never</span>') + '</td>'
         + '<td class="px-4 py-2 text-center">' + badge + '</td>'
         + '</tr>';
-    });
-
-    html += '</tbody></table></td>';
-    return html;
+    }).join('');
   }
+
+  function _thSort(label, col, align, oid, s) {
+    var active = s.col === col;
+    var arrow  = active ? (s.dir === 'asc' ? '↑' : '↓') : '↕';
+    var color  = active ? '#6366f1' : '#94a3b8';
+    return '<th class="px-4 py-2 ' + align + ' font-semibold uppercase tracking-wider select-none"'
+      + ' style="cursor:pointer;color:' + color + ';white-space:nowrap;"'
+      + ' onclick="window._sortAcctTable(\'' + oid + '\',\'' + col + '\')">'
+      + label + ' <span style="font-size:.6rem;vertical-align:middle;opacity:.8;">' + arrow + '</span></th>';
+  }
+
+  function buildAccountsTable(accounts, ownerId) {
+    if (!accounts.length) {
+      return '<td colspan="9" class="px-6 py-4 text-center text-gray-400 text-xs bg-slate-50">No accounts found</td>';
+    }
+    _acctData[ownerId] = accounts;
+    if (!_acctSort[ownerId]) _acctSort[ownerId] = { col: 'status', dir: 'asc' };
+    var s = _acctSort[ownerId];
+    return '<td colspan="9" class="p-0 bg-slate-50">'
+      + '<table class="w-full text-xs border-t border-slate-200" id="acct-tbl-' + ownerId + '">'
+      + '<thead><tr style="background:#f1f5f9;">'
+      + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
+      + _thSort('ICP Rank',  'icp',       'text-center', ownerId, s)
+      + _thSort('Employees', 'employees', 'text-right',  ownerId, s)
+      + _thSort('Last Call', 'last_call', 'text-right',  ownerId, s)
+      + _thSort('Status',    'status',    'text-center', ownerId, s)
+      + '</tr></thead>'
+      + '<tbody id="acct-body-' + ownerId + '">'
+      + _renderAccountsRows(_sortAccounts(accounts, s.col, s.dir))
+      + '</tbody></table></td>';
+  }
+
+  window._sortAcctTable = function (ownerId, col) {
+    var s = _acctSort[ownerId] || { col: col, dir: 'asc' };
+    s.dir = s.col === col ? (s.dir === 'asc' ? 'desc' : 'asc') : 'asc';
+    s.col = col;
+    _acctSort[ownerId] = s;
+    var tbody = document.getElementById('acct-body-' + ownerId);
+    if (tbody && _acctData[ownerId]) {
+      tbody.innerHTML = _renderAccountsRows(_sortAccounts(_acctData[ownerId], s.col, s.dir));
+    }
+    var tbl = document.getElementById('acct-tbl-' + ownerId);
+    if (tbl) {
+      var cols = ['icp', 'employees', 'last_call', 'status'];
+      tbl.querySelectorAll('thead th[onclick]').forEach(function (th, i) {
+        var c = cols[i], active = s.col === c;
+        th.style.color = active ? '#6366f1' : '#94a3b8';
+        var sp = th.querySelector('span');
+        if (sp) sp.textContent = active ? (s.dir === 'asc' ? '↑' : '↓') : '↕';
+      });
+    }
+  };
 
   function loadRepBreakdown(team) {
     var tbody = document.getElementById('rep-tbody');
@@ -378,7 +443,7 @@
         fetch('/api/tam-funnel/rep-accounts?owner_id=' + encodeURIComponent(ownerId), { credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            newRow.innerHTML = buildAccountsTable(data.accounts || []);
+            newRow.innerHTML = buildAccountsTable(data.accounts || [], ownerId);
           })
           .catch(function () {
             newRow.innerHTML = '<td colspan="9" class="px-6 py-4 text-center text-red-400 text-xs bg-slate-50">Failed to load accounts</td>';
