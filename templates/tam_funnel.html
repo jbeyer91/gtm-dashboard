@@ -94,17 +94,28 @@
         </div>
       </div>
 
-      <!-- Stale sub-count -->
-      <div style="display:flex; align-items:center; gap:6px; margin-left:40px; margin-top:4px; margin-bottom:2px;">
-        <span id="count-prime-stale"
-              style="font-size:.8125rem; font-weight:700; font-variant-numeric:tabular-nums; color:#b45309;">
-          <svg style="width:12px;height:12px;display:inline-block;animation:spin 0.7s linear infinite;"
-               fill="none" viewBox="0 0 24 24">
-            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#b45309" stroke-width="4"/>
-            <path style="opacity:.75" fill="#b45309" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-        </span>
-        <span style="font-size:.75rem; color:#b45309;">not connected in 30+ days</span>
+      <!-- Stale bar row (subset of prime) -->
+      <div style="display:grid; grid-template-columns:28px 1fr 260px; align-items:center; gap:12px; height:44px; margin-top:4px;">
+        <span style="font-size:.75rem; color:#ef4444; text-align:right; user-select:none; line-height:1;">↳</span>
+        <div style="display:flex; align-items:center; justify-content:center;">
+          <div id="bar-prime-stale"
+               style="height:32px; width:0%; min-width:0; border-radius:6px;
+                      background:linear-gradient(90deg,#f97316,#c2410c);
+                      transition:width 0.75s cubic-bezier(0.4,0,0.2,1);
+                      box-shadow:0 1px 4px rgba(249,115,22,0.25);">
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <span id="count-prime-stale"
+                style="font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; color:#c2410c; white-space:nowrap; flex-shrink:0;">
+            <svg style="width:13px;height:13px;display:inline-block;animation:spin 0.7s linear infinite;"
+                 fill="none" viewBox="0 0 24 24">
+              <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#f97316" stroke-width="4"/>
+              <path style="opacity:.75" fill="#f97316" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </span>
+          <span title="Subset of Can Call Now: last connected call was more than 30 days ago, or no connected call yet (deal-path only)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not reached in 30+ days</span>
+        </div>
       </div>
 
       <!-- Criteria pills -->
@@ -182,7 +193,9 @@
     var primeBar = document.getElementById('bar-prime');
     if (primeBar) primeBar.style.width = '0%';
     var staleEl = document.getElementById('count-prime-stale');
-    if (staleEl) staleEl.innerHTML = '<svg style="width:12px;height:12px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#b45309" stroke-width="4"/><path style="opacity:.75" fill="#b45309" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+    if (staleEl) staleEl.innerHTML = '<svg style="width:13px;height:13px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#f97316" stroke-width="4"/><path style="opacity:.75" fill="#f97316" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+    var staleBar = document.getElementById('bar-prime-stale');
+    if (staleBar) staleBar.style.width = '0%';
   }
 
   function loadCounts(team) {
@@ -211,15 +224,20 @@
           setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
         }
 
+        var staleVal = counts['prime_stale'] !== undefined ? counts['prime_stale'] : null;
         var staleEl = document.getElementById('count-prime-stale');
         if (staleEl) {
-          var staleVal = counts['prime_stale'] !== undefined ? counts['prime_stale'] : null;
           if (staleVal === null) {
-            staleEl.innerHTML = '<span style="color:#b45309;">—</span>';
+            staleEl.innerHTML = '<span style="color:#c2410c;">—</span>';
           } else {
-            staleEl.style.color = '#b45309';
+            staleEl.style.color = '#c2410c';
             staleEl.textContent = staleVal.toLocaleString();
           }
+        }
+        var staleBar = document.getElementById('bar-prime-stale');
+        if (staleBar && staleVal !== null) {
+          var stalePct = Math.max((staleVal / max) * 100, 0.4);
+          setTimeout(function () { staleBar.style.width = stalePct + '%'; }, LAYERS.length * 70 + 200);
         }
 
       })
