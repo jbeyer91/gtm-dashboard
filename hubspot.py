@@ -1487,7 +1487,8 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
         "layer9": [{"filters": [
             {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
         ]}],
-        "prime": [],  # overridden below — prime uses a dynamic 90-day timestamp
+        "prime": [],       # overridden below — prime uses a dynamic 90-day timestamp
+        "prime_stale": [], # overridden below — same dynamic timestamps
     }
 
     # 90-day closed-lost cutoff: companies closed-lost within 90 days are excluded.
@@ -1560,8 +1561,72 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
     else:
         _prime_groups = _prime_all
 
-    _searches = {k: (_with_owner(v) if k != "prime" else v) for k, v in _base.items()}
+    # prime_stale: prime companies whose last connected call was >30 days ago (connected path)
+    # or who have never had a connected call at all (has-deal path).
+    # 3 groups, 6 filters each — same structural limits as prime.
+    # LT on a date property implicitly requires HAS_PROPERTY, so no extra slot needed.
+    _30d_ms    = str(int((time.time() - 30 * 24 * 3600) * 1000))
+    _stale_call = {"propertyName": "last_connected_call", "operator": "LT",               "value": _30d_ms}
+    _no_call    = {"propertyName": "last_connected_call", "operator": "NOT_HAS_PROPERTY"}
+
+    if _owner_f:
+        _prime_stale_groups = [
+            {"filters": [  # connected, no CL ever, call >30d ago, owner
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                _stale_call,
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _no_recent_cl,
+                _owner_f,
+            ]},
+            {"filters": [  # connected, stale CL, call >30d ago, owner
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                _stale_call,
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _stale_cl,
+                _owner_f,
+            ]},
+            {"filters": [  # has-deal, no open deal, never called, no CL ever, owner
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                _no_call,
+                _owner_f,
+            ]},
+        ]
+    else:
+        _prime_stale_groups = [
+            {"filters": [  # connected, no CL ever, call >30d ago
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                _stale_call,
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _no_recent_cl,
+            ]},
+            {"filters": [  # connected, stale CL, call >30d ago
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                _stale_call,
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _stale_cl,
+            ]},
+            {"filters": [  # has-deal, no open deal, never called, no CL ever
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                _no_call,
+            ]},
+        ]
+
+    _searches = {k: (_with_owner(v) if k not in {"prime", "prime_stale"} else v) for k, v in _base.items()}
     _searches["prime"] = _prime_groups
+    _searches["prime_stale"] = _prime_stale_groups
 
     counts: dict = {}
     lock = threading.Lock()
