@@ -1561,65 +1561,42 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
     else:
         _prime_groups = _prime_all
 
-    # prime_stale: prime companies with no logged call in the past 30 days (any outcome).
-    # Uses hs_last_logged_call_date — any call logged regardless of connection outcome.
-    # 3 groups, 6 filters each — same structural limits as prime.
-    _30d_ms    = str(int((time.time() - 30 * 24 * 3600) * 1000))
-    _stale_call = {"propertyName": "hs_last_logged_call_date", "operator": "LT",               "value": _30d_ms}
-    _no_call    = {"propertyName": "hs_last_logged_call_date", "operator": "NOT_HAS_PROPERTY"}
+    # prime_stale: prime companies with no logged call (any outcome) in the past 30 days.
+    # Requires last_connected_call HAS_PROPERTY to ensure this is a strict subset of prime
+    # (prime already requires a connected call; without this the stale count could exceed prime).
+    # 2 groups split by CL state — portfolio-wide uses emp>10 in place of 3rd group.
+    # Team-filtered uses 1 group (owner replaces emp>10 and CL filter at the 6-filter limit).
+    _30d_ms     = str(int((time.time() - 30 * 24 * 3600) * 1000))
+    _stale_call = {"propertyName": "hs_last_logged_call_date", "operator": "LT", "value": _30d_ms}
 
     if _owner_f:
         _prime_stale_groups = [
-            {"filters": [  # connected, no CL ever, call >30d ago, owner
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                _stale_call,
+            {"filters": [  # connected, not-NI, not-customer, no-call-30d, owner (any CL state)
+                {"propertyName": "icp_rank",                             "operator": "NOT_IN",          "values": [_SUPPRESS]},
+                {"propertyName": "last_connected_call",                  "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                _no_recent_cl,
-                _owner_f,
-            ]},
-            {"filters": [  # connected, stale CL, call >30d ago, owner
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "company_status",                       "operator": "NEQ",             "value": "Customer - Live"},
                 _stale_call,
-                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                _stale_cl,
-                _owner_f,
-            ]},
-            {"filters": [  # has-deal, no open deal, never called, no CL ever, owner
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-                _no_call,
                 _owner_f,
             ]},
         ]
     else:
         _prime_stale_groups = [
-            {"filters": [  # connected, no CL ever, call >30d ago
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-                _stale_call,
+            {"filters": [  # connected, emp>10, not-NI, not-customer, no-call-30d, no-CL-ever
+                {"propertyName": "icp_rank",                             "operator": "NOT_IN",          "values": [_SUPPRESS]},
+                {"propertyName": "last_connected_call",                  "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "company_status",                       "operator": "NEQ",             "value": "Customer - Live"},
+                _stale_call,
                 _no_recent_cl,
             ]},
-            {"filters": [  # connected, stale CL, call >30d ago
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-                _stale_call,
+            {"filters": [  # connected, emp>10, not-NI, not-customer, no-call-30d, stale-CL
+                {"propertyName": "icp_rank",                             "operator": "NOT_IN",          "values": [_SUPPRESS]},
+                {"propertyName": "last_connected_call",                  "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "company_status",                       "operator": "NEQ",             "value": "Customer - Live"},
+                _stale_call,
                 _stale_cl,
-            ]},
-            {"filters": [  # has-deal, no open deal, never called, no CL ever
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-                _no_call,
             ]},
         ]
 
@@ -1818,28 +1795,12 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                 ]},
             ],
             "prime_stale": [
-                {"filters": [  # connected, no CL ever, no logged call in 30d
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "hs_last_logged_call_date", "operator": "LT", "value": str(int((time.time() - 30 * 24 * 3600) * 1000))},
+                {"filters": [  # connected, not-NI, not-customer, no-call-30d, owner
+                    {"propertyName": "icp_rank",                             "operator": "NOT_IN",          "values": [_SUPPRESS]},
+                    {"propertyName": "last_connected_call",                  "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
-                    of,
-                ]},
-                {"filters": [  # connected, stale CL, no logged call in 30d
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "hs_last_logged_call_date", "operator": "LT", "value": str(int((time.time() - 30 * 24 * 3600) * 1000))},
-                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
-                    of,
-                ]},
-                {"filters": [  # has-deal, no open deal, never called (any outcome), no CL ever
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                    {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-                    {"propertyName": "hs_last_logged_call_date", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "company_status",                       "operator": "NEQ",             "value": "Customer - Live"},
+                    {"propertyName": "hs_last_logged_call_date",             "operator": "LT",              "value": str(int((time.time() - 30 * 24 * 3600) * 1000))},
                     of,
                 ]},
             ],
@@ -1919,7 +1880,7 @@ def get_prime_accounts_for_rep(owner_id: str) -> list:
         for _ in range(20):  # safety cap: 20 pages × 100 = 2 000 companies max
             body = {
                 "filterGroups": filter_groups,
-                "properties":   ["name", "domain", "hs_last_logged_call_date", "icp_rank"],
+                "properties":   ["name", "domain", "hs_last_logged_call_date", "icp_rank", "of_officers"],
                 "sorts":        [{"propertyName": "hs_last_logged_call_date", "direction": "ASCENDING"}],
                 "limit":        100,
             }
@@ -1954,12 +1915,13 @@ def get_prime_accounts_for_rep(owner_id: str) -> list:
                         pass
 
                 records.append({
-                    "id":       company["id"],
-                    "name":     props.get("name") or "",
-                    "icp_rank": props.get("icp_rank") or "",
+                    "id":        company["id"],
+                    "name":      props.get("name") or "",
+                    "icp_rank":  props.get("icp_rank") or "",
+                    "employees": props.get("of_officers") or "",
                     "last_connected_call_ms":      call_ms,
                     "last_connected_call_display": call_disp,
-                    "overdue":  call_ms is None or call_ms < _30d_cutoff,
+                    "overdue":   call_ms is None or call_ms < _30d_cutoff,
                 })
 
             paging = data.get("paging", {})
