@@ -1780,24 +1780,24 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                 {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
             ]}]),
             "prime": [
-                {"filters": [  # connected-interested · never closed-lost
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"filters": [  # connected-interested · never closed-lost · emp>10
+                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
                     {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                     {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
                     of,
                 ]},
-                {"filters": [  # connected-interested · stale closed-lost
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"filters": [  # connected-interested · stale closed-lost · emp>10
+                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
                     {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                     {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
                     of,
                 ]},
-                {"filters": [  # has-deal (no open deal) · never closed-lost
-                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"filters": [  # has-deal (no open deal) · never closed-lost · emp>10
+                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
                     {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                     {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
@@ -1806,8 +1806,8 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                 ]},
             ],
             "prime_stale": [
-                {"filters": [  # connected, not-NI, not-customer, no-call-30d, owner
-                    {"propertyName": "icp_rank",                             "operator": "NOT_IN",          "values": [_SUPPRESS]},
+                {"filters": [  # connected, emp>10, not-NI, not-customer, no-call-30d, owner
+                    {"propertyName": "of_officers",                          "operator": "GT",              "value": "10"},
                     {"propertyName": "last_connected_call",                  "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
                     {"propertyName": "company_status",                       "operator": "NEQ",             "value": "Customer - Live"},
@@ -1941,6 +1941,20 @@ def get_prime_accounts_for_rep(owner_id: str) -> list:
                 break
     finally:
         sess.close()
+
+    # Enforce employee count > 10 (dropped from HubSpot query due to 6-filter limit).
+    # Also drop suppressed companies that slipped through.
+    def _emp_ok(val):
+        try:
+            return int(val) > 10
+        except (TypeError, ValueError):
+            return False
+
+    records = [
+        r for r in records
+        if _emp_ok(r["employees"])
+        and (r["icp_rank"] or "").lower() not in {"suprress", "suppress"}
+    ]
 
     # Overdue first: null call → 0 (oldest), then ascending by timestamp
     records.sort(key=lambda r: (
