@@ -94,9 +94,22 @@
         </div>
       </div>
 
+      <!-- Stale sub-count -->
+      <div style="display:flex; align-items:center; gap:6px; margin-left:40px; margin-top:4px; margin-bottom:2px;">
+        <span id="count-prime-stale"
+              style="font-size:.8125rem; font-weight:700; font-variant-numeric:tabular-nums; color:#b45309;">
+          <svg style="width:12px;height:12px;display:inline-block;animation:spin 0.7s linear infinite;"
+               fill="none" viewBox="0 0 24 24">
+            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#b45309" stroke-width="4"/>
+            <path style="opacity:.75" fill="#b45309" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+        </span>
+        <span style="font-size:.75rem; color:#b45309;">not connected in 30+ days</span>
+      </div>
+
       <!-- Criteria pills -->
       <div style="display:flex; flex-wrap:wrap; gap:5px; margin-left:40px; margin-top:6px;">
-        {% for pill in ["ICP ranked", "Employee count > 10", "Connected interested or has deal", "Not a customer", "No open deal", "Closed lost 90+ days ago"] %}
+        {% for pill in ["ICP ranked", "Employee count > 10", "Connected interested or has deal", "Not a customer", "No open deal", "No CL deal in past 90 days"] %}
         <span style="font-size:.6875rem; font-weight:500; padding:2px 10px; border-radius:9999px; background:#fef3c7; color:#92400e;">{{ pill }}</span>
         {% endfor %}
       </div>
@@ -168,6 +181,8 @@
     if (primeEl) primeEl.innerHTML = PRIME_SPINNER_HTML;
     var primeBar = document.getElementById('bar-prime');
     if (primeBar) primeBar.style.width = '0%';
+    var staleEl = document.getElementById('count-prime-stale');
+    if (staleEl) staleEl.innerHTML = '<svg style="width:12px;height:12px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#b45309" stroke-width="4"/><path style="opacity:.75" fill="#b45309" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
   }
 
   function loadCounts(team) {
@@ -194,6 +209,17 @@
         if (primeBar && primeVal !== null) {
           var primePct = Math.max((primeVal / max) * 100, 0.4);
           setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
+        }
+
+        var staleEl = document.getElementById('count-prime-stale');
+        if (staleEl) {
+          var staleVal = counts['prime_stale'] !== undefined ? counts['prime_stale'] : null;
+          if (staleVal === null) {
+            staleEl.innerHTML = '<span style="color:#b45309;">—</span>';
+          } else {
+            staleEl.style.color = '#b45309';
+            staleEl.textContent = staleVal.toLocaleString();
+          }
         }
 
       })
