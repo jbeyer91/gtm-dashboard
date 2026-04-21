@@ -114,7 +114,7 @@
               <path style="opacity:.75" fill="#f97316" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span title="Subset of Can Call Now: last connected call was more than 30 days ago, or no connected call yet (deal-path only)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not reached in 30+ days</span>
+          <span title="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not called in 30+ days</span>
         </div>
       </div>
 
@@ -146,7 +146,7 @@
         <th class="px-4 py-3 text-right" title="Has at least one associated deal ever (won, lost, or active)">Had a Deal</th>
         <th class="px-4 py-3 text-right" title="Has at least one currently active open deal">Open Deal</th>
         <th class="px-4 py-3 text-right" title="ICP ranked, emp &gt;10, connected &amp; interested or has a deal, no open deal, not a customer, not closed-lost in last 90 days" style="color:#b45309;">★ Can Call</th>
-        <th class="px-4 py-3 text-right" title="Can Call Now companies with no connected call in the last 30 days" style="color:#c2410c;">Not Reached 30d+</th>
+        <th class="px-4 py-3 text-right" title="Can Call Now companies with no call logged in the last 30 days (any outcome)" style="color:#c2410c;">Not Called 30d+</th>
       </tr>
     </thead>
     <tbody id="rep-tbody" class="divide-y divide-gray-100">
@@ -273,13 +273,13 @@
       + '<thead><tr style="background:#f1f5f9;">'
       + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
       + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP</th>'
-      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Connected Call</th>'
+      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Call</th>'
       + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">Status</th>'
       + '</tr></thead><tbody>';
 
     accounts.forEach(function (a) {
       var badge = a.overdue
-        ? '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#fee2e2;color:#b91c1c;">Overdue 30d+</span>'
+        ? '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#fee2e2;color:#b91c1c;">Not called 30d+</span>'
         : '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#dcfce7;color:#15803d;">Called recently</span>';
       html += '<tr class="border-t border-slate-100 hover:bg-white">'
         + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
