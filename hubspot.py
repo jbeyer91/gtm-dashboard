@@ -1637,14 +1637,25 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
         with lock:
             counts[key] = val
 
+    # prime and prime_stale are derived from the per-rep breakdown so that the
+    # funnel totals always match the sum of the rows shown in the By Rep table.
+    # Running separate portfolio-wide queries for these two metrics produces
+    # different numbers because the portfolio query uses of_officers>10 while
+    # the per-rep query drops that filter to fit the owner filter within
+    # HubSpot's 6-filter-per-group limit.
     workers = [
         threading.Thread(target=_fetch, args=(k, fg), daemon=True)
         for k, fg in _searches.items()
+        if k not in {"prime", "prime_stale"}
     ]
     for w in workers:
         w.start()
     for w in workers:
         w.join(timeout=25)
+
+    rep_rows = get_tam_funnel_rep_breakdown(team)
+    counts["prime"]       = sum((r.get("prime")       or 0) for r in rep_rows)
+    counts["prime_stale"] = sum((r.get("prime_stale") or 0) for r in rep_rows)
 
     return counts
 
