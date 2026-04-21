@@ -1487,50 +1487,92 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
         "layer9": [{"filters": [
             {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
         ]}],
-        "prime": [
-            {"filters": [
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-                {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
-                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-            ]},
-            {"filters": [
-                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_employees_source", "operator": "IN", "values": _EMP_SRC},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
-                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
-                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
-                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
-            ]},
-        ],
+        "prime": [],  # overridden below — prime uses a dynamic 90-day timestamp
     }
 
-    # Prime groups are at the 6-filter-per-group limit in the portfolio-wide form.
-    # When team-filtering, swap of_employees_source for hubspot_owner_id to keep
-    # prime counts team-scoped (employee-source validation is dropped as a trade-off).
+    # 90-day closed-lost cutoff: companies closed-lost within 90 days are excluded.
+    # Split into NOT_HAS_PROPERTY + LT groups (OR'd) to include companies that have
+    # never had a closed-lost deal AND those whose last was 90+ days ago.
+    _cl_cutoff_ms = str(int((time.time() - 90 * 24 * 3600) * 1000))
+    _no_recent_cl = {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"}
+    _stale_cl     = {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": _cl_cutoff_ms}
+
+    # Portfolio-wide prime: 4 groups (2 paths × 2 closed-lost states = 4 total, within the 5-group max).
+    # of_employees_source dropped to stay at 6 filters per group after adding the 90-day split.
+    _prime_all = [
+        {"filters": [  # connected-interested · never closed-lost
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+            {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+            {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            _no_recent_cl,
+        ]},
+        {"filters": [  # connected-interested · closed-lost 90+ days ago
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+            {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+            {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            _stale_cl,
+        ]},
+        {"filters": [  # has-deal · never closed-lost
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+            {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+            _no_recent_cl,
+        ]},
+        {"filters": [  # has-deal · closed-lost 90+ days ago
+            {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+            {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+            {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+            {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+            {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+            _stale_cl,
+        ]},
+    ]
+
+    # Team-filtered prime: owner filter replaces emp>10 to stay at 6 filters
+    # while still applying the full 90-day closed-lost split.
     if _owner_f:
         _prime_groups = [
             {"filters": [
                 {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
                 {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                 {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
                 {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _no_recent_cl,
                 _owner_f,
             ]},
             {"filters": [
                 {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                _stale_cl,
+                _owner_f,
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                 {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
                 {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                 {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                _no_recent_cl,
+                _owner_f,
+            ]},
+            {"filters": [
+                {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                _stale_cl,
                 _owner_f,
             ]},
         ]
     else:
-        _prime_groups = _base["prime"]
+        _prime_groups = _prime_all
 
     _searches = {k: (_with_owner(v) if k != "prime" else v) for k, v in _base.items()}
     _searches["prime"] = _prime_groups
@@ -1700,20 +1742,36 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                 {"propertyName": "company_status", "operator": "EQ", "value": "Customer - Live"},
             ]}]),
             "prime": [
-                {"filters": [
+                {"filters": [  # connected-interested · never closed-lost
                     {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
                     {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
                     {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
                     of,
                 ]},
-                {"filters": [
+                {"filters": [  # connected-interested · closed-lost 90+ days ago
                     {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
-                    {"propertyName": "of_officers", "operator": "GT", "value": "10"},
+                    {"propertyName": "last_connected_call", "operator": "HAS_PROPERTY"},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
+                    of,
+                ]},
+                {"filters": [  # has-deal · never closed-lost
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
                     {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
                     {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
                     {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
+                    of,
+                ]},
+                {"filters": [  # has-deal · closed-lost 90+ days ago
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
                     of,
                 ]},
             ],
