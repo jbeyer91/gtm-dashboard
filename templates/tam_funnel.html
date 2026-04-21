@@ -131,13 +131,12 @@
         <th class="px-4 py-3 text-right" title="Connected, interested">Conn Int</th>
         <th class="px-4 py-3 text-right" title="Has had a deal">Has Deal</th>
         <th class="px-4 py-3 text-right" title="Has an open deal">Open Deal</th>
-        <th class="px-4 py-3 text-right rep-col-customer" title="Customer">Customer</th>
         <th class="px-4 py-3 text-right" title="Can call now (no-excuse list)" style="color:#b45309;">★ Can Call</th>
       </tr>
     </thead>
     <tbody id="rep-tbody" class="divide-y divide-gray-100">
       <tr id="rep-loading-row">
-        <td colspan="10" class="px-4 py-8 text-center text-gray-400 text-xs">
+        <td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">
           <svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;"
                fill="none" viewBox="0 0 24 24">
             <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>
@@ -224,15 +223,9 @@
 
   function loadRepBreakdown(team) {
     var tbody = document.getElementById('rep-tbody');
-    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="10" class="px-4 py-8 text-center text-gray-400 text-xs">'
-      + SPINNER_HTML.replace('14px', '14px').replace('14px', '14px')
+    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">'
+      + SPINNER_HTML
       + ' Loading rep data…</td></tr>';
-
-    // Show/hide Customer column based on team
-    var showCustomer = !team || team === 'all';
-    document.querySelectorAll('.rep-col-customer').forEach(function (el) {
-      el.style.display = showCustomer ? '' : 'none';
-    });
 
     var url = '/api/tam-funnel/rep-breakdown' + (team && team !== 'all' ? '?team=' + encodeURIComponent(team) : '');
     fetch(url, { credentials: 'same-origin' })
@@ -240,7 +233,7 @@
       .then(function (data) {
         var rows = (data && data.rows) || [];
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
           return;
         }
         var html = '';
@@ -248,9 +241,6 @@
           var teamBadge = (team === 'all' && row.team)
             ? '<span class="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded" style="background:#ede9fe;color:#7c3aed;">' + row.team + '</span>'
             : '';
-          var customerCell = showCustomer
-            ? '<td class="px-4 py-2.5 text-right tabular-nums rep-col-customer">' + fmtN(row.layer9) + '</td>'
-            : '<td class="px-4 py-2.5 text-right tabular-nums rep-col-customer" style="display:none;">' + fmtN(row.layer9) + '</td>';
           html += '<tr class="hover:bg-slate-50 transition-colors duration-100">'
             + '<td class="px-4 py-2.5 font-medium whitespace-nowrap">' + (row.name || row.owner_id) + teamBadge + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums font-semibold">' + fmtN(row.layer2) + '</td>'
@@ -260,14 +250,13 @@
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer6) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer7) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer8) + '</td>'
-            + customerCell
             + '<td class="px-4 py-2.5 text-right tabular-nums font-bold" style="color:#92400e;">' + fmtN(row.prime) + '</td>'
             + '</tr>';
         });
         tbody.innerHTML = html;
       })
       .catch(function () {
-        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
       });
   }
 
