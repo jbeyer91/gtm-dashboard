@@ -9,7 +9,8 @@
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 7px);
-  left: 0;
+  right: 0;
+  left: auto;
   background: #1e293b;
   color: #f8fafc;
   font-size: .7rem;
@@ -47,7 +48,7 @@ th[data-tip] { overflow: visible; }
 </div>
 
 <!-- ── Company Funnel card ─────────────────────────────────────────────────── -->
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100">
   <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
     <h2 class="font-semibold text-sm text-gray-800">Company Funnel</h2>
     <p class="text-xs text-gray-400">Bar width proportional to ICP universe</p>
@@ -277,20 +278,28 @@ th[data-tip] { overflow: visible; }
     return (v === null || v === undefined) ? '<span class="text-gray-300">—</span>' : Number(v).toLocaleString();
   }
 
-  // ICP rank badge colours — covers both letter grades and qualitative labels
   var ICP_COLORS = {
-    'A+':       ['#ede9fe','#6d28d9'],
-    'A':        ['#dbeafe','#1d4ed8'],
-    'B':        ['#dcfce7','#15803d'],
-    'C':        ['#fef9c3','#a16207'],
-    'D':        ['#fee2e2','#b91c1c'],
-    'Superior': ['#ede9fe','#6d28d9'],
-    'Strong':   ['#dbeafe','#1d4ed8'],
-    'Moderate': ['#dcfce7','#15803d'],
-    'Weak':     ['#fef9c3','#a16207'],
+    'A+': ['#ede9fe','#6d28d9'],
+    'A':  ['#dbeafe','#1d4ed8'],
+    'B':  ['#dcfce7','#15803d'],
+    'C':  ['#fef9c3','#a16207'],
+    'D':  ['#fee2e2','#b91c1c'],
+  };
+  var ICP_QUAL_TO_GRADE = {
+    'Superior':     'A+',
+    'superior':     'A+',
+    'Strong':       'A',
+    'strong':       'A',
+    'Moderate':     'B',
+    'moderate':     'B',
+    'Conservative': 'C',
+    'conservative': 'C',
+    'Least Priority': 'D',
+    'least_priority': 'D',
   };
   function icpBadge(rank) {
     if (!rank) return '<span style="color:#d1d5db;">—</span>';
+    rank = ICP_QUAL_TO_GRADE[rank] || rank;
     var c = ICP_COLORS[rank] || ['#f1f5f9','#64748b'];
     return '<span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:9999px;background:' + c[0] + ';color:' + c[1] + ';">' + rank + '</span>';
   }
@@ -303,7 +312,7 @@ th[data-tip] { overflow: visible; }
       + '<table class="w-full text-xs border-t border-slate-200">'
       + '<thead><tr style="background:#f1f5f9;">'
       + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
-      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP</th>'
+      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP Rank</th>'
       + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Employees</th>'
       + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Call</th>'
       + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">Status</th>'
