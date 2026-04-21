@@ -1561,13 +1561,12 @@ def get_tam_funnel_counts(team: str = "all") -> dict:
     else:
         _prime_groups = _prime_all
 
-    # prime_stale: prime companies whose last connected call was >30 days ago (connected path)
-    # or who have never had a connected call at all (has-deal path).
+    # prime_stale: prime companies with no logged call in the past 30 days (any outcome).
+    # Uses hs_last_logged_call_date — any call logged regardless of connection outcome.
     # 3 groups, 6 filters each — same structural limits as prime.
-    # LT on a date property implicitly requires HAS_PROPERTY, so no extra slot needed.
     _30d_ms    = str(int((time.time() - 30 * 24 * 3600) * 1000))
-    _stale_call = {"propertyName": "last_connected_call", "operator": "LT",               "value": _30d_ms}
-    _no_call    = {"propertyName": "last_connected_call", "operator": "NOT_HAS_PROPERTY"}
+    _stale_call = {"propertyName": "hs_last_logged_call_date", "operator": "LT",               "value": _30d_ms}
+    _no_call    = {"propertyName": "hs_last_logged_call_date", "operator": "NOT_HAS_PROPERTY"}
 
     if _owner_f:
         _prime_stale_groups = [
@@ -1818,6 +1817,32 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
                     of,
                 ]},
             ],
+            "prime_stale": [
+                {"filters": [  # connected, no CL ever, no logged call in 30d
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "hs_last_logged_call_date", "operator": "LT", "value": str(int((time.time() - 30 * 24 * 3600) * 1000))},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "NOT_HAS_PROPERTY"},
+                    of,
+                ]},
+                {"filters": [  # connected, stale CL, no logged call in 30d
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "hs_last_logged_call_date", "operator": "LT", "value": str(int((time.time() - 30 * 24 * 3600) * 1000))},
+                    {"propertyName": "last_connected_call___not_interested", "operator": "NOT_HAS_PROPERTY"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "most_recent_closed_lost_new_business", "operator": "LT", "value": str(int((time.time() - 90 * 24 * 3600) * 1000))},
+                    of,
+                ]},
+                {"filters": [  # has-deal, no open deal, never called (any outcome), no CL ever
+                    {"propertyName": "icp_rank", "operator": "NOT_IN", "values": [_SUPPRESS]},
+                    {"propertyName": "num_associated_deals", "operator": "GT", "value": "0"},
+                    {"propertyName": "company_status", "operator": "NEQ", "value": "Customer - Live"},
+                    {"propertyName": "hs_num_open_deals", "operator": "EQ", "value": "0"},
+                    {"propertyName": "hs_last_logged_call_date", "operator": "NOT_HAS_PROPERTY"},
+                    of,
+                ]},
+            ],
         }
 
         for key, fg in layer_searches.items():
@@ -1841,3 +1866,112 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
 
     rows.sort(key=lambda r: r.get("layer2") or 0, reverse=True)
     return rows
+
+
+@ttl_cache
+def get_prime_accounts_for_rep(owner_id: str) -> list:
+    """Return the full list of Can Call Now companies for one rep.
+
+    Each record includes name, ICP rank, last_connected_call date, and an
+    overdue flag (true when call was >30 days ago or never happened).
+    Sorted: overdue companies first (null call date → oldest call date),
+    then recently-called companies sorted oldest-first.
+    """
+    _SUPPRESS    = "Suprress"
+    _cl_cutoff   = int((time.time() - 90 * 24 * 3600) * 1000)
+    _30d_cutoff  = int((time.time() - 30 * 24 * 3600) * 1000)
+
+    of = {"propertyName": "hubspot_owner_id", "operator": "IN", "values": [owner_id]}
+
+    filter_groups = [
+        {"filters": [
+            {"propertyName": "icp_rank",                              "operator": "NOT_IN",          "values": [_SUPPRESS]},
+            {"propertyName": "last_connected_call",                   "operator": "HAS_PROPERTY"},
+            {"propertyName": "last_connected_call___not_interested",  "operator": "NOT_HAS_PROPERTY"},
+            {"propertyName": "company_status",                        "operator": "NEQ",             "value": "Customer - Live"},
+            {"propertyName": "most_recent_closed_lost_new_business",  "operator": "NOT_HAS_PROPERTY"},
+            of,
+        ]},
+        {"filters": [
+            {"propertyName": "icp_rank",                              "operator": "NOT_IN",          "values": [_SUPPRESS]},
+            {"propertyName": "last_connected_call",                   "operator": "HAS_PROPERTY"},
+            {"propertyName": "last_connected_call___not_interested",  "operator": "NOT_HAS_PROPERTY"},
+            {"propertyName": "company_status",                        "operator": "NEQ",             "value": "Customer - Live"},
+            {"propertyName": "most_recent_closed_lost_new_business",  "operator": "LT",              "value": str(_cl_cutoff)},
+            of,
+        ]},
+        {"filters": [
+            {"propertyName": "icp_rank",                              "operator": "NOT_IN",          "values": [_SUPPRESS]},
+            {"propertyName": "num_associated_deals",                  "operator": "GT",              "value": "0"},
+            {"propertyName": "company_status",                        "operator": "NEQ",             "value": "Customer - Live"},
+            {"propertyName": "hs_num_open_deals",                     "operator": "EQ",              "value": "0"},
+            {"propertyName": "most_recent_closed_lost_new_business",  "operator": "NOT_HAS_PROPERTY"},
+            of,
+        ]},
+    ]
+
+    records = []
+    after   = None
+    sess    = requests.Session()
+    sess.headers.update(HEADERS)
+
+    try:
+        for _ in range(20):  # safety cap: 20 pages × 100 = 2 000 companies max
+            body = {
+                "filterGroups": filter_groups,
+                "properties":   ["name", "domain", "hs_last_logged_call_date", "icp_rank"],
+                "sorts":        [{"propertyName": "hs_last_logged_call_date", "direction": "ASCENDING"}],
+                "limit":        100,
+            }
+            if after:
+                body["after"] = after
+
+            for attempt in range(4):
+                resp = sess.post(
+                    f"{BASE_URL}/crm/v3/objects/companies/search",
+                    json=body, timeout=_TIMEOUT,
+                )
+                if resp.status_code == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                break
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            for company in data.get("results", []):
+                props     = company.get("properties", {})
+                raw_call  = props.get("hs_last_logged_call_date")
+                call_ms   = None
+                call_disp = None
+
+                if raw_call:
+                    try:
+                        dt       = _parse_hs_datetime(raw_call)
+                        call_ms  = int(dt.timestamp() * 1000)
+                        call_disp = dt.strftime("%-d %b %Y")
+                    except Exception:
+                        pass
+
+                records.append({
+                    "id":       company["id"],
+                    "name":     props.get("name") or "",
+                    "icp_rank": props.get("icp_rank") or "",
+                    "last_connected_call_ms":      call_ms,
+                    "last_connected_call_display": call_disp,
+                    "overdue":  call_ms is None or call_ms < _30d_cutoff,
+                })
+
+            paging = data.get("paging", {})
+            after  = (paging.get("next") or {}).get("after")
+            if not after:
+                break
+    finally:
+        sess.close()
+
+    # Overdue first: null call → 0 (oldest), then ascending by timestamp
+    records.sort(key=lambda r: (
+        0 if r["overdue"] else 1,
+        r["last_connected_call_ms"] if r["last_connected_call_ms"] is not None else 0,
+    ))
+    return records

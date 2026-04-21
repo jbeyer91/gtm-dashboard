@@ -1141,6 +1141,21 @@ def api_tam_funnel_rep_breakdown():
         return jsonify({"status": "error", "rows": []}), 500
 
 
+@app.route("/api/tam-funnel/rep-accounts")
+@login_required
+def api_tam_funnel_rep_accounts():
+    from hubspot import get_prime_accounts_for_rep
+    owner_id = request.args.get("owner_id", "").strip()
+    if not owner_id:
+        return jsonify({"status": "error", "message": "owner_id required"}), 400
+    try:
+        accounts = get_prime_accounts_for_rep(owner_id)
+        return jsonify({"status": "ok", "accounts": accounts})
+    except Exception as exc:
+        log.warning("api_tam_funnel_rep_accounts error: %s", exc)
+        return jsonify({"status": "error", "accounts": []}), 500
+
+
 @app.route("/book-coverage")
 @login_required
 def book_coverage():
