@@ -146,11 +146,12 @@
         <th class="px-4 py-3 text-right" title="Has at least one associated deal ever (won, lost, or active)">Had a Deal</th>
         <th class="px-4 py-3 text-right" title="Has at least one currently active open deal">Open Deal</th>
         <th class="px-4 py-3 text-right" title="ICP ranked, emp &gt;10, connected &amp; interested or has a deal, no open deal, not a customer, not closed-lost in last 90 days" style="color:#b45309;">★ Can Call</th>
+        <th class="px-4 py-3 text-right" title="Can Call Now companies with no connected call in the last 30 days" style="color:#c2410c;">Not Reached 30d+</th>
       </tr>
     </thead>
     <tbody id="rep-tbody" class="divide-y divide-gray-100">
       <tr id="rep-loading-row">
-        <td colspan="8" class="px-4 py-8 text-center text-gray-400 text-xs">
+        <td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">
           <svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;"
                fill="none" viewBox="0 0 24 24">
             <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>
@@ -251,9 +252,50 @@
     return (v === null || v === undefined) ? '<span class="text-gray-300">—</span>' : Number(v).toLocaleString();
   }
 
+  // ICP rank badge colours
+  var ICP_COLORS = {
+    'A+': ['#ede9fe','#6d28d9'], 'A': ['#dbeafe','#1d4ed8'],
+    'B':  ['#dcfce7','#15803d'], 'C': ['#fef9c3','#a16207'],
+    'D':  ['#fee2e2','#b91c1c'],
+  };
+  function icpBadge(rank) {
+    var c = ICP_COLORS[rank];
+    if (!c) return rank ? '<span style="font-size:.7rem;color:#6b7280;">' + rank + '</span>' : '<span style="color:#d1d5db;">—</span>';
+    return '<span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:9999px;background:' + c[0] + ';color:' + c[1] + ';">' + rank + '</span>';
+  }
+
+  function buildAccountsTable(accounts) {
+    if (!accounts.length) {
+      return '<td colspan="9" class="px-6 py-4 text-center text-gray-400 text-xs bg-slate-50">No accounts found</td>';
+    }
+    var html = '<td colspan="9" class="p-0 bg-slate-50">'
+      + '<table class="w-full text-xs border-t border-slate-200">'
+      + '<thead><tr style="background:#f1f5f9;">'
+      + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;">Company</th>'
+      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP</th>'
+      + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Connected Call</th>'
+      + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">Status</th>'
+      + '</tr></thead><tbody>';
+
+    accounts.forEach(function (a) {
+      var badge = a.overdue
+        ? '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#fee2e2;color:#b91c1c;">Overdue 30d+</span>'
+        : '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:9999px;background:#dcfce7;color:#15803d;">Called recently</span>';
+      html += '<tr class="border-t border-slate-100 hover:bg-white">'
+        + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
+        + '<td class="px-4 py-2 text-center">' + icpBadge(a.icp_rank) + '</td>'
+        + '<td class="px-4 py-2 text-right text-slate-500">' + (a.last_connected_call_display || '<span style="color:#d1d5db;">Never</span>') + '</td>'
+        + '<td class="px-4 py-2 text-center">' + badge + '</td>'
+        + '</tr>';
+    });
+
+    html += '</tbody></table></td>';
+    return html;
+  }
+
   function loadRepBreakdown(team) {
     var tbody = document.getElementById('rep-tbody');
-    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="8" class="px-4 py-8 text-center text-gray-400 text-xs">'
+    tbody.innerHTML = '<tr id="rep-loading-row"><td colspan="9" class="px-4 py-8 text-center text-gray-400 text-xs">'
       + SPINNER_HTML
       + ' Loading rep data…</td></tr>';
 
@@ -263,13 +305,16 @@
       .then(function (data) {
         var rows = (data && data.rows) || [];
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-gray-400 text-xs">No data</td></tr>';
           return;
         }
         var html = '';
         rows.forEach(function (row) {
-          html += '<tr class="hover:bg-slate-50 transition-colors duration-100">'
-            + '<td class="px-4 py-2.5 font-medium whitespace-nowrap">' + (row.name || row.owner_id) + '</td>'
+          html += '<tr class="rep-row hover:bg-slate-50 transition-colors duration-100 cursor-pointer" data-owner="' + row.owner_id + '">'
+            + '<td class="px-4 py-2.5 font-medium whitespace-nowrap">'
+            + '<span class="rep-toggle text-gray-300 mr-2 select-none" style="font-size:.65rem;">▶</span>'
+            + (row.name || row.owner_id)
+            + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums font-semibold">' + fmtN(row.layer2) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer3) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer4) + '</td>'
@@ -277,13 +322,52 @@
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer7) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer8) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums font-bold" style="color:#92400e;">' + fmtN(row.prime) + '</td>'
+            + '<td class="px-4 py-2.5 text-right tabular-nums font-semibold" style="color:#c2410c;">' + fmtN(row.prime_stale) + '</td>'
             + '</tr>';
         });
         tbody.innerHTML = html;
+        attachRepRowHandlers();
       })
       .catch(function () {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
       });
+  }
+
+  function attachRepRowHandlers() {
+    document.querySelectorAll('#rep-tbody .rep-row').forEach(function (tr) {
+      tr.addEventListener('click', function () {
+        var ownerId   = tr.getAttribute('data-owner');
+        var toggle    = tr.querySelector('.rep-toggle');
+        var expandRow = tr.nextElementSibling;
+
+        // Collapse if already open
+        if (expandRow && expandRow.classList.contains('rep-expand-row')) {
+          var isVisible = expandRow.style.display !== 'none';
+          expandRow.style.display = isVisible ? 'none' : '';
+          toggle.textContent = isVisible ? '▶' : '▼';
+          toggle.style.color = isVisible ? '#d1d5db' : '#6366f1';
+          return;
+        }
+
+        // Insert loading row
+        var newRow = document.createElement('tr');
+        newRow.className = 'rep-expand-row';
+        newRow.innerHTML = '<td colspan="9" class="px-6 py-5 text-center text-gray-400 text-xs bg-slate-50">'
+          + SPINNER_HTML + ' Loading accounts…</td>';
+        tr.after(newRow);
+        toggle.textContent = '▼';
+        toggle.style.color = '#6366f1';
+
+        fetch('/api/tam-funnel/rep-accounts?owner_id=' + encodeURIComponent(ownerId), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            newRow.innerHTML = buildAccountsTable(data.accounts || []);
+          })
+          .catch(function () {
+            newRow.innerHTML = '<td colspan="9" class="px-6 py-4 text-center text-red-400 text-xs bg-slate-50">Failed to load accounts</td>';
+          });
+      });
+    });
   }
 
   // Team tab click handling
