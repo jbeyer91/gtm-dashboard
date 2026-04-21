@@ -30,20 +30,20 @@
 
   <div class="px-6 py-6 space-y-2" style="padding-bottom: 8px;">
 
-    {# dead_end=true → gray bar, muted text; signals a branch off the main path #}
+    {# dead_end=true → gray bar + muted text; signals a branch off the main calling path #}
     {% set layers = [
-      ("02", "layer2", "ICP Universe",             "A+ through D · excludes Suppress",         false),
-      ("03", "layer3", "Employee Verified",         "Count sourced from Demo, AI, Gong, or Rep", false),
-      ("04", "layer4", "Called",                   "Has a logged call date",                   false),
-      ("05", "layer5", "Not Interested",            "Connected · marked not interested",        true),
-      ("06", "layer6", "Interested",               "Connected · engaged or has a deal",         false),
-      ("07", "layer7", "Had a Deal",               "≥1 associated deal, ever",                  false),
-      ("08", "layer8", "Open Deal",                "Active deal · no ICP or emp. filter",       false),
-      ("09", "layer9", "Customer",                 "Status = Customer · Live",                  false),
+      ("02", "layer2", "ICP Universe",      false),
+      ("03", "layer3", "Employee Verified", false),
+      ("04", "layer4", "Called",            false),
+      ("05", "layer5", "Not Interested",    true),
+      ("06", "layer6", "Interested",        false),
+      ("07", "layer7", "Had a Deal",        false),
+      ("08", "layer8", "Open Deal",         false),
+      ("09", "layer9", "Customer",          false),
     ] %}
 
-    {% for num, key, label, sub, dead_end in layers %}
-    <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 260px; align-items:center; gap:12px; height:52px;">
+    {% for num, key, label, dead_end in layers %}
+    <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 220px; align-items:center; gap:12px; height:44px;">
       <span style="font-size:.6875rem; font-family:monospace; color:#d1d5db; text-align:right; user-select:none;">{{ num }}</span>
       <div style="display:flex; align-items:center; justify-content:center;">
         <div id="bar-{{ key }}"
@@ -62,10 +62,7 @@
             <path style="opacity:.75" fill="{% if dead_end %}#9ca3af{% else %}#6366f1{% endif %}" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </span>
-        <div style="min-width:0; overflow:hidden;">
-          <div style="font-size:.8125rem; font-weight:600; color:{% if dead_end %}#9ca3af{% else %}#374151{% endif %}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ label }}</div>
-          <div style="font-size:.6875rem; color:#d1d5db; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px;">{{ sub }}</div>
-        </div>
+        <span style="font-size:.8125rem; font-weight:600; color:{% if dead_end %}#9ca3af{% else %}#374151{% endif %}; white-space:nowrap;">{{ label }}</span>
       </div>
     </div>
     {% endfor %}
@@ -96,10 +93,7 @@
               <path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <div style="min-width:0;">
-            <div style="font-size:.8125rem; font-weight:600; color:#92400e;">Can call now</div>
-            <div style="font-size:.6875rem; color:#fbbf24; margin-top:1px;">ICP · emp &gt;10 · engaged · no open deal</div>
-          </div>
+          <span style="font-size:.8125rem; font-weight:600; color:#92400e;">Can call now</span>
         </div>
       </div>
 
@@ -131,8 +125,8 @@
         <th class="px-4 py-3 text-right" title="ICP ranked companies assigned to this rep">ICP Universe</th>
         <th class="px-4 py-3 text-right" title="Employee count source-validated (Demo, AI, Gong, or Rep)">Emp. Verified</th>
         <th class="px-4 py-3 text-right" title="Has a logged call date">Called</th>
-        <th class="px-4 py-3 text-right" title="Connected but marked not interested">Not Interested</th>
-        <th class="px-4 py-3 text-right" title="Connected and engaged, or has a deal">Interested</th>
+        <th class="px-4 py-3 text-right" title="Connected but marked not interested" style="line-height:1.25;">Connected<br><span style="font-weight:400;opacity:.7;">Not Interested</span></th>
+        <th class="px-4 py-3 text-right" title="Connected and engaged, or has a deal" style="line-height:1.25;">Connected<br><span style="font-weight:400;opacity:.7;">Interested</span></th>
         <th class="px-4 py-3 text-right" title="Has ≥1 associated deal, ever">Had a Deal</th>
         <th class="px-4 py-3 text-right" title="Has an active open deal">Open Deal</th>
         <th class="px-4 py-3 text-right" title="No-excuse calling list: ICP ranked, emp >10, engaged, no open deal" style="color:#b45309;">★ Can Call</th>
@@ -246,11 +240,8 @@
         }
         var html = '';
         rows.forEach(function (row) {
-          var teamBadge = (team === 'all' && row.team)
-            ? '<span class="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded" style="background:#ede9fe;color:#7c3aed;">' + row.team + '</span>'
-            : '';
           html += '<tr class="hover:bg-slate-50 transition-colors duration-100">'
-            + '<td class="px-4 py-2.5 font-medium whitespace-nowrap">' + (row.name || row.owner_id) + teamBadge + '</td>'
+            + '<td class="px-4 py-2.5 font-medium whitespace-nowrap">' + (row.name || row.owner_id) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums font-semibold">' + fmtN(row.layer2) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer3) + '</td>'
             + '<td class="px-4 py-2.5 text-right tabular-nums">' + fmtN(row.layer4) + '</td>'

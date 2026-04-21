@@ -155,17 +155,21 @@ def _refresh_period_data(period: str):
         log.warning("  ✗ _coverage_end(%s): %s", period, exc)
         coverage = end
 
-    for fn, kwargs in [
-        (hubspot.get_deals,            {"date_field": "createdate"}),
-        (hubspot.get_deals,            {"date_field": "closedate"}),
-        (hubspot.get_deals,            {"date_field": "hs_v2_date_entered_71300358"}),
-        (hubspot.get_deals,            {"date_field": "hs_v2_date_entered_71300363"}),
-        (hubspot.get_calls,            {}),
-        (hubspot.get_contacts_inbound, {}),
-        (hubspot.get_quotas,           {}),
+    # Pass date_field positionally so the ttl_cache key matches what analytics
+    # functions produce when they call get_deals(start, end, "closedate").
+    # Keyword vs positional produces different cache keys — causing analytics
+    # to miss the pre-warmed cache and call HubSpot live every time.
+    for fn, args in [
+        (hubspot.get_deals,            ("createdate",)),
+        (hubspot.get_deals,            ("closedate",)),
+        (hubspot.get_deals,            ("hs_v2_date_entered_71300358",)),
+        (hubspot.get_deals,            ("hs_v2_date_entered_71300363",)),
+        (hubspot.get_calls,            ()),
+        (hubspot.get_contacts_inbound, ()),
+        (hubspot.get_quotas,           ()),
     ]:
         try:
-            fn(start, end, _force=True, **kwargs)
+            fn(start, end, *args, _force=True)
         except Exception as exc:
             log.warning("  ✗ %s(%s, ...): %s", fn.__name__, period, exc)
         import time; time.sleep(0.5)  # avoid HubSpot rate limit between fetches
