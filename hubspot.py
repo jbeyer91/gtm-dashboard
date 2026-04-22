@@ -1834,7 +1834,7 @@ def get_tam_funnel_rep_breakdown(team: str = "all") -> list:
 
 @ttl_cache
 def get_prime_accounts_for_rep(owner_id: str) -> list:
-    """Return the full list of Can Call Now companies for one rep.
+    """Return the full list of Call Now companies for one rep.
 
     Each record includes name, ICP rank, last_connected_call date, and an
     overdue flag (true when call was >30 days ago or never happened).
