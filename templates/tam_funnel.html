@@ -33,17 +33,17 @@
 
     {% set layers = [
       ("02", "layer2", "ICP Universe",      "All companies with an ICP rank (A+ through D), excluding Suppressed",
-       "ICP-ranked A+ through D. Excludes Suppressed. Accounts that have been evaluated and are worth tracking."),
+       "ICP-ranked A+ through D. Excludes Suppressed."),
       ("03", "layer3", "Employee Verified", "ICP companies whose employee count has been confirmed via Demo Form, AI, Gong, or Rep entry",
-       "Headcount confirmed via a trusted source: rep update, AI research call, Gong transcript, or demo form. Auto-populate and list uploads excluded."),
+       "Headcount confirmed via a trusted source: rep update, AI research call, Gong transcript, or demo form."),
       ("04", "layer4", "Called",            "Employee-verified companies with at least one logged call in HubSpot",
-       "At least one logged call on record. The dial has been pointed at this account at some point."),
+       "At least one logged call on record."),
       ("06", "layer6", "Connected, Interested", "Called companies connected and not marked Not Interested, or who have an associated deal",
-       "Someone picked up and showed interest without booking a meeting, plus any account that has ever had a deal. Prior deal history counts as demonstrated intent."),
+       "Someone picked up and showed interest without booking a meeting, plus any account that has ever had a deal."),
       ("07", "layer7", "Has Had a Deal",    "ICP companies with at least one associated deal ever (won, lost, or active)",
-       "Non-customers with at least one deal on record, open or closed. Has been through the pipeline at least once."),
+       "Non-customers with at least one deal on record, open or closed."),
       ("08", "layer8", "Has Open Deal",     "Companies with at least one currently active open deal",
-       "Active deal in pipeline right now. No ICP or headcount filter. Hands-off for cold outreach."),
+       "Active deal in pipeline right now. No ICP or headcount filter."),
     ] %}
 
     {% for num, key, label, tooltip, subtitle in layers %}
@@ -134,13 +134,6 @@
         </div>
       </div>
 
-      <!-- Criteria pills -->
-      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-left:40px; margin-top:10px;">
-        {% for pill in ["ICP ranked", "Employee count > 10", "Connected interested or has deal", "Not a customer", "No open deal", "No CL deal in past 90 days"] %}
-        <span style="font-size:.6875rem; font-weight:500; padding:2px 10px; border-radius:9999px; background:#fef3c7; color:#92400e;">{{ pill }}</span>
-        {% endfor %}
-      </div>
-
     </div>
 
   </div>
@@ -186,6 +179,7 @@
   var SPINNER_HTML = '<svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/><path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
   var PRIME_SPINNER_HTML = '<svg style="width:16px;height:16px;display:inline-block;animation:spin 0.7s linear infinite;" fill="none" viewBox="0 0 24 24"><circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="4"/><path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
   var currentTeam = 'all';
+  var _funnelMax = 1; // layer2 count — set by loadCounts, used by loadRepBreakdown for prime bars
 
   function setCount(id, val, errColor) {
     var el = document.getElementById(id);
@@ -222,6 +216,7 @@
       .then(function (data) {
         var counts = (data && data.counts) || {};
         var max = counts['layer2'] || counts['layer1'] || 1;
+        _funnelMax = max;
 
         LAYERS.forEach(function (key, i) {
           var val = counts[key] !== undefined ? counts[key] : null;
@@ -232,35 +227,11 @@
             setTimeout(function () { bar.style.width = pct + '%'; }, i * 70);
           }
         });
-
-        var primeVal = counts['prime'] !== undefined ? counts['prime'] : null;
-        setCount('count-prime', primeVal, '#b45309');
-        var primeBar = document.getElementById('bar-prime');
-        if (primeBar && primeVal !== null) {
-          var primePct = Math.max((primeVal / max) * 100, 0.4);
-          setTimeout(function () { primeBar.style.width = primePct + '%'; }, LAYERS.length * 70 + 100);
-        }
-
-        var staleVal = counts['prime_stale'] !== undefined ? counts['prime_stale'] : null;
-        var staleEl = document.getElementById('count-prime-stale');
-        if (staleEl) {
-          if (staleVal === null) {
-            staleEl.innerHTML = '<span style="color:#c2410c;">—</span>';
-          } else {
-            staleEl.style.color = '#c2410c';
-            staleEl.textContent = staleVal.toLocaleString();
-          }
-        }
-        var staleBar = document.getElementById('bar-prime-stale');
-        if (staleBar && staleVal !== null) {
-          var stalePct = Math.max((staleVal / max) * 100, 0.4);
-          setTimeout(function () { staleBar.style.width = stalePct + '%'; }, LAYERS.length * 70 + 200);
-        }
+        // prime/prime_stale totals are summed from rep breakdown rows in loadRepBreakdown
 
       })
       .catch(function () {
         LAYERS.forEach(function (key) { setCount('count-' + key, null); });
-        setCount('count-prime', null, '#b45309');
       });
   }
 
@@ -424,6 +395,19 @@
         });
         tbody.innerHTML = html;
         attachRepRowHandlers();
+
+        // Sum prime/prime_stale from rep rows so funnel totals always match the table
+        var totalPrime = 0, totalStale = 0;
+        rows.forEach(function (r) { totalPrime += (r.prime || 0); totalStale += (r.prime_stale || 0); });
+
+        setCount('count-prime', totalPrime, '#b45309');
+        var primeBar = document.getElementById('bar-prime');
+        if (primeBar) setTimeout(function () { primeBar.style.width = Math.max((totalPrime / _funnelMax) * 100, 0.4) + '%'; }, 100);
+
+        var staleEl = document.getElementById('count-prime-stale');
+        if (staleEl) { staleEl.style.color = '#c2410c'; staleEl.textContent = totalStale.toLocaleString(); }
+        var staleBar = document.getElementById('bar-prime-stale');
+        if (staleBar) setTimeout(function () { staleBar.style.width = Math.max((totalStale / _funnelMax) * 100, 0.4) + '%'; }, 200);
       })
       .catch(function () {
         tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-red-400 text-xs">Failed to load</td></tr>';
