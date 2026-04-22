@@ -22,7 +22,7 @@
 {% set won   = t.get('deals_won', 0) %}
 {% set pg    = t.get('pg_amt', 0) %}
 {% set rev   = t.get('won_amt', 0) %}
-{% set spend_total = s.get('spend', 0) if ga else 0 %}
+{% set spend_total = s.get('cost', 0) if ga else 0 %}
 
 <div class="grid gap-0 mb-1" style="grid-template-columns: repeat(8, 1fr) repeat(7, 24px);">
   {# helper macro for funnel step #}
@@ -47,7 +47,7 @@
 
   {# Spend #}
   {% if ga %}
-    {{ fstep("Spend", "$" ~ (s.spend|round(0)|int if s.spend < 10000 else ((s.spend/1000)|round(1)|string ~ "k"))) }}
+    {{ fstep("Spend", "$" ~ (s.cost|round(0)|int if s.cost < 10000 else ((s.cost/1000)|round(1)|string ~ "k"))) }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
