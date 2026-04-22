@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% from "macros.html" import period_filter %}
+{% block title %} — Marketing Attribution{% endblock %}
+{% block content %}
+
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #7c3aed 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Marketing Attribution</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Spend → Sessions → Leads → Pipeline · Customer Journey End-to-End</p>
+</div>
+
+{{ period_filter(period, periods) }}
+
+{# ── Funnel strip ────────────────────────────────────────────────────────────── #}
+{% set s  = spend.totals if spend else {} %}
+{% set t  = inbound.totals if inbound else {} %}
+{% set ga = ga4_ok and spend and not spend.error %}
+
+{# Compute conversions between stages #}
+{% set clicks_to_sessions = ((s.get('clicks',0) / s.get('clicks',1)) * 100) if s.get('clicks') else none %}
+{% set leads = t.get('leads_created', 0) %}
+{% set deals = t.get('deals_created', 0) %}
+{% set won   = t.get('deals_won', 0) %}
+{% set pg    = t.get('pg_amt', 0) %}
+{% set rev   = t.get('won_amt', 0) %}
+{% set spend_total = s.get('spend', 0) if ga else 0 %}
+
+<div class="grid gap-0 mb-1" style="grid-template-columns: repeat(8, 1fr) repeat(7, 24px);">
+  {# helper macro for funnel step #}
+  {% macro fstep(label, value, sub='', color='indigo') %}
+  <div class="bg-white border border-gray-100 rounded-xl px-3 py-4 text-center shadow-sm hover:shadow-md transition-all">
+    <p class="text-xl font-bold text-slate-900 tabular-nums leading-tight">{{ value }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1.5">{{ label }}</p>
+    {% if sub %}<p class="text-[10px] text-slate-400 mt-0.5">{{ sub }}</p>{% endif %}
+  </div>
+  {% endmacro %}
+
+  {% macro arrow(conv=none) %}
+  <div class="flex items-center justify-center">
+    <div class="text-center">
+      <svg class="w-4 h-4 text-gray-300 mx-auto" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+      {% if conv is not none %}<p class="text-[9px] text-gray-400 font-medium -mt-0.5">{{ conv }}</p>{% endif %}
+    </div>
+  </div>
+  {% endmacro %}
+
+  {# Spend #}
+  {% if ga %}
+    {{ fstep("Spend", "$" ~ (s.spend|round(0)|int if s.spend < 10000 else ((s.spend/1000)|round(1)|string ~ "k"))) }}
+  {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
+      <p class="text-xl font-bold text-gray-300">—</p>
+      <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Spend</p>
+    </div>
+  {% endif %}
+  {{ arrow() }}
+
+  {# Clicks #}
+  {% if ga %}
+    {{ fstep("Clicks", s.clicks if s.clicks < 10000 else ((s.clicks/1000)|round(1)|string ~ "k")) }}
+  {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
+      <p class="text-xl font-bold text-gray-300">—</p>
+      <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Clicks</p>
+    </div>
+  {% endif %}
+  {{ arrow() }}
+
+  {# Sessions #}
+  {% set ch_total = inbound_sessions if inbound_sessions is defined else none %}
+  {% if ga and spend %}
+    {% set sess = spend.rows | sum(attribute='sessions') %}
+    {{ fstep("Sessions", sess if sess < 10000 else ((sess/1000)|round(1)|string ~ "k"),
+             sub=((sess / s.clicks * 100)|round(1)|string ~ "% of clicks") if s.clicks else '') }}
+  {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
+      <p class="text-xl font-bold text-gray-300">—</p>
+      <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Sessions</p>
+    </div>
+  {% endif %}
+  {{ arrow() }}
+
+  {# Key Events #}
+  {% if ga %}
+    {{ fstep("Key Events", s.get('key_events', 0) if s.get('key_events', 0) is defined else '—',
+             sub="form fills / demos") }}
+  {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
+      <p class="text-xl font-bold text-gray-300">—</p>
+      <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Key Events</p>
+    </div>
+  {% endif %}
+  {{ arrow() }}
+
+  {# Inbound Leads #}
+  {{ fstep("Inbound Leads", leads) }}
+  {{ arrow(conv=((deals / leads * 100)|round(0)|int|string ~ "%") if leads else none) }}
+
+  {# Deals Created #}
+  {{ fstep("Deals", deals) }}
+  {{ arrow(conv=((won / deals * 100)|round(0)|int|string ~ "%") if deals else none) }}
+
+  {# Pipeline #}
+  {{ fstep("Pipeline", "$" ~ (pg|round(0)|int if pg < 10000 else ((pg/1000)|round(0)|int|string ~ "k"))) }}
+  {{ arrow() }}
+
+  {# Revenue Won #}
+  {{ fstep("Revenue Won", "$" ~ (rev|round(0)|int if rev < 10000 else ((rev/1000)|round(0)|int|string ~ "k"))) }}
+
+</div>
+
+{# ── Efficiency metrics ──────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 mt-4">
+
+  {% macro eff_card(label, value, tip='', good=none) %}
+  <div class="bg-white rounded-xl border px-5 py-4 shadow-sm relative overflow-hidden"
+       style="border-color: var(--border-muted);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-2xl font-bold tabular-nums tracking-tight
+      {% if good == true %}text-green-600{% elif good == false %}text-red-500{% else %}text-slate-900{% endif %}"
+      {% if tip %}data-tip="{{ tip }}"{% endif %}>{{ value }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2">{{ label }}</p>
+  </div>
+  {% endmacro %}
+
+  {# Cost per Lead #}
+  {% if spend_total and leads %}
+    {% set cpl = (spend_total / leads)|round(0)|int %}
+    {{ eff_card("Cost per Lead", "$" ~ cpl,
+        tip="Total ad spend ÷ inbound leads created",
+        good=(cpl < 300)) }}
+  {% else %}
+    {{ eff_card("Cost per Lead", "—", tip="Requires GA4 spend data") }}
+  {% endif %}
+
+  {# Cost per Deal #}
+  {% if spend_total and deals %}
+    {% set cpd = (spend_total / deals)|round(0)|int %}
+    {{ eff_card("Cost per Deal", "$" ~ cpd,
+        tip="Total ad spend ÷ deals created from inbound",
+        good=(cpd < 2000)) }}
+  {% else %}
+    {{ eff_card("Cost per Deal", "—", tip="Requires GA4 spend data") }}
+  {% endif %}
+
+  {# ROAS #}
+  {% if spend_total and rev %}
+    {% set roas = (rev / spend_total)|round(1) %}
+    {{ eff_card("ROAS", roas ~ "×",
+        tip="Revenue won ÷ ad spend. 1× = break even.",
+        good=(roas > 3)) }}
+  {% else %}
+    {{ eff_card("ROAS", "—", tip="Requires GA4 spend + won revenue") }}
+  {% endif %}
+
+  {# Win Rate #}
+  {% if deals %}
+    {% set wr = (won / deals * 100)|round(1) %}
+    {{ eff_card("Win Rate", wr ~ "%",
+        tip="Closed won deals ÷ all deals created from inbound",
+        good=(wr > 25)) }}
+  {% else %}
+    {{ eff_card("Win Rate", "—") }}
+  {% endif %}
+
+</div>
+
+{# ── UTM campaign breakdown ──────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+    <h2 class="font-semibold text-sm text-gray-800">Campaign Attribution</h2>
+    <span class="text-[11px] text-gray-400">utm_campaign_first_touch · from HubSpot contacts</span>
+  </div>
+
+  {% if utm_rows %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase"
+           style="background: var(--surface-sub);">
+      <tr>
+        <th class="px-4 py-3 text-left">Campaign</th>
+        <th class="px-4 py-3 text-left">Source / Medium</th>
+        <th class="px-4 py-3 text-right">Deals</th>
+        <th class="px-4 py-3 text-right" data-tip="Closed won deals from this campaign">Won</th>
+        <th class="px-4 py-3 text-right" data-tip="Win rate: won ÷ total deals">Win %</th>
+        <th class="px-4 py-3 text-right" data-tip="Open pipeline value">Pipeline $</th>
+        <th class="px-4 py-3 text-right" data-tip="Closed won revenue">Revenue $</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in utm_rows %}
+      <tr class="hover:bg-slate-50 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="{{ row.campaign }}">
+          {{ row.campaign }}
+        </td>
+        <td class="px-4 py-3 text-gray-500 text-xs">
+          {% if row.source %}{{ row.source }}{% if row.medium %} / {{ row.medium }}{% endif %}{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ row.deals }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.won_deals %}text-green-600 font-semibold{% else %}text-gray-300{% endif %}">
+          {{ row.won_deals or '—' }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-medium
+          {% set wr2 = (row.won_deals / row.deals * 100) if row.deals else 0 %}
+          {% if wr2 >= 25 %}text-green-600{% elif wr2 >= 10 %}text-amber-600{% elif row.deals %}text-red-500{% endif %}">
+          {% if row.deals %}{{ (row.won_deals / row.deals * 100)|round(0)|int }}%{% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700">
+          {% if row.pipeline_amt %}
+            ${{ (row.pipeline_amt / 1000)|round(1) }}k
+          {% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.won_amt %}text-green-600 font-semibold{% else %}text-gray-300{% endif %}">
+          {% if row.won_amt %}
+            ${{ (row.won_amt / 1000)|round(1) }}k
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+      <tr>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider" colspan="2">Total</td>
+        <td class="px-4 py-3 text-right">{{ utm_rows | sum(attribute='deals') }}</td>
+        <td class="px-4 py-3 text-right text-green-600">{{ utm_rows | sum(attribute='won_deals') }}</td>
+        <td class="px-4 py-3 text-right">
+          {% set td = utm_rows | sum(attribute='deals') %}
+          {% set tw = utm_rows | sum(attribute='won_deals') %}
+          {{ (tw / td * 100)|round(0)|int ~ "%" if td else '—' }}
+        </td>
+        <td class="px-4 py-3 text-right">
+          {% set tp = utm_rows | sum(attribute='pipeline_amt') %}
+          ${{ (tp / 1000)|round(1) }}k
+        </td>
+        <td class="px-4 py-3 text-right text-green-600">
+          {% set tr2 = utm_rows | sum(attribute='won_amt') %}
+          ${{ (tr2 / 1000)|round(1) }}k
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% else %}
+  <div class="px-6 py-10 text-center">
+    <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-violet-50 mb-3">
+      <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <p class="text-sm font-semibold text-gray-700 mb-1">UTM backfill in progress</p>
+    <p class="text-xs text-gray-400 max-w-sm mx-auto">
+      Campaign attribution will appear here automatically once
+      <code class="bg-gray-100 px-1 rounded">utm_campaign_first_touch</code>
+      is populated on contacts. No changes needed to this page.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

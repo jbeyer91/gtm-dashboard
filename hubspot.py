@@ -1954,3 +1954,105 @@ def get_prime_accounts_for_rep(owner_id: str) -> list:
         r["last_connected_call_ms"] if r["last_connected_call_ms"] is not None else 0,
     ))
     return records
+
+
+def get_utm_deal_attribution(period: str) -> list:
+    """Deals grouped by utm_campaign_first_touch (read from associated contacts).
+
+    Walks the deal → contact association and reads the five first-touch UTM
+    properties off the contact record.  Returns an empty list until the UTM
+    backfill is complete — callers should treat [] as "no data yet".
+
+    UTM contact properties used:
+        utm_source_first_touch, utm_medium_first_touch,
+        utm_campaign_first_touch, utm_content_first_touch,
+        utm_term_first_touch
+
+    Returns a list of dicts sorted by deals desc:
+        {"campaign", "source", "medium",
+         "deals", "won_deals", "pipeline_amt", "won_amt"}
+    """
+    from collections import defaultdict
+
+    start, end = get_date_range(period)
+    start_ms   = int(start.timestamp() * 1000)
+    end_ms     = int(end.timestamp() * 1000)
+
+    # Fetch NB pipeline deals created in period
+    deals = _search_all("deals", {
+        "filterGroups": [{
+            "filters": [
+                {"propertyName": "createdate", "operator": "GTE", "value": str(start_ms)},
+                {"propertyName": "createdate", "operator": "LTE", "value": str(end_ms)},
+                {"propertyName": "pipeline",   "operator": "EQ",  "value": "31544320"},
+            ]
+        }],
+        "properties": ["dealname", "amount", "hs_is_closed_won", "hs_is_closed_lost"],
+    })
+    if not deals:
+        return []
+
+    deal_ids = [str(d["id"]) for d in deals]
+
+    # Deal → contact associations
+    deal_to_contacts = _batch_associations("deals", "contacts", deal_ids)
+    all_contact_ids  = list({cid for cids in deal_to_contacts.values() for cid in cids})
+    if not all_contact_ids:
+        return []
+
+    # Batch-read UTM fields from contacts
+    _UTM_PROPS = [
+        "utm_source_first_touch", "utm_medium_first_touch",
+        "utm_campaign_first_touch", "utm_content_first_touch",
+        "utm_term_first_touch",
+    ]
+    contact_utms: dict = {}
+    for i in range(0, len(all_contact_ids), 100):
+        batch = all_contact_ids[i:i + 100]
+        resp  = _post_with_retry(
+            f"{BASE_URL}/crm/v3/objects/contacts/batch/read",
+            {"inputs": [{"id": cid} for cid in batch], "properties": _UTM_PROPS},
+            "contacts batch/read for UTM attribution",
+        )
+        if not resp.ok:
+            log.warning("contacts UTM batch/read error %s: %s", resp.status_code, resp.text[:300])
+            continue
+        for obj in resp.json().get("results", []):
+            contact_utms[str(obj["id"])] = obj.get("properties", {})
+
+    # Return empty if no UTM data has been backfilled yet
+    if not any(p.get("utm_campaign_first_touch") for p in contact_utms.values()):
+        return []
+
+    # Aggregate by campaign
+    buckets: dict = defaultdict(lambda: {
+        "campaign": "", "source": "", "medium": "",
+        "deals": 0, "won_deals": 0, "pipeline_amt": 0.0, "won_amt": 0.0,
+    })
+    for deal in deals:
+        deal_id = str(deal["id"])
+        utms    = {}
+        for cid in deal_to_contacts.get(deal_id, []):
+            props = contact_utms.get(str(cid), {})
+            if props.get("utm_campaign_first_touch"):
+                utms = props
+                break
+
+        key    = utms.get("utm_campaign_first_touch") or "(untracked)"
+        props  = deal.get("properties", {})
+        amount = float(props.get("amount") or 0)
+        is_won = props.get("hs_is_closed_won") == "true"
+
+        b = buckets[key]
+        b["campaign"] = key
+        b["source"]   = utms.get("utm_source_first_touch", "")
+        b["medium"]   = utms.get("utm_medium_first_touch", "")
+        b["deals"]   += 1
+        if is_won:
+            b["won_deals"] += 1
+            b["won_amt"]   += amount
+        else:
+            b["pipeline_amt"] += amount
+
+    return sorted(buckets.values(), key=lambda r: r["deals"], reverse=True)
+    return records

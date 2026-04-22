@@ -185,6 +185,7 @@ NAV = [
         {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
         {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
         {"endpoint": "web_traffic",      "label": "Traffic Sources"},
+        {"endpoint": "attribution",       "label": "Attribution"},
     ]},
 ]
 
@@ -1195,6 +1196,42 @@ def web_traffic():
         configured=configured,
         nav=NAV,
         active="web_traffic",
+    )
+
+
+@app.route("/marketing/attribution")
+@login_required
+def attribution():
+    import google_analytics
+    from hubspot import get_utm_deal_attribution
+    period = request.args.get("period", "last_30")
+    valid  = [p[0] for p in PAID_MEDIA_PERIODS]
+    if period not in valid:
+        period = "last_30"
+
+    spend_data = get_cached(google_analytics.fetch_campaign_spend, period)
+    inbound    = get_cached(analytics.compute_inbound_funnel, period)
+    utm_rows   = get_cached(get_utm_deal_attribution, period)
+
+    if spend_data is None:
+        spend_data = google_analytics.fetch_campaign_spend(period)
+    if inbound is None:
+        inbound = analytics.compute_inbound_funnel(period)
+    if utm_rows is None:
+        utm_rows = get_utm_deal_attribution(period)
+
+    ga4_ok = google_analytics.is_configured()
+
+    return render_template(
+        "attribution.html",
+        spend=spend_data,
+        inbound=inbound,
+        utm_rows=utm_rows or [],
+        periods=PAID_MEDIA_PERIODS,
+        period=period,
+        ga4_ok=ga4_ok,
+        nav=NAV,
+        active="attribution",
     )
 
 
