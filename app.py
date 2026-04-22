@@ -1175,17 +1175,21 @@ def web_traffic():
     valid  = [p[0] for p in PAID_MEDIA_PERIODS]
     if period not in valid:
         period = "last_30"
-    data       = get_cached(google_analytics.fetch_channel_performance, period)
-    daily      = get_cached(google_analytics.fetch_daily_sessions, period)
+    data     = get_cached(google_analytics.fetch_channel_performance, period)
+    daily    = get_cached(google_analytics.fetch_daily_sessions, period)
+    campaigns = get_cached(google_analytics.fetch_campaign_spend, period)
     configured = google_analytics.is_configured()
     if data is None:
         data = google_analytics.fetch_channel_performance(period)
     if daily is None:
         daily = google_analytics.fetch_daily_sessions(period)
+    if campaigns is None:
+        campaigns = google_analytics.fetch_campaign_spend(period)
     return render_template(
         "web_traffic.html",
         data=data,
         daily=daily,
+        campaigns=campaigns,
         periods=PAID_MEDIA_PERIODS,
         period=period,
         configured=configured,
