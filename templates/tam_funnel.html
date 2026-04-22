@@ -33,7 +33,7 @@
 
     {% set layers = [
       ("02", "layer2", "ICP Universe",      "All companies with an ICP rank (A+ through D), excluding Suppressed",
-       "ICP-ranked A+ through D. Excludes Suppressed — accounts that have been evaluated and are worth tracking."),
+       "ICP-ranked A+ through D. Excludes Suppressed. Accounts that have been evaluated and are worth tracking."),
       ("03", "layer3", "Employee Verified", "ICP companies whose employee count has been confirmed via Demo Form, AI, Gong, or Rep entry",
        "Headcount confirmed via a trusted source: rep update, AI research call, Gong transcript, or demo form. Auto-populate and list uploads excluded."),
       ("04", "layer4", "Called",            "Employee-verified companies with at least one logged call in HubSpot",
@@ -41,7 +41,7 @@
       ("06", "layer6", "Connected, Interested", "Called companies connected and not marked Not Interested, or who have an associated deal",
        "Someone picked up and showed interest without booking a meeting, plus any account that has ever had a deal. Prior deal history counts as demonstrated intent."),
       ("07", "layer7", "Has Had a Deal",    "ICP companies with at least one associated deal ever (won, lost, or active)",
-       "Non-customers with at least one deal on record — open or closed. Has been through the pipeline at least once."),
+       "Non-customers with at least one deal on record, open or closed. Has been through the pipeline at least once."),
       ("08", "layer8", "Has Open Deal",     "Companies with at least one currently active open deal",
        "Active deal in pipeline right now. No ICP or headcount filter. Hands-off for cold outreach."),
     ] %}
@@ -77,7 +77,7 @@
     <!-- ── Prime row separator ─────────────────────────────────────────────── -->
     <div style="border-top:1.5px dashed #e5e7eb; padding-top:16px; margin-top:8px !important;">
       <p style="font-size:.6875rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#b45309; margin-bottom:10px;">
-        No-excuse calling list — can call now
+        No-excuse calling list: can call now
       </p>
 
       <!-- Prime bar row -->
@@ -128,8 +128,8 @@
             </svg>
           </span>
           <div style="min-width:0;">
-            <div style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap;" data-tip="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)">Not called in 30+ days</div>
-            <div style="font-size:.6875rem; color:#c2410c; opacity:.7; line-height:1.4; margin-top:2px;">No call logged in the past 30 days — any outcome.</div>
+            <div style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap;" data-tip="Subset of Can Call Now: no call logged in the past 30 days (any outcome: voicemail, answered, etc.)">Not called in 30+ days</div>
+            <div style="font-size:.6875rem; color:#c2410c; opacity:.7; line-height:1.4; margin-top:2px;">No call logged in the past 30 days, any outcome.</div>
           </div>
         </div>
       </div>
