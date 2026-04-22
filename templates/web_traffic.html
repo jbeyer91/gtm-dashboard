@@ -97,6 +97,108 @@
 </div>
 {% endif %}
 
+{# ── Campaign spend ──────────────────────────────────────────────────────────── #}
+{% if campaigns and campaigns.rows %}
+{% set cs = campaigns.totals %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto mb-5">
+  <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+    <h2 class="font-semibold text-sm text-gray-800">Campaign Spend</h2>
+    <span class="text-[11px] text-gray-400 font-medium">via Google Ads · linked to GA4</span>
+  </div>
+
+  {# Spend summary strip #}
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-0 divide-x divide-gray-100 border-b border-gray-100">
+    {% for label, val in [
+      ("Total Spend",   "$" ~ (cs.cost | round(0) | int)),
+      ("Clicks",        cs.clicks),
+      ("Impressions",   cs.impressions),
+      ("Avg CPC",       ("$" ~ cs.cpc) if cs.cpc else "—"),
+      ("Key Events",    cs.key_events),
+      ("Cost / Event",  ("$" ~ cs.cpl) if cs.cpl else "—"),
+    ] %}
+    <div class="px-5 py-3 text-center">
+      <p class="text-base font-bold text-slate-900 tabular-nums">
+        {% if val | string | int >= 10000 %}
+          {% set n = val | string | replace("$","") | float %}
+          ${{ (n / 1000) | round(1) }}k
+        {% else %}
+          {{ val }}
+        {% endif %}
+      </p>
+      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-0.5">{{ label }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase"
+           style="background: var(--surface-sub);">
+      <tr>
+        <th class="px-4 py-3 text-left">Campaign</th>
+        <th class="px-4 py-3 text-right" data-tip="Total ad spend for this campaign">Spend</th>
+        <th class="px-4 py-3 text-right">Clicks</th>
+        <th class="px-4 py-3 text-right">Impressions</th>
+        <th class="px-4 py-3 text-right" data-tip="Cost per click">CPC</th>
+        <th class="px-4 py-3 text-right" data-tip="Sessions driven by this campaign">Sessions</th>
+        <th class="px-4 py-3 text-right" data-tip="Conversion events attributed to this campaign">Key Events</th>
+        <th class="px-4 py-3 text-right" data-tip="Cost per key event (spend ÷ conversions)">CPL</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% set total_cost = campaigns.totals.cost %}
+      {% for row in campaigns.rows %}
+      <tr class="hover:bg-slate-50 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="{{ row.campaign }}">
+          {{ row.campaign }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold">
+          ${{ row.cost | round(0) | int }}
+          {% if total_cost > 0 %}
+          <span class="text-[10px] text-gray-400 font-normal ml-1">{{ (row.cost / total_cost * 100) | round(0) | int }}%</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ row.clicks }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">
+          {% if row.impressions >= 1000 %}{{ (row.impressions / 1000) | round(1) }}k
+          {% else %}{{ row.impressions }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">${{ row.cpc if row.cpc else '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ row.sessions }}</td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.key_events > 0 %}text-green-600 font-semibold{% else %}text-gray-300{% endif %}">
+          {{ row.key_events if row.key_events > 0 else '—' }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.cpl is not none and row.cpl < 200 %}text-green-600 font-semibold
+          {% elif row.cpl is not none and row.cpl < 500 %}text-gray-700
+          {% elif row.cpl is not none %}text-red-500
+          {% else %}text-gray-300{% endif %}">
+          {{ ("$" ~ row.cpl) if row.cpl is not none else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+      <tr>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
+        <td class="px-4 py-3 text-right tabular-nums">${{ cs.cost | round(0) | int }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ cs.clicks }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if cs.impressions >= 1000 %}{{ (cs.impressions / 1000) | round(1) }}k
+          {% else %}{{ cs.impressions }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">${{ cs.cpc if cs.cpc else '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ campaigns.rows | sum(attribute='sessions') }}</td>
+        <td class="px-4 py-3 text-right tabular-nums {% if cs.key_events > 0 %}text-green-600{% endif %}">
+          {{ cs.key_events if cs.key_events > 0 else '—' }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">${{ cs.cpl if cs.cpl else '—' }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endif %}
+
 {# ── Channel table ───────────────────────────────────────────────────────────── #}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
   <div class="px-5 py-3.5 border-b border-gray-100">

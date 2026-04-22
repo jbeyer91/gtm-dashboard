@@ -168,6 +168,94 @@ def fetch_daily_sessions(period: str = "last_30") -> list:
         return []
 
 
+def fetch_campaign_spend(period: str = "last_30") -> dict:
+    """Advertiser spend, clicks, and impressions by Google Ads campaign.
+
+    Requires Google Ads to be linked to the GA4 property.
+
+    Returns:
+        {
+          "rows":   [{"campaign", "cost", "clicks", "impressions",
+                      "cpc", "sessions", "key_events", "cpl"}, ...],
+          "totals": {...same keys aggregated...},
+          "period": str,
+          "error":  str | None,
+        }
+    """
+    if not is_configured():
+        return {"rows": [], "totals": _zero_spend_totals(), "period": period,
+                "error": "not_configured"}
+
+    start, end = _date_range(period)
+
+    try:
+        from google.analytics.data_v1beta.types import (
+            DateRange, Dimension, Metric, RunReportRequest,
+        )
+        req = RunReportRequest(
+            property=f"properties/{PROPERTY_ID}",
+            dimensions=[Dimension(name="sessionGoogleAdsCampaignName")],
+            metrics=[
+                Metric(name="advertiserAdCost"),
+                Metric(name="advertiserAdClicks"),
+                Metric(name="advertiserAdImpressions"),
+                Metric(name="sessions"),
+                Metric(name="keyEvents"),
+            ],
+            date_ranges=[DateRange(start_date=start, end_date=end)],
+        )
+        resp = _client().run_report(req)
+
+        rows = []
+        for row in resp.rows:
+            name = row.dimension_values[0].value
+            if not name or name == "(not set)":
+                continue
+            cost        = float(row.metric_values[0].value)
+            clicks      = int(row.metric_values[1].value)
+            impressions = int(row.metric_values[2].value)
+            sessions    = int(row.metric_values[3].value)
+            key_events  = int(float(row.metric_values[4].value))
+            rows.append({
+                "campaign":    name,
+                "cost":        round(cost, 2),
+                "clicks":      clicks,
+                "impressions": impressions,
+                "cpc":         round(cost / clicks, 2) if clicks else None,
+                "sessions":    sessions,
+                "key_events":  key_events,
+                "cpl":         round(cost / key_events, 2) if key_events else None,
+            })
+
+        rows = [r for r in rows if r["cost"] > 0 or r["impressions"] > 0]
+        rows.sort(key=lambda r: r["cost"], reverse=True)
+        return {"rows": rows, "totals": _spend_totals(rows), "period": period, "error": None}
+
+    except Exception as exc:
+        log.error("GA4 campaign spend fetch failed: %s", exc)
+        return {"rows": [], "totals": _zero_spend_totals(), "period": period, "error": str(exc)}
+
+
+def _spend_totals(rows: list) -> dict:
+    cost        = sum(r["cost"]        for r in rows)
+    clicks      = sum(r["clicks"]      for r in rows)
+    impressions = sum(r["impressions"] for r in rows)
+    key_events  = sum(r["key_events"]  for r in rows)
+    return {
+        "cost":        round(cost, 2),
+        "clicks":      clicks,
+        "impressions": impressions,
+        "cpc":         round(cost / clicks, 2)      if clicks     else None,
+        "key_events":  key_events,
+        "cpl":         round(cost / key_events, 2)  if key_events else None,
+    }
+
+
+def _zero_spend_totals() -> dict:
+    return {"cost": 0, "clicks": 0, "impressions": 0,
+            "cpc": None, "key_events": 0, "cpl": None}
+
+
 def _totals(rows: list) -> dict:
     sessions   = sum(r["sessions"]         for r in rows)
     engaged    = sum(r["engaged_sessions"] for r in rows)
