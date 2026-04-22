@@ -184,7 +184,7 @@ NAV = [
         {"endpoint": "abm",             "label": "ABM"},
         {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
         {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
-        {"endpoint": "paid_media",      "label": "Paid Media"},
+        {"endpoint": "web_traffic",      "label": "Traffic Sources"},
     ]},
 ]
 
@@ -1167,30 +1167,30 @@ def api_tam_funnel_rep_accounts():
         return jsonify({"status": "error", "accounts": []}), 500
 
 
-@app.route("/marketing/paid-media")
+@app.route("/marketing/traffic")
 @login_required
-def paid_media():
-    import google_ads
+def web_traffic():
+    import google_analytics
     period = request.args.get("period", "last_30")
     valid  = [p[0] for p in PAID_MEDIA_PERIODS]
     if period not in valid:
         period = "last_30"
-    data       = get_cached(google_ads.fetch_campaign_performance, period)
-    daily      = get_cached(google_ads.fetch_daily_spend, period)
-    configured = google_ads.is_configured()
+    data       = get_cached(google_analytics.fetch_channel_performance, period)
+    daily      = get_cached(google_analytics.fetch_daily_sessions, period)
+    configured = google_analytics.is_configured()
     if data is None:
-        data = google_ads.fetch_campaign_performance(period)
+        data = google_analytics.fetch_channel_performance(period)
     if daily is None:
-        daily = google_ads.fetch_daily_spend(period)
+        daily = google_analytics.fetch_daily_sessions(period)
     return render_template(
-        "paid_media.html",
+        "web_traffic.html",
         data=data,
         daily=daily,
         periods=PAID_MEDIA_PERIODS,
         period=period,
         configured=configured,
         nav=NAV,
-        active="paid_media",
+        active="web_traffic",
     )
 
 
