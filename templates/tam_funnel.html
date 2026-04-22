@@ -32,18 +32,24 @@
   <div class="px-6 py-6 space-y-2" style="padding-bottom: 8px;">
 
     {% set layers = [
-      ("02", "layer2", "ICP Universe",      "All companies with an ICP rank (A+ through D), excluding Suppressed"),
-      ("03", "layer3", "Employee Verified", "ICP companies whose employee count has been confirmed via Demo Form, AI, Gong, or Rep entry"),
-      ("04", "layer4", "Called",            "Employee-verified companies with at least one logged call in HubSpot"),
-      ("06", "layer6", "Interested",        "Called companies connected and not marked Not Interested, or who have an associated deal"),
-      ("07", "layer7", "Had a Deal",        "ICP companies with at least one associated deal ever (won, lost, or active)"),
-      ("08", "layer8", "Open Deal",         "Companies with at least one currently active open deal"),
+      ("02", "layer2", "ICP Universe",      "All companies with an ICP rank (A+ through D), excluding Suppressed",
+       "ICP-ranked A+–D — accounts that have been evaluated and are worth tracking. Excludes Suppressed."),
+      ("03", "layer3", "Employee Verified", "ICP companies whose employee count has been confirmed via Demo Form, AI, Gong, or Rep entry",
+       "Headcount confirmed via rep update, AI, Gong, or demo form. HubSpot auto-populate and list uploads excluded."),
+      ("04", "layer4", "Called",            "Employee-verified companies with at least one logged call in HubSpot",
+       "At least one logged call on record. The dial has been pointed at this account at some point."),
+      ("06", "layer6", "Connected, Interested", "Called companies connected and not marked Not Interested, or who have an associated deal",
+       "Someone picked up and showed interest without booking a meeting, or the account has a deal on record."),
+      ("07", "layer7", "Has Had a Deal",    "ICP companies with at least one associated deal ever (won, lost, or active)",
+       "At least one deal ever — open, won, or lost. These accounts have been through the pipeline."),
+      ("08", "layer8", "Has Open Deal",     "Companies with at least one currently active open deal",
+       "Active deal in the pipeline right now. No ICP or headcount filter — focused on deal progression only."),
     ] %}
 
-    {% for num, key, label, tooltip in layers %}
-    <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 220px; align-items:center; gap:12px; height:44px;">
-      <span style="font-size:.6875rem; font-family:monospace; color:#d1d5db; text-align:right; user-select:none;">{{ num }}</span>
-      <div style="display:flex; align-items:center; justify-content:center;">
+    {% for num, key, label, tooltip, subtitle in layers %}
+    <div id="row-{{ key }}" style="display:grid; grid-template-columns:28px 1fr 300px; align-items:center; gap:12px; min-height:44px; padding:6px 0;">
+      <span style="font-size:.6875rem; font-family:monospace; color:#d1d5db; text-align:right; user-select:none; align-self:flex-start; padding-top:2px;">{{ num }}</span>
+      <div style="display:flex; align-items:center; justify-content:center; align-self:stretch;">
         <div id="bar-{{ key }}"
              style="height:32px; width:0%; min-width:0; border-radius:6px;
                     background:linear-gradient(90deg,#6366f1,#7c3aed);
@@ -51,16 +57,19 @@
                     box-shadow:0 1px 4px rgba(99,102,241,0.2);">
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+      <div style="display:flex; align-items:flex-start; gap:10px; min-width:0;">
         <span id="count-{{ key }}"
-              style="font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; color:#111827; white-space:nowrap; flex-shrink:0;">
+              style="font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; color:#111827; white-space:nowrap; flex-shrink:0; padding-top:1px;">
           <svg style="width:14px;height:14px;display:inline-block;animation:spin 0.7s linear infinite;"
                fill="none" viewBox="0 0 24 24">
             <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>
             <path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </span>
-        <span data-tip="{{ tooltip }}" style="font-size:.8125rem; font-weight:600; color:#374151; white-space:nowrap; cursor:help;">{{ label }}</span>
+        <div style="min-width:0;">
+          <div style="font-size:.8125rem; font-weight:600; color:#374151; white-space:nowrap;">{{ label }}</div>
+          <div style="font-size:.6875rem; color:#94a3b8; line-height:1.4; margin-top:2px;">{{ subtitle }}</div>
+        </div>
       </div>
     </div>
     {% endfor %}
@@ -72,7 +81,7 @@
       </p>
 
       <!-- Prime bar row -->
-      <div style="display:grid; grid-template-columns:28px 1fr 260px; align-items:center; gap:12px; height:48px;">
+      <div style="display:grid; grid-template-columns:28px 1fr 300px; align-items:center; gap:12px; min-height:48px; padding:4px 0;">
         <span style="font-size:.8rem; color:#f59e0b; text-align:right; user-select:none;">★</span>
         <div style="display:flex; align-items:center; justify-content:center;">
           <div id="bar-prime"
@@ -82,7 +91,7 @@
                       box-shadow:0 2px 8px rgba(245,158,11,0.3);">
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        <div style="display:flex; align-items:flex-start; gap:10px; min-width:0;">
           <span id="count-prime"
                 style="font-size:1.4rem; font-weight:800; font-variant-numeric:tabular-nums; color:#92400e; white-space:nowrap; flex-shrink:0;">
             <svg style="width:16px;height:16px;display:inline-block;animation:spin 0.7s linear infinite;"
@@ -91,12 +100,15 @@
               <path style="opacity:.75" fill="#f59e0b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span data-tip="ICP ranked, employee count &gt;10, connected &amp; interested or has had a deal, no open deal, not a customer, not closed-lost in the past 90 days" style="font-size:.8125rem; font-weight:600; color:#92400e; cursor:help;">Can call now</span>
+          <div style="min-width:0;">
+            <div style="font-size:.8125rem; font-weight:600; color:#92400e; white-space:nowrap;" data-tip="ICP ranked, employee count &gt;10, connected &amp; interested or has had a deal, no open deal, not a customer, not closed-lost in the past 90 days">Can call now</div>
+            <div style="font-size:.6875rem; color:#b45309; line-height:1.4; margin-top:2px;">Meets all criteria — ready to dial today.</div>
+          </div>
         </div>
       </div>
 
       <!-- Stale bar row (subset of prime) -->
-      <div style="display:grid; grid-template-columns:28px 1fr 260px; align-items:center; gap:12px; height:44px; margin-top:4px;">
+      <div style="display:grid; grid-template-columns:28px 1fr 300px; align-items:center; gap:12px; min-height:44px; padding:4px 0; margin-top:2px;">
         <span style="font-size:.75rem; color:#ef4444; text-align:right; user-select:none; line-height:1;">↳</span>
         <div style="display:flex; align-items:center; justify-content:center;">
           <div id="bar-prime-stale"
@@ -106,7 +118,7 @@
                       box-shadow:0 1px 4px rgba(249,115,22,0.25);">
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        <div style="display:flex; align-items:flex-start; gap:10px; min-width:0;">
           <span id="count-prime-stale"
                 style="font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; color:#c2410c; white-space:nowrap; flex-shrink:0;">
             <svg style="width:13px;height:13px;display:inline-block;animation:spin 0.7s linear infinite;"
@@ -115,12 +127,15 @@
               <path style="opacity:.75" fill="#f97316" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
           </span>
-          <span data-tip="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)" style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap; cursor:help;">Not called in 30+ days</span>
+          <div style="min-width:0;">
+            <div style="font-size:.8125rem; font-weight:600; color:#c2410c; white-space:nowrap;" data-tip="Subset of Can Call Now: no call logged in the past 30 days (any outcome — voicemail, answered, etc.)">Not called in 30+ days</div>
+            <div style="font-size:.6875rem; color:#c2410c; opacity:.7; line-height:1.4; margin-top:2px;">Subset of Can Call Now — prioritise these first.</div>
+          </div>
         </div>
       </div>
 
       <!-- Criteria pills -->
-      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-left:40px; margin-top:6px;">
+      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-left:40px; margin-top:10px;">
         {% for pill in ["ICP ranked", "Employee count > 10", "Connected interested or has deal", "Not a customer", "No open deal", "No CL deal in past 90 days"] %}
         <span style="font-size:.6875rem; font-weight:500; padding:2px 10px; border-radius:9999px; background:#fef3c7; color:#92400e;">{{ pill }}</span>
         {% endfor %}
