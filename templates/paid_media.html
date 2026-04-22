@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% from "macros.html" import period_filter, stat_card %}
+{% block title %} — Paid Media{% endblock %}
+{% block content %}
+
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #1e3a6e 0%, #0f766e 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">Paid Media Performance</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Google Ads · Campaign Spend &amp; Efficiency</p>
+</div>
+
+{{ period_filter(period, periods) }}
+
+{% if not configured %}
+{# ── Not configured ─────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-8 mt-4">
+  <div class="flex items-start gap-4">
+    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+      <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+      </svg>
+    </div>
+    <div>
+      <h2 class="text-base font-semibold text-gray-900 mb-1">Google Ads credentials not configured</h2>
+      <p class="text-sm text-gray-500 mb-4">Add the following environment variables to connect your Google Ads account:</p>
+      <div class="bg-gray-50 rounded-xl border border-gray-200 divide-y divide-gray-200 text-sm font-mono mb-4">
+        {% for var in [
+          ("GOOGLE_ADS_DEVELOPER_TOKEN", "From Google Ads API Center"),
+          ("GOOGLE_ADS_CLIENT_ID",       "OAuth2 client ID"),
+          ("GOOGLE_ADS_CLIENT_SECRET",   "OAuth2 client secret"),
+          ("GOOGLE_ADS_REFRESH_TOKEN",   "Long-lived OAuth2 refresh token"),
+          ("GOOGLE_ADS_CUSTOMER_ID",     "Google Ads account ID (e.g. 123-456-7890)"),
+        ] %}
+        <div class="px-4 py-2.5 flex items-start gap-3">
+          <span class="text-violet-700 font-semibold shrink-0">{{ var[0] }}</span>
+          <span class="text-gray-400 text-xs self-center">{{ var[1] }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="text-xs text-gray-400">
+        Generate a refresh token with the
+        <strong class="font-medium">https://www.googleapis.com/auth/adwords</strong> scope.
+        The developer token is issued in the Google Ads API Center under your manager account.
+      </p>
+    </div>
+  </div>
+</div>
+
+{% elif data.error and data.error != 'not_configured' %}
+{# ── API error ───────────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl border border-red-200 shadow-sm p-6 mt-4">
+  <p class="text-sm font-semibold text-red-600 mb-1">Google Ads API error</p>
+  <p class="text-xs text-gray-500 font-mono">{{ data.error }}</p>
+</div>
+
+{% else %}
+{# ── Summary cards ───────────────────────────────────────────────────────────── #}
+{% set t = data.totals %}
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">
+      {% if t.spend >= 1000000 %}${{ (t.spend / 1000000)|round(1) }}M
+      {% elif t.spend >= 1000 %}${{ (t.spend / 1000)|round(1) }}k
+      {% else %}${{ t.spend|round(0)|int }}{% endif %}
+    </p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Total Spend</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">
+      {% if t.impressions >= 1000000 %}{{ (t.impressions / 1000000)|round(1) }}M
+      {% elif t.impressions >= 1000 %}{{ (t.impressions / 1000)|round(0)|int }}k
+      {% else %}{{ t.impressions }}{% endif %}
+    </p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Impressions</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">
+      {% if t.clicks >= 1000 %}{{ (t.clicks / 1000)|round(1) }}k
+      {% else %}{{ t.clicks }}{% endif %}
+    </p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Clicks</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">{{ t.conversions|round(0)|int }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Conversions</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">{{ t.ctr|round(2) }}%</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">CTR</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">
+      ${{ t.avg_cpc|round(2) }}
+    </p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Avg CPC</p>
+  </div>
+
+  <div class="bg-white rounded-xl border px-5 py-5 hover:shadow-md transition-all duration-200 relative overflow-hidden col-span-1"
+       style="border-color: var(--border-muted); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-[28px] font-bold text-slate-900 leading-none tabular-nums tracking-tight">
+      {% if t.cpl %}
+        {% if t.cpl >= 1000 %}${{ (t.cpl / 1000)|round(1) }}k
+        {% else %}${{ t.cpl|round(0)|int }}{% endif %}
+      {% else %}—{% endif %}
+    </p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2.5">Cost / Lead</p>
+  </div>
+
+</div>
+
+{# ── Daily spend trend ───────────────────────────────────────────────────────── #}
+{% if daily %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
+  <h2 class="font-semibold text-sm text-gray-800 mb-4">Daily Spend</h2>
+  <div style="height:180px;">
+    <canvas id="daily-spend-chart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+{# ── Campaign table ──────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <div class="px-5 py-3.5 border-b border-gray-100">
+    <h2 class="font-semibold text-sm text-gray-800">Campaigns</h2>
+  </div>
+
+  {% if data.rows %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase"
+           style="background: var(--surface-sub);">
+      <tr>
+        <th class="px-4 py-3 text-left">Campaign</th>
+        <th class="px-4 py-3 text-center">Status</th>
+        <th class="px-4 py-3 text-right" data-tip="Total amount spent in this period">Spend</th>
+        <th class="px-4 py-3 text-right">Impressions</th>
+        <th class="px-4 py-3 text-right">Clicks</th>
+        <th class="px-4 py-3 text-right" data-tip="Click-through rate: clicks ÷ impressions">CTR</th>
+        <th class="px-4 py-3 text-right" data-tip="Average cost per click">Avg CPC</th>
+        <th class="px-4 py-3 text-right" data-tip="Conversion events recorded by Google Ads">Conversions</th>
+        <th class="px-4 py-3 text-right" data-tip="Cost per conversion (spend ÷ conversions)">CPL</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% set total_spend = data.totals.spend %}
+      {% for row in data.rows %}
+      <tr class="hover:bg-slate-50 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="{{ row.name }}">{{ row.name }}</td>
+        <td class="px-4 py-3 text-center">
+          {% if row.status == 'ENABLED' %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>Active
+            </span>
+          {% elif row.status == 'PAUSED' %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>Paused
+            </span>
+          {% else %}
+            <span class="text-[11px] text-gray-400">{{ row.status|capitalize }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold">
+          {% if row.spend >= 1000000 %}${{ (row.spend / 1000000)|round(1) }}M
+          {% elif row.spend >= 1000 %}${{ (row.spend / 1000)|round(1) }}k
+          {% else %}${{ row.spend|round(0)|int }}{% endif %}
+          {% if total_spend > 0 %}
+          <span class="text-[10px] text-gray-400 font-normal ml-1">{{ (row.spend / total_spend * 100)|round(0)|int }}%</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">
+          {% if row.impressions >= 1000000 %}{{ (row.impressions / 1000000)|round(1) }}M
+          {% elif row.impressions >= 1000 %}{{ (row.impressions / 1000)|round(0)|int }}k
+          {% else %}{{ row.impressions }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">
+          {% if row.clicks >= 1000 %}{{ (row.clicks / 1000)|round(1) }}k
+          {% else %}{{ row.clicks }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.ctr >= 5 %}text-green-600 font-semibold{% elif row.ctr >= 2 %}text-gray-700{% else %}text-red-500{% endif %}">
+          {{ row.ctr|round(2) }}%
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">${{ row.avg_cpc|round(2) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700 font-medium">{{ row.conversions|round(0)|int or '—' }}</td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.cpl is not none and row.cpl < 200 %}text-green-600 font-semibold
+          {% elif row.cpl is not none and row.cpl < 500 %}text-gray-700
+          {% elif row.cpl is not none %}text-red-500{% endif %}">
+          {% if row.cpl is not none %}
+            {% if row.cpl >= 1000 %}${{ (row.cpl / 1000)|round(1) }}k
+            {% else %}${{ row.cpl|round(0)|int }}{% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+      <tr>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider" colspan="2">Total</td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.spend >= 1000000 %}${{ (t.spend / 1000000)|round(1) }}M
+          {% elif t.spend >= 1000 %}${{ (t.spend / 1000)|round(1) }}k
+          {% else %}${{ t.spend|round(0)|int }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.impressions >= 1000000 %}{{ (t.impressions / 1000000)|round(1) }}M
+          {% elif t.impressions >= 1000 %}{{ (t.impressions / 1000)|round(0)|int }}k
+          {% else %}{{ t.impressions }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.clicks >= 1000 %}{{ (t.clicks / 1000)|round(1) }}k
+          {% else %}{{ t.clicks }}{% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.ctr|round(2) }}%</td>
+        <td class="px-4 py-3 text-right tabular-nums">${{ t.avg_cpc|round(2) }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">{{ t.conversions|round(0)|int }}</td>
+        <td class="px-4 py-3 text-right tabular-nums">
+          {% if t.cpl %}
+            {% if t.cpl >= 1000 %}${{ (t.cpl / 1000)|round(1) }}k
+            {% else %}${{ t.cpl|round(0)|int }}{% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% else %}
+  <div class="px-6 py-12 text-center text-gray-400 text-sm">
+    No campaign data found for this period.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}{# end configured #}
+
+{% if daily %}
+<script>
+(function () {
+  var labels = {{ daily | map(attribute='date') | list | tojson }};
+  var values = {{ daily | map(attribute='spend') | list | tojson }};
+
+  new Chart(document.getElementById('daily-spend-chart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Daily Spend ($)',
+        data: values,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.08)',
+        borderWidth: 2,
+        pointRadius: labels.length > 30 ? 0 : 3,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return '$' + ctx.parsed.y.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 },
+            maxTicksLimit: 10,
+            color: '#94a3b8',
+          }
+        },
+        y: {
+          grid: { color: '#f1f5f9' },
+          ticks: {
+            font: { size: 11 },
+            color: '#94a3b8',
+            callback: function(v) {
+              return '$' + (v >= 1000 ? (v/1000).toFixed(1)+'k' : v.toFixed(0));
+            }
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{% endblock %}
