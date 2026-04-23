@@ -186,6 +186,7 @@ NAV = [
         {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
         {"endpoint": "web_traffic",      "label": "Traffic Sources"},
         {"endpoint": "attribution",       "label": "Attribution"},
+        {"endpoint": "linkedin",          "label": "LinkedIn Ads"},
     ]},
 ]
 
@@ -1232,6 +1233,36 @@ def attribution():
         ga4_ok=ga4_ok,
         nav=NAV,
         active="attribution",
+    )
+
+
+@app.route("/marketing/linkedin")
+@login_required
+def linkedin():
+    import linkedin_ads
+    from hubspot import get_linkedin_pipeline
+    period = request.args.get("period", "last_30")
+    valid  = [p[0] for p in PAID_MEDIA_PERIODS]
+    if period not in valid:
+        period = "last_30"
+
+    li_data  = get_cached(linkedin_ads.fetch_campaign_analytics, period)
+    pipeline = get_cached(get_linkedin_pipeline, period)
+
+    if li_data is None:
+        li_data = linkedin_ads.fetch_campaign_analytics(period)
+    if pipeline is None:
+        pipeline = get_linkedin_pipeline(period)
+
+    return render_template(
+        "linkedin.html",
+        li=li_data,
+        pipeline=pipeline,
+        li_ok=linkedin_ads.is_configured(),
+        periods=PAID_MEDIA_PERIODS,
+        period=period,
+        nav=NAV,
+        active="linkedin",
     )
 
 

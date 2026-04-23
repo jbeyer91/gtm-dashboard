@@ -24,7 +24,7 @@
 {% set rev   = t.get('won_amt', 0) %}
 {% set spend_total = s.get('cost', 0) if ga else 0 %}
 
-<div class="grid gap-0 mb-1" style="grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;">
+<div class="grid gap-0 mb-1" style="grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;">
   {# helper macro for funnel step #}
   {% macro fstep(label, value, sub='', color='indigo') %}
   <div class="bg-white border border-gray-100 rounded-xl px-3 py-4 text-center shadow-sm hover:shadow-md transition-all">
@@ -78,18 +78,6 @@
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
       <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Sessions</p>
-    </div>
-  {% endif %}
-  {{ arrow() }}
-
-  {# Key Events #}
-  {% if ga %}
-    {% set ke = s.get('key_events', 0) %}
-    {{ fstep("Key Events", ke if ke else '—', sub="form fills / demos") }}
-  {% else %}
-    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
-      <p class="text-xl font-bold text-gray-300">—</p>
-      <p class="text-[10px] font-semibold text-gray-300 uppercase tracking-[0.07em] mt-1.5">Key Events</p>
     </div>
   {% endif %}
   {{ arrow() }}

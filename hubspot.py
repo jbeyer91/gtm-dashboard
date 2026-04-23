@@ -2055,4 +2055,93 @@ def get_utm_deal_attribution(period: str) -> list:
             b["pipeline_amt"] += amount
 
     return sorted(buckets.values(), key=lambda r: r["deals"], reverse=True)
-    return records
+
+
+def get_linkedin_pipeline(period: str = "last_30") -> dict:
+    """HubSpot pipeline from contacts sourced via Paid Social (LinkedIn Lead Gen Forms).
+
+    Requires the HubSpot-LinkedIn Lead Gen Form integration to be active.
+    Contacts synced from LinkedIn arrive with hs_analytics_source = 'PAID_SOCIAL'.
+
+    Returns:
+        {
+          "leads":        int,   # contacts created from paid social in period
+          "deals":        int,
+          "won_deals":    int,
+          "pipeline_amt": float,
+          "won_amt":      float,
+          "has_data":     bool,  # False when integration not set up
+        }
+    """
+    from collections import defaultdict
+
+    start, end = get_date_range(period)
+    start_ts   = int(start.timestamp() * 1000)
+    end_ts     = int(end.timestamp() * 1000)
+
+    # 1. Contacts with paid social source created in period
+    contact_payload = {
+        "filterGroups": [{
+            "filters": [
+                {"propertyName": "createdate",           "operator": "GTE", "value": str(start_ts)},
+                {"propertyName": "createdate",           "operator": "LTE", "value": str(end_ts)},
+                {"propertyName": "hs_analytics_source",  "operator": "EQ",  "value": "PAID_SOCIAL"},
+            ]
+        }],
+        "properties": ["hs_analytics_source", "createdate"],
+        "limit": 100,
+    }
+    contacts   = _search_all("contacts", contact_payload)
+    lead_count = len(contacts)
+
+    if not contacts:
+        return {"leads": 0, "deals": 0, "won_deals": 0,
+                "pipeline_amt": 0.0, "won_amt": 0.0, "has_data": False}
+
+    contact_ids = [str(c["id"]) for c in contacts]
+
+    # 2. Associated deals (NB pipeline only)
+    contact_to_deals = _batch_associations("contacts", "deals", contact_ids)
+    all_deal_ids     = list({did for dids in contact_to_deals.values() for did in dids})
+
+    if not all_deal_ids:
+        return {"leads": lead_count, "deals": 0, "won_deals": 0,
+                "pipeline_amt": 0.0, "won_amt": 0.0, "has_data": True}
+
+    # 3. Batch-read deal details
+    deals_data = {}
+    for i in range(0, len(all_deal_ids), 100):
+        batch = all_deal_ids[i:i + 100]
+        resp  = _post_with_retry(
+            f"{BASE_URL}/crm/v3/objects/deals/batch/read",
+            {"inputs": [{"id": did} for did in batch],
+             "properties": ["pipeline", "amount", "hs_is_closed_won", "dealstage"]},
+            "LinkedIn pipeline deals batch/read",
+        )
+        if resp.ok:
+            for obj in resp.json().get("results", []):
+                deals_data[str(obj["id"])] = obj.get("properties", {})
+
+    deals_total = won_deals = 0
+    pipeline_amt = won_amt = 0.0
+
+    for deal_id, props in deals_data.items():
+        if props.get("pipeline") != "31544320":
+            continue
+        amount = float(props.get("amount") or 0)
+        is_won = props.get("hs_is_closed_won") == "true"
+        deals_total += 1
+        if is_won:
+            won_deals += 1
+            won_amt   += amount
+        else:
+            pipeline_amt += amount
+
+    return {
+        "leads":        lead_count,
+        "deals":        deals_total,
+        "won_deals":    won_deals,
+        "pipeline_amt": round(pipeline_amt, 2),
+        "won_amt":      round(won_amt, 2),
+        "has_data":     True,
+    }
