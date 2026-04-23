@@ -106,14 +106,16 @@ def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
     )
     names = {}
     try:
+        log.info("LinkedIn campaign name fetch: GET %s", url)
         resp = requests.get(url, headers=_headers(), timeout=30)
+        log.info("LinkedIn campaign name fetch: status=%s body=%s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         data = resp.json()
         for el in data.get("elements", []):
             cid = str(el.get("id", ""))
             if cid:
                 names[cid] = el.get("name", cid)
-        log.debug("LinkedIn campaign name search: %d names fetched", len(names))
+        log.info("LinkedIn campaign name search: %d names fetched for %d requested", len(names), len(campaign_ids))
     except Exception as exc:
         log.warning("LinkedIn campaign name search failed: %s", exc)
     for cid in campaign_ids:
