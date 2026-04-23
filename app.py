@@ -1203,6 +1203,7 @@ def web_traffic():
 @login_required
 def attribution():
     import google_analytics
+    import linkedin_ads
     from hubspot import get_utm_deal_attribution
     period = request.args.get("period", "last_30")
     valid  = [p[0] for p in PAID_MEDIA_PERIODS]
@@ -1212,6 +1213,7 @@ def attribution():
     spend_data = get_cached(google_analytics.fetch_campaign_spend, period)
     inbound    = get_cached(analytics.compute_inbound_funnel, period)
     utm_rows   = get_cached(get_utm_deal_attribution, period)
+    li_data    = get_cached(linkedin_ads.fetch_campaign_analytics, period)
 
     if spend_data is None:
         spend_data = google_analytics.fetch_campaign_spend(period)
@@ -1219,17 +1221,22 @@ def attribution():
         inbound = analytics.compute_inbound_funnel(period)
     if utm_rows is None:
         utm_rows = get_utm_deal_attribution(period)
+    if li_data is None:
+        li_data = linkedin_ads.fetch_campaign_analytics(period)
 
     ga4_ok = google_analytics.is_configured()
+    li_ok  = linkedin_ads.is_configured()
 
     return render_template(
         "attribution.html",
         spend=spend_data,
+        li_spend=li_data,
         inbound=inbound,
         utm_rows=utm_rows or [],
         periods=PAID_MEDIA_PERIODS,
         period=period,
         ga4_ok=ga4_ok,
+        li_ok=li_ok,
         nav=NAV,
         active="attribution",
     )
