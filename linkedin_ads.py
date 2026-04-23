@@ -89,25 +89,35 @@ def _date_range(period: str) -> tuple[date, date]:
 
 
 def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
-    """Batch-fetch campaign names for a list of campaign ID strings."""
+    """Fetch campaign names via account search (more reliable than batch-read ids=List()).
+
+    Pulls up to 200 campaigns for the account; falls back to numeric ID for
+    any campaign not returned.
+    """
     if not campaign_ids:
         return {}
+    # Build URL manually to keep search.account.values[0] brackets unencoded
+    url = (
+        f"{BASE_URL}/adCampaigns"
+        f"?q=search"
+        f"&search.account.values[0]=urn%3Ali%3AsponsoredAccount%3A{AD_ACCOUNT_ID}"
+        f"&fields=id,name"
+        f"&count=200"
+    )
     names = {}
-    for i in range(0, len(campaign_ids), 20):
-        chunk = campaign_ids[i:i + 20]
-        encoded_ids = ",".join(
-            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe="")
-            for cid in chunk
-        )
-        try:
-            data = _get("/adCampaigns", {"ids": f"List({encoded_ids})"})
-            for urn, detail in data.get("results", {}).items():
-                cid = urn.split(":")[-1]
-                names[cid] = detail.get("name", cid)
-        except Exception as exc:
-            log.warning("LinkedIn campaign name batch fetch failed: %s", exc)
-            for cid in chunk:
-                names[cid] = cid
+    try:
+        resp = requests.get(url, headers=_headers(), timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        for el in data.get("elements", []):
+            cid = str(el.get("id", ""))
+            if cid:
+                names[cid] = el.get("name", cid)
+        log.debug("LinkedIn campaign name search: %d names fetched", len(names))
+    except Exception as exc:
+        log.warning("LinkedIn campaign name search failed: %s", exc)
+    for cid in campaign_ids:
+        names.setdefault(cid, cid)
     return names
 
 
