@@ -6,7 +6,7 @@ from LinkedIn Campaign Manager via the versioned Marketing Analytics API.
 
 Required env vars:
     LINKEDIN_ACCESS_TOKEN  — OAuth2 bearer token with r_ads + r_ads_reporting scopes
-    LINKEDIN_AD_ACCOUNT_ID — numeric Campaign Manager account ID (from the URL in Campaign Manager)
+    LINKEDIN_AD_ACCOUNT_ID — numeric Campaign Manager account ID
 """
 
 import logging
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 ACCESS_TOKEN  = os.environ.get("LINKEDIN_ACCESS_TOKEN",  "").strip()
 AD_ACCOUNT_ID = os.environ.get("LINKEDIN_AD_ACCOUNT_ID", "").strip()
 BASE_URL      = "https://api.linkedin.com/rest"
-LI_VERSION    = "202501"
+LI_VERSION    = "202604"
 
 
 def is_configured() -> bool:
@@ -31,24 +31,31 @@ def is_configured() -> bool:
 def _headers() -> dict:
     return {
         "Authorization":             f"Bearer {ACCESS_TOKEN}",
+        "Linkedin-Version":          LI_VERSION,
         "X-Restli-Protocol-Version": "2.0.0",
-        "LinkedIn-Version":          LI_VERSION,
     }
 
 
 def _get(path: str, params: dict | None = None) -> dict:
-    # RestLi 2.0 complex values (dateRange, List()) must not have their
-    # parens/colons percent-encoded, so we build the query string manually.
+    """Build URL with RestLi 2.0-aware encoding.
+
+    dateRange  — parens/colons/commas left unencoded (RestLi complex syntax)
+    accounts   — URN colons encoded, List() parens left unencoded
+    everything else — standard encoding
+    """
     url = f"{BASE_URL}{path}"
     if params:
         parts = []
         for k, v in params.items():
-            parts.append(
-                f"{urllib.parse.quote(str(k))}="
-                f"{urllib.parse.quote(str(v), safe='():,')}"
-            )
+            ek = urllib.parse.quote(str(k))
+            if k == "dateRange":
+                ev = urllib.parse.quote(str(v), safe="():,")
+            elif k == "accounts":
+                ev = str(v)  # pre-encoded URN inside List() — passed as-is
+            else:
+                ev = urllib.parse.quote(str(v), safe=",")
+            parts.append(f"{ek}={ev}")
         url = f"{url}?{'&'.join(parts)}"
-
     resp = requests.get(url, headers=_headers(), timeout=30)
     resp.raise_for_status()
     return resp.json()
@@ -106,27 +113,33 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
                 "error": "not_configured"}
 
     start, end = _date_range(period)
-    account_urn = f"urn:li:sponsoredAccount:{AD_ACCOUNT_ID}"
+
+    # dateRange: RestLi 2.0 complex, year/month/day order per API docs
+    date_range = (
+        f"(start:(year:{start.year},month:{start.month},day:{start.day}),"
+        f"end:(year:{end.year},month:{end.month},day:{end.day}))"
+    )
+    # accounts: URN colons must be percent-encoded inside List()
+    encoded_urn = urllib.parse.quote(
+        f"urn:li:sponsoredAccount:{AD_ACCOUNT_ID}", safe=""
+    )
 
     try:
-        date_range = (
-            f"(start:(day:{start.day},month:{start.month},year:{start.year}),"
-            f"end:(day:{end.day},month:{end.month},year:{end.year}))"
-        )
         params = {
             "q":               "analytics",
             "pivot":           "CAMPAIGN",
             "dateRange":       date_range,
             "timeGranularity": "ALL",
-            "accounts":        f"List({account_urn})",
-            "fields":          "impressions,clicks,costInLocalCurrency,oneClickLeads",
+            "accounts":        f"List({encoded_urn})",
+            "fields":          "pivotValues,impressions,clicks,costInLocalCurrency,oneClickLeads",
         }
         data     = _get("/adAnalytics", params)
         elements = data.get("elements", [])
 
         rows = []
         for el in elements:
-            pv          = el.get("pivotValue", "")
+            pivot_vals  = el.get("pivotValues", [])
+            pv          = pivot_vals[0] if pivot_vals else ""
             cid         = pv.split(":")[-1] if "sponsoredCampaign:" in pv else None
             cost        = float(el.get("costInLocalCurrency", 0))
             impressions = int(el.get("impressions", 0))
