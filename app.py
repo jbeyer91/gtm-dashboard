@@ -1052,6 +1052,18 @@ def forecast():
 @login_required
 def inbound_funnel():
     period = request.args.get("period", "this_month")
+    prior_key = None if period == "next_month" else "prior_" + period
+    keys_to_check = [period] + ([prior_key] if prior_key else [])
+    missing = [p for p in keys_to_check if not is_cached(analytics.compute_inbound_funnel, p)]
+    if missing:
+        for p in missing:
+            def _bg_warm(_p=p):
+                try:
+                    analytics.compute_inbound_funnel(_p)
+                except Exception as exc:
+                    log.warning("bg inbound_funnel warm (%s) failed: %s", _p, exc)
+            threading.Thread(target=_bg_warm, daemon=True).start()
+        return render_template("loading.html", nav=NAV, active="inbound_funnel"), 202
     try:
         data = analytics.compute_inbound_funnel(period)
         prior_data, prior_label = _prior(period, analytics.compute_inbound_funnel)

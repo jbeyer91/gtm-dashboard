@@ -96,7 +96,7 @@ def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
     for i in range(0, len(campaign_ids), 20):
         chunk = campaign_ids[i:i + 20]
         encoded_ids = ",".join(
-            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe="")
+            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe=":")
             for cid in chunk
         )
         try:
