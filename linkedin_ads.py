@@ -2,7 +2,7 @@
 LinkedIn Marketing API integration for campaign spend and lead gen performance.
 
 Pulls spend, impressions, clicks, and Lead Gen Form leads by campaign
-from LinkedIn Campaign Manager via the Marketing Analytics API.
+from LinkedIn Campaign Manager via the versioned Marketing Analytics API.
 
 Required env vars:
     LINKEDIN_ACCESS_TOKEN  — OAuth2 bearer token with r_ads + r_ads_reporting scopes
@@ -11,6 +11,7 @@ Required env vars:
 
 import logging
 import os
+import urllib.parse
 from datetime import date, timedelta
 
 import requests
@@ -19,7 +20,8 @@ log = logging.getLogger(__name__)
 
 ACCESS_TOKEN  = os.environ.get("LINKEDIN_ACCESS_TOKEN",  "").strip()
 AD_ACCOUNT_ID = os.environ.get("LINKEDIN_AD_ACCOUNT_ID", "").strip()
-BASE_URL      = "https://api.linkedin.com/v2"
+BASE_URL      = "https://api.linkedin.com/rest"
+LI_VERSION    = "202501"
 
 
 def is_configured() -> bool:
@@ -28,18 +30,26 @@ def is_configured() -> bool:
 
 def _headers() -> dict:
     return {
-        "Authorization":              f"Bearer {ACCESS_TOKEN}",
-        "X-Restli-Protocol-Version":  "2.0.0",
+        "Authorization":             f"Bearer {ACCESS_TOKEN}",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "LinkedIn-Version":          LI_VERSION,
     }
 
 
 def _get(path: str, params: dict | None = None) -> dict:
-    resp = requests.get(
-        f"{BASE_URL}{path}",
-        headers=_headers(),
-        params=params or {},
-        timeout=30,
-    )
+    # RestLi 2.0 complex values (dateRange, List()) must not have their
+    # parens/colons percent-encoded, so we build the query string manually.
+    url = f"{BASE_URL}{path}"
+    if params:
+        parts = []
+        for k, v in params.items():
+            parts.append(
+                f"{urllib.parse.quote(str(k))}="
+                f"{urllib.parse.quote(str(v), safe='():,')}"
+            )
+        url = f"{url}?{'&'.join(parts)}"
+
+    resp = requests.get(url, headers=_headers(), timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -73,7 +83,7 @@ def _date_range(period: str) -> tuple[date, date]:
 
 def _campaign_name(campaign_id: str) -> str:
     try:
-        data = _get(f"/adCampaignsV2/{campaign_id}")
+        data = _get(f"/adCampaigns/{campaign_id}")
         return data.get("name", campaign_id)
     except Exception:
         return campaign_id
@@ -99,23 +109,22 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
     account_urn = f"urn:li:sponsoredAccount:{AD_ACCOUNT_ID}"
 
     try:
+        date_range = (
+            f"(start:(day:{start.day},month:{start.month},year:{start.year}),"
+            f"end:(day:{end.day},month:{end.month},year:{end.year}))"
+        )
         params = {
-            "q":                     "analytics",
-            "pivot":                 "CAMPAIGN",
-            "dateRange.start.day":   start.day,
-            "dateRange.start.month": start.month,
-            "dateRange.start.year":  start.year,
-            "dateRange.end.day":     end.day,
-            "dateRange.end.month":   end.month,
-            "dateRange.end.year":    end.year,
-            "timeGranularity":       "ALL",
-            "accounts[0]":           account_urn,
-            "fields":                (
+            "q":               "analytics",
+            "pivot":           "CAMPAIGN",
+            "dateRange":       date_range,
+            "timeGranularity": "ALL",
+            "accounts":        f"List({account_urn})",
+            "fields":          (
                 "pivot,pivotValue,impressions,clicks,"
                 "costInLocalCurrency,leadGenerationMailContactInfoShares"
             ),
         }
-        data     = _get("/adAnalyticsV2", params)
+        data     = _get("/adAnalytics", params)
         elements = data.get("elements", [])
 
         rows = []
