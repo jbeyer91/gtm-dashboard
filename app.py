@@ -184,9 +184,8 @@ NAV = [
         {"endpoint": "abm",             "label": "ABM"},
         {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
         {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
-        {"endpoint": "web_traffic",      "label": "Traffic Sources"},
-        {"endpoint": "attribution",       "label": "Attribution"},
-        {"endpoint": "linkedin",          "label": "LinkedIn Ads"},
+        {"endpoint": "paid_media",      "label": "Paid Media"},
+        {"endpoint": "attribution",     "label": "Attribution"},
     ]},
 ]
 
@@ -1263,6 +1262,42 @@ def linkedin():
         period=period,
         nav=NAV,
         active="linkedin",
+    )
+
+
+@app.route("/marketing/paid-media")
+@login_required
+def paid_media():
+    import google_analytics
+    import linkedin_ads
+    from hubspot import get_linkedin_pipeline
+    period = request.args.get("period", "last_30")
+    valid  = [p[0] for p in PAID_MEDIA_PERIODS]
+    if period not in valid:
+        period = "last_30"
+
+    ga_channels  = get_cached(google_analytics.fetch_channel_performance, period)
+    ga_campaigns = get_cached(google_analytics.fetch_campaign_spend, period)
+    li_data      = get_cached(linkedin_ads.fetch_campaign_analytics, period)
+    li_pipeline  = get_cached(get_linkedin_pipeline, period)
+
+    if ga_channels  is None: ga_channels  = google_analytics.fetch_channel_performance(period)
+    if ga_campaigns is None: ga_campaigns = google_analytics.fetch_campaign_spend(period)
+    if li_data      is None: li_data      = linkedin_ads.fetch_campaign_analytics(period)
+    if li_pipeline  is None: li_pipeline  = get_linkedin_pipeline(period)
+
+    return render_template(
+        "paid_media_overview.html",
+        ga_channels=ga_channels,
+        ga_campaigns=ga_campaigns,
+        li=li_data,
+        li_pipeline=li_pipeline,
+        ga4_ok=google_analytics.is_configured(),
+        li_ok=linkedin_ads.is_configured(),
+        periods=PAID_MEDIA_PERIODS,
+        period=period,
+        nav=NAV,
+        active="paid_media",
     )
 
 
