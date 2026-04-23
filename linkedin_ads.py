@@ -96,7 +96,9 @@ def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
     """
     names = {}
     for cid in campaign_ids:
-        url = f"{BASE_URL}/adCampaigns/{cid}"
+        # LinkedIn REST API keys resources by URN; numeric ID alone returns 404
+        urn = urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe="")
+        url = f"{BASE_URL}/adCampaigns/{urn}"
         try:
             resp = requests.get(url, headers=_headers(), timeout=10)
             if resp.ok:
