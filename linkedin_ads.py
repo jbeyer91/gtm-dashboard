@@ -89,35 +89,24 @@ def _date_range(period: str) -> tuple[date, date]:
 
 
 def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
-    """Fetch campaign names via account search (more reliable than batch-read ids=List()).
+    """Fetch campaign names one-by-one using GET /adCampaigns/{id}.
 
-    Pulls up to 200 campaigns for the account; falls back to numeric ID for
-    any campaign not returned.
+    Simple per-resource GET avoids RestLi batch-read and search parameter
+    encoding issues that silently fail across API versions.
     """
-    if not campaign_ids:
-        return {}
-    # Build URL manually to keep search.account.values[0] brackets unencoded
-    url = (
-        f"{BASE_URL}/adCampaigns"
-        f"?q=search"
-        f"&search.account.values[0]=urn%3Ali%3AsponsoredAccount%3A{AD_ACCOUNT_ID}"
-        f"&fields=id,name"
-        f"&count=200"
-    )
     names = {}
-    try:
-        resp = requests.get(url, headers=_headers(), timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        for el in data.get("elements", []):
-            cid = str(el.get("id", ""))
-            if cid:
-                names[cid] = el.get("name", cid)
-        log.debug("LinkedIn campaign name search: %d names fetched", len(names))
-    except Exception as exc:
-        log.warning("LinkedIn campaign name search failed: %s", exc)
     for cid in campaign_ids:
-        names.setdefault(cid, cid)
+        url = f"{BASE_URL}/adCampaigns/{cid}"
+        try:
+            resp = requests.get(url, headers=_headers(), timeout=10)
+            if resp.ok:
+                names[cid] = resp.json().get("name", cid)
+            else:
+                log.warning("LinkedIn campaign %s: %s %s", cid, resp.status_code, resp.text[:300])
+                names[cid] = cid
+        except Exception as exc:
+            log.warning("LinkedIn campaign %s fetch failed: %s", cid, exc)
+            names[cid] = cid
     return names
 
 
