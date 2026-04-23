@@ -14,15 +14,17 @@
 {% set s  = spend.totals if spend else {} %}
 {% set t  = inbound.totals if inbound else {} %}
 {% set ga = ga4_ok and spend and not spend.error %}
+{% set li = li_ok and li_spend and li_spend.error != 'not_configured' %}
 
 {# Compute conversions between stages #}
-{% set clicks_to_sessions = ((s.get('clicks',0) / s.get('clicks',1)) * 100) if s.get('clicks') else none %}
 {% set leads = t.get('leads_created', 0) %}
 {% set deals = t.get('deals_created', 0) %}
 {% set won   = t.get('deals_won', 0) %}
 {% set pg    = t.get('pg_amt', 0) %}
 {% set rev   = t.get('won_amt', 0) %}
-{% set spend_total = s.get('cost', 0) if ga else 0 %}
+{% set ga_spend  = s.get('cost', 0) if ga else 0 %}
+{% set li_cost   = li_spend.totals.cost if li else 0 %}
+{% set spend_total = ga_spend + li_cost %}
 
 <div class="grid gap-0 mb-1" style="grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;">
   {# helper macro for funnel step #}
@@ -46,8 +48,10 @@
   {% endmacro %}
 
   {# Spend #}
-  {% if ga %}
-    {{ fstep("Spend", "$" ~ (s.cost|round(0)|int if s.cost < 10000 else ((s.cost/1000)|round(1)|string ~ "k"))) }}
+  {% if spend_total %}
+    {{ fstep("Spend",
+             "$" ~ (spend_total|round(0)|int if spend_total < 10000 else ((spend_total/1000)|round(1)|string ~ "k")),
+             sub=("GA + LinkedIn" if ga and li else ("Google Ads" if ga else "LinkedIn"))) }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
@@ -99,6 +103,66 @@
 
 </div>
 
+{# ── Spend breakdown by vendor ───────────────────────────────────────────────── #}
+{% if ga or li %}
+<div class="grid grid-cols-2 gap-4 mb-4 mt-3">
+
+  {# Google Ads card #}
+  <div class="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm relative overflow-hidden">
+    <div class="absolute top-0 left-0 right-0 h-[2px]" style="background: linear-gradient(90deg, #4285F4 0%, transparent 100%);"></div>
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em]">Google Ads</span>
+      {% if spend_total and ga_spend %}
+      <span class="text-[10px] font-medium text-slate-400 bg-slate-50 rounded px-1.5 py-0.5">
+        {{ (ga_spend / spend_total * 100)|round(0)|int }}% of spend
+      </span>
+      {% endif %}
+    </div>
+    {% if ga %}
+    <p class="text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+      ${{ (ga_spend|round(0)|int if ga_spend < 10000 else ((ga_spend/1000)|round(1)|string ~ "k")) }}
+    </p>
+    <div class="mt-2 flex gap-4 text-[11px] text-slate-500">
+      {% if s.clicks %}<span>{{ s.clicks }} clicks</span>{% endif %}
+      {% if s.cpc %}<span>${{ s.cpc|round(2) }} CPC</span>{% endif %}
+      {% if s.impressions %}<span>{{ (s.impressions/1000)|round(1) }}k impressions</span>{% endif %}
+    </div>
+    {% else %}
+    <p class="text-2xl font-bold text-gray-300">—</p>
+    <p class="text-[11px] text-slate-400 mt-2">Not configured</p>
+    {% endif %}
+  </div>
+
+  {# LinkedIn Ads card #}
+  <div class="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm relative overflow-hidden">
+    <div class="absolute top-0 left-0 right-0 h-[2px]" style="background: linear-gradient(90deg, #0A66C2 0%, transparent 100%);"></div>
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em]">LinkedIn Ads</span>
+      {% if spend_total and li_cost %}
+      <span class="text-[10px] font-medium text-slate-400 bg-slate-50 rounded px-1.5 py-0.5">
+        {{ (li_cost / spend_total * 100)|round(0)|int }}% of spend
+      </span>
+      {% endif %}
+    </div>
+    {% if li %}
+    {% set lt = li_spend.totals %}
+    <p class="text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+      ${{ (li_cost|round(0)|int if li_cost < 10000 else ((li_cost/1000)|round(1)|string ~ "k")) }}
+    </p>
+    <div class="mt-2 flex gap-4 text-[11px] text-slate-500">
+      {% if lt.clicks %}<span>{{ lt.clicks }} clicks</span>{% endif %}
+      {% if lt.leads %}<span>{{ lt.leads }} LGF leads</span>{% endif %}
+      {% if lt.cpl %}<span>${{ lt.cpl|round(0)|int }} CPL</span>{% endif %}
+    </div>
+    {% else %}
+    <p class="text-2xl font-bold text-gray-300">—</p>
+    <p class="text-[11px] text-slate-400 mt-2">Not configured</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endif %}
+
 {# ── Efficiency metrics ──────────────────────────────────────────────────────── #}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 mt-4">
 
@@ -117,30 +181,30 @@
   {% if spend_total and leads %}
     {% set cpl = (spend_total / leads)|round(0)|int %}
     {{ eff_card("Cost per Lead", "$" ~ cpl,
-        tip="Total ad spend ÷ inbound leads created",
+        tip="Total ad spend (all vendors) ÷ inbound leads created",
         good=(cpl < 300)) }}
   {% else %}
-    {{ eff_card("Cost per Lead", "—", tip="Requires GA4 spend data") }}
+    {{ eff_card("Cost per Lead", "—", tip="Requires ad spend data") }}
   {% endif %}
 
   {# Cost per Deal #}
   {% if spend_total and deals %}
     {% set cpd = (spend_total / deals)|round(0)|int %}
     {{ eff_card("Cost per Deal", "$" ~ cpd,
-        tip="Total ad spend ÷ deals created from inbound",
+        tip="Total ad spend (all vendors) ÷ deals created from inbound",
         good=(cpd < 2000)) }}
   {% else %}
-    {{ eff_card("Cost per Deal", "—", tip="Requires GA4 spend data") }}
+    {{ eff_card("Cost per Deal", "—", tip="Requires ad spend data") }}
   {% endif %}
 
   {# ROAS #}
   {% if spend_total and rev %}
     {% set roas = (rev / spend_total)|round(1) %}
     {{ eff_card("ROAS", roas ~ "×",
-        tip="Revenue won ÷ ad spend. 1× = break even.",
+        tip="Revenue won ÷ total ad spend (all vendors). 1× = break even.",
         good=(roas > 3)) }}
   {% else %}
-    {{ eff_card("ROAS", "—", tip="Requires GA4 spend + won revenue") }}
+    {{ eff_card("ROAS", "—", tip="Requires ad spend + won revenue") }}
   {% endif %}
 
   {# Win Rate #}
