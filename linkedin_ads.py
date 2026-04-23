@@ -50,8 +50,8 @@ def _get(path: str, params: dict | None = None) -> dict:
             ek = urllib.parse.quote(str(k))
             if k == "dateRange":
                 ev = urllib.parse.quote(str(v), safe="():,")
-            elif k == "accounts":
-                ev = str(v)  # pre-encoded URN inside List() — passed as-is
+            elif k in ("accounts", "ids"):
+                ev = str(v)  # pre-encoded URNs inside List() — passed as-is
             else:
                 ev = urllib.parse.quote(str(v), safe=",")
             parts.append(f"{ek}={ev}")
