@@ -89,32 +89,42 @@ def _date_range(period: str) -> tuple[date, date]:
 
 
 def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
-    """Batch-fetch campaign names — bypass _get() to capture raw response for debugging."""
+    """Fetch campaign names — tries numeric-ID batch, then per-campaign GET."""
     if not campaign_ids:
         return {}
     names = {}
+
+    # Attempt 1: batch read with bare numeric IDs — List(123,456,...)
     for i in range(0, len(campaign_ids), 20):
         chunk = campaign_ids[i:i + 20]
-        ids_param = ",".join(f"urn:li:sponsoredCampaign:{cid}" for cid in chunk)
-        url = f"{BASE_URL}/adCampaigns?ids=List({ids_param})"
+        url = f"{BASE_URL}/adCampaigns?ids=List({','.join(chunk)})"
         try:
             resp = requests.get(url, headers=_headers(), timeout=10)
-            if not resp.ok:
-                log.error("LinkedIn /adCampaigns batch %s — body: %s", resp.status_code, resp.text[:500])
-                for cid in chunk:
-                    names[cid] = cid
+            if resp.ok:
+                for key, detail in resp.json().get("results", {}).items():
+                    cid = str(key).split(":")[-1].strip(")")
+                    names[cid] = detail.get("name", cid)
                 continue
-            data = resp.json()
-            results = data.get("results", {})
-            if not results:
-                log.error("LinkedIn /adCampaigns batch: no results key — full body: %s", resp.text[:500])
-            for urn, detail in results.items():
-                cid = urn.split(":")[-1]
-                names[cid] = detail.get("name", cid)
+            log.error("LI batch (numeric) %s ids=%s: %s — %s",
+                      resp.status_code, chunk[:2], url, resp.text[:400])
         except Exception as exc:
-            log.error("LinkedIn /adCampaigns batch exception: %s", exc)
-            for cid in chunk:
+            log.error("LI batch (numeric) exception %s: %s", chunk[:2], exc)
+
+    # Attempt 2: per-campaign GET for any still missing
+    missing = [cid for cid in campaign_ids if cid not in names]
+    for cid in missing:
+        url = f"{BASE_URL}/adCampaigns/{cid}"
+        try:
+            resp = requests.get(url, headers=_headers(), timeout=10)
+            if resp.ok:
+                names[cid] = resp.json().get("name", cid)
+            else:
+                log.error("LI GET /adCampaigns/%s: %s — %s", cid, resp.status_code, resp.text[:400])
                 names[cid] = cid
+        except Exception as exc:
+            log.error("LI GET /adCampaigns/%s exception: %s", cid, exc)
+            names[cid] = cid
+
     return names
 
 
