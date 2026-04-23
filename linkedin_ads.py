@@ -11,7 +11,6 @@ Required env vars:
 
 import logging
 import os
-import urllib.parse
 from datetime import date, timedelta
 
 import requests
@@ -37,19 +36,12 @@ def _headers() -> dict:
 
 
 def _get(path: str, params: dict | None = None) -> dict:
-    # RestLi 2.0 complex values (dateRange, List()) must not have their
-    # parens/colons percent-encoded, so we build the query string manually.
-    url = f"{BASE_URL}{path}"
-    if params:
-        parts = []
-        for k, v in params.items():
-            parts.append(
-                f"{urllib.parse.quote(str(k))}="
-                f"{urllib.parse.quote(str(v), safe='():,')}"
-            )
-        url = f"{url}?{'&'.join(parts)}"
-
-    resp = requests.get(url, headers=_headers(), timeout=30)
+    resp = requests.get(
+        f"{BASE_URL}{path}",
+        headers=_headers(),
+        params=params or {},
+        timeout=30,
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -109,16 +101,17 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
     account_urn = f"urn:li:sponsoredAccount:{AD_ACCOUNT_ID}"
 
     try:
-        date_range = (
-            f"(start:(day:{start.day},month:{start.month},year:{start.year}),"
-            f"end:(day:{end.day},month:{end.month},year:{end.year}))"
-        )
         params = {
-            "q":               "analytics",
-            "pivot":           "CAMPAIGN",
-            "dateRange":       date_range,
-            "timeGranularity": "ALL",
-            "accounts":        f"List({account_urn})",
+            "q":                     "analytics",
+            "pivot":                 "CAMPAIGN",
+            "dateRange.start.day":   start.day,
+            "dateRange.start.month": start.month,
+            "dateRange.start.year":  start.year,
+            "dateRange.end.day":     end.day,
+            "dateRange.end.month":   end.month,
+            "dateRange.end.year":    end.year,
+            "timeGranularity":       "ALL",
+            "accounts[0]":           account_urn,
         }
         data     = _get("/adAnalytics", params)
         log.info("LinkedIn adAnalytics raw keys: %s",
