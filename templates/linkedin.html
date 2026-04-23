@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% from "macros.html" import period_filter %}
+{% block title %} — LinkedIn Ads{% endblock %}
+{% block content %}
+
+<div class="rounded-2xl mb-6 px-8 py-7" style="background: linear-gradient(135deg, #0A66C2 0%, #004182 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+  <h1 class="text-2xl font-bold text-white tracking-tight">LinkedIn Ads</h1>
+  <p class="text-sm mt-1" style="color: rgba(255,255,255,0.6);">Campaign Manager · Lead Gen Form Performance &amp; Pipeline Impact</p>
+</div>
+
+{{ period_filter(period, periods) }}
+
+{% if not li_ok %}
+{# ── Not configured ──────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-8 mt-4">
+  <div class="flex items-start gap-4">
+    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+      <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+      </svg>
+    </div>
+    <div>
+      <p class="font-semibold text-gray-800 mb-1">LinkedIn credentials not configured</p>
+      <p class="text-sm text-gray-500 mb-3">Add the following environment variables to enable LinkedIn campaign data:</p>
+      <div class="bg-gray-50 rounded-lg p-3 font-mono text-xs text-gray-700 space-y-1">
+        <div><span class="text-violet-600">LINKEDIN_ACCESS_TOKEN</span> — OAuth2 bearer token (r_ads + r_ads_reporting scopes)</div>
+        <div><span class="text-violet-600">LINKEDIN_AD_ACCOUNT_ID</span> — numeric Campaign Manager account ID</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+
+{% set t = li.totals if li else {} %}
+
+{% if li.error and li.error != 'not_configured' %}
+<div class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 mb-6 text-sm text-red-700">
+  LinkedIn API error: {{ li.error }}
+</div>
+{% endif %}
+
+{# ── Summary cards ────────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+
+  {% macro card(label, value, sub='', good=none) %}
+  <div class="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm relative overflow-hidden">
+    <div class="absolute top-0 left-0 right-0 h-[2px]" style="background: linear-gradient(90deg, #0A66C2 0%, transparent 100%);"></div>
+    <p class="text-2xl font-bold tabular-nums tracking-tight
+      {% if good == true %}text-green-600{% elif good == false %}text-red-500{% else %}text-slate-900{% endif %}">{{ value }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2">{{ label }}</p>
+    {% if sub %}<p class="text-[11px] text-slate-400 mt-0.5">{{ sub }}</p>{% endif %}
+  </div>
+  {% endmacro %}
+
+  {{ card("Spend",
+          "$" ~ (t.cost|round(0)|int if t.cost and t.cost < 10000 else ((t.cost/1000)|round(1)|string ~ "k") if t.cost else "—")) }}
+
+  {{ card("Impressions",
+          (t.impressions if t.impressions and t.impressions < 10000 else ((t.impressions/1000)|round(1)|string ~ "k")) if t.impressions else "—") }}
+
+  {{ card("Clicks",
+          t.clicks if t.clicks else "—",
+          sub=((t.ctr|string ~ "% CTR") if t.ctr else "")) }}
+
+  {{ card("Leads",
+          t.leads if t.leads else "—",
+          sub="from Lead Gen Forms") }}
+
+  {% if t.cpl %}
+    {{ card("Cost per Lead", "$" ~ (t.cpl|round(0)|int), good=(t.cpl < 200)) }}
+  {% else %}
+    {{ card("Cost per Lead", "—") }}
+  {% endif %}
+
+</div>
+
+{# ── Pipeline impact (HubSpot paid social) ───────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+
+  {% macro pipe_card(label, value, note='') %}
+  <div class="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm relative overflow-hidden">
+    <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400/50 to-transparent"></div>
+    <p class="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{{ value }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2">{{ label }}</p>
+    {% if note %}<p class="text-[10px] text-slate-400 mt-0.5">{{ note }}</p>{% endif %}
+  </div>
+  {% endmacro %}
+
+  {% if pipeline and pipeline.has_data %}
+    {{ pipe_card("HS Leads", pipeline.leads, note="paid social contacts") }}
+    {{ pipe_card("Deals", pipeline.deals) }}
+    {{ pipe_card("Pipeline",
+        "$" ~ ((pipeline.pipeline_amt / 1000)|round(1)|string ~ "k") if pipeline.pipeline_amt else "—") }}
+    {{ pipe_card("Revenue Won",
+        "$" ~ ((pipeline.won_amt / 1000)|round(1)|string ~ "k") if pipeline.won_amt else "—") }}
+  {% else %}
+  <div class="col-span-2 md:col-span-4 bg-gray-50 border border-dashed border-gray-200 rounded-xl px-6 py-5 flex items-center gap-4">
+    <svg class="w-8 h-8 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+    </svg>
+    <div>
+      <p class="text-sm font-semibold text-gray-600">Pipeline data requires HubSpot-LinkedIn integration</p>
+      <p class="text-xs text-gray-400 mt-0.5">Enable the LinkedIn Lead Gen Form sync in HubSpot so form fills appear as paid social contacts. Once active, pipeline and revenue will populate automatically.</p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ── Campaign table ───────────────────────────────────────────────────────────── #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+  <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+    <h2 class="font-semibold text-sm text-gray-800">Campaign Performance</h2>
+    <span class="text-[11px] text-gray-400">LinkedIn Campaign Manager · Lead Gen Forms</span>
+  </div>
+
+  {% if li.rows %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase"
+           style="background: var(--surface-sub);">
+      <tr>
+        <th class="px-4 py-3 text-left">Campaign</th>
+        <th class="px-4 py-3 text-right" data-tip="Total ad spend for this campaign">Spend</th>
+        <th class="px-4 py-3 text-right">Impressions</th>
+        <th class="px-4 py-3 text-right" data-tip="Clicks on the ad">Clicks</th>
+        <th class="px-4 py-3 text-right" data-tip="Click-through rate: clicks ÷ impressions">CTR</th>
+        <th class="px-4 py-3 text-right" data-tip="Lead Gen Form completions">Leads</th>
+        <th class="px-4 py-3 text-right" data-tip="Cost per lead: spend ÷ leads">CPL</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% set total_spend = li.rows | sum(attribute='cost') %}
+      {% for row in li.rows %}
+      <tr class="hover:bg-slate-50 transition-colors duration-100">
+        <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="{{ row.campaign }}">
+          {{ row.campaign }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
+          <div>${{ (row.cost / 1000)|round(1) ~ "k" if row.cost >= 1000 else row.cost|round(0)|int }}</div>
+          {% if total_spend %}
+          <div class="text-[10px] text-gray-400">{{ (row.cost / total_spend * 100)|round(0)|int }}%</div>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">
+          {{ (row.impressions / 1000)|round(1)|string ~ "k" if row.impressions >= 1000 else row.impressions }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ row.clicks }}</td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.ctr is not none %}
+            {% if row.ctr >= 0.5 %}text-green-600 font-medium{% elif row.ctr >= 0.2 %}text-amber-600{% else %}text-red-500{% endif %}
+          {% endif %}">
+          {{ row.ctr|string ~ "%" if row.ctr is not none else "—" }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums {% if row.leads %}font-semibold text-gray-900{% else %}text-gray-300{% endif %}">
+          {{ row.leads or "—" }}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums
+          {% if row.cpl is not none %}
+            {% if row.cpl < 200 %}text-green-600 font-medium{% elif row.cpl < 500 %}text-amber-600{% else %}text-red-500{% endif %}
+          {% endif %}">
+          {{ ("$" ~ row.cpl|round(0)|int) if row.cpl is not none else "—" }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
+      <tr>
+        <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
+        <td class="px-4 py-3 text-right">
+          ${{ (t.cost / 1000)|round(1) ~ "k" if t.cost >= 1000 else t.cost|round(0)|int if t.cost else "—" }}
+        </td>
+        <td class="px-4 py-3 text-right">
+          {{ (t.impressions / 1000)|round(1)|string ~ "k" if t.impressions >= 1000 else t.impressions }}
+        </td>
+        <td class="px-4 py-3 text-right">{{ t.clicks or "—" }}</td>
+        <td class="px-4 py-3 text-right">{{ (t.ctr|string ~ "%") if t.ctr else "—" }}</td>
+        <td class="px-4 py-3 text-right">{{ t.leads or "—" }}</td>
+        <td class="px-4 py-3 text-right">{{ ("$" ~ t.cpl|round(0)|int) if t.cpl else "—" }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% else %}
+  <div class="px-6 py-10 text-center">
+    <p class="text-sm font-semibold text-gray-700 mb-1">No campaign data for this period</p>
+    <p class="text-xs text-gray-400">Campaigns with zero spend and zero impressions are hidden.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
