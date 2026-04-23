@@ -12,12 +12,12 @@
 
 {# ── Combined totals ──────────────────────────────────────────────────────────── #}
 {% set ga  = ga_campaigns.totals if ga_campaigns and not ga_campaigns.error else {} %}
-{% set li  = li.totals           if li and not li.error                      else {} %}
+{% set li_totals = li.totals if li and not li.error else {} %}
 {% set ga_spend = ga.get('cost', 0) or 0 %}
-{% set li_spend = li.get('cost', 0) or 0 %}
+{% set li_spend = li_totals.get('cost', 0) or 0 %}
 {% set total_spend = ga_spend + li_spend %}
 {% set ga_leads = 0 %}
-{% set li_leads = li.get('leads', 0) or 0 %}
+{% set li_leads = li_totals.get('leads', 0) or 0 %}
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
   {% macro total_card(label, value, sub='') %}
@@ -99,7 +99,7 @@
       </div>
       {% endmacro %}
       {{ li_stat("Spend", ("$" ~ ((li_spend/1000)|round(1)|string ~ "k")) if li_spend >= 1000 else (("$" ~ li_spend|round(0)|int) if li_spend else "—")) }}
-      {{ li_stat("Impressions", ((li.get('impressions',0)/1000)|round(1)|string ~ "k") if li.get('impressions',0) >= 1000 else (li.get('impressions',0) or "—")) }}
+      {{ li_stat("Impressions", ((li_totals.get('impressions',0)/1000)|round(1)|string ~ "k") if li_totals.get('impressions',0) >= 1000 else (li_totals.get('impressions',0) or "—")) }}
       {{ li_stat("Leads", li_leads if li_leads else "—") }}
     </div>
   </div>
@@ -186,7 +186,7 @@
       <span class="text-[11px] text-gray-400">Campaign Manager · Lead Gen Forms</span>
     </summary>
 
-    {% if li_data and li_data.rows %}
+    {% if li and li.rows %}
     <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
@@ -201,8 +201,8 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
-        {% set total_li_spend = li_data.rows | sum(attribute='cost') %}
-        {% for row in li_data.rows %}
+        {% set total_li_spend = li.rows | sum(attribute='cost') %}
+        {% for row in li.rows %}
         <tr class="hover:bg-slate-50 transition-colors duration-100">
           <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="{{ row.campaign }}">{{ row.campaign }}</td>
           <td class="px-4 py-3 text-right tabular-nums font-semibold">
@@ -226,7 +226,7 @@
         {% endfor %}
       </tbody>
       <tfoot class="bg-gray-50 font-semibold border-t-2 border-gray-200 text-gray-700">
-        {% set lt = li_data.totals %}
+        {% set lt = li_totals %}
         <tr>
           <td class="px-4 py-3 text-xs uppercase tracking-wider">Total</td>
           <td class="px-4 py-3 text-right">${{ (li_spend/1000)|round(1) ~ "k" if li_spend >= 1000 else li_spend|round(0)|int }}</td>
@@ -241,8 +241,8 @@
     </div>
     {% elif not li_ok %}
     <div class="px-6 py-8 text-center text-sm text-gray-400">LinkedIn not configured — add LINKEDIN_ACCESS_TOKEN and LINKEDIN_AD_ACCOUNT_ID.</div>
-    {% elif li_data and li_data.error %}
-    <div class="px-6 py-8 text-center text-sm text-red-400">LinkedIn API error: {{ li_data.error }}</div>
+    {% elif li and li.error %}
+    <div class="px-6 py-8 text-center text-sm text-red-400">LinkedIn API error: {{ li.error }}</div>
     {% else %}
     <div class="px-6 py-8 text-center text-sm text-gray-400">No LinkedIn campaign data for this period.</div>
     {% endif %}
