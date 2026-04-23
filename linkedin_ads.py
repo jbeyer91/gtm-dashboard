@@ -94,10 +94,11 @@ def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
         return {}
     names = {}
 
-    # Attempt 1: batch read with bare numeric IDs — List(123,456,...)
+    # Versioned API requires account ID in path: /adAccounts/{id}/adCampaigns
+    base = f"{BASE_URL}/adAccounts/{AD_ACCOUNT_ID}/adCampaigns"
     for i in range(0, len(campaign_ids), 20):
         chunk = campaign_ids[i:i + 20]
-        url = f"{BASE_URL}/adCampaigns?ids=List({','.join(chunk)})"
+        url = f"{base}?ids=List({','.join(chunk)})"
         try:
             resp = requests.get(url, headers=_headers(), timeout=10)
             if resp.ok:
@@ -105,24 +106,15 @@ def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
                     cid = str(key).split(":")[-1].strip(")")
                     names[cid] = detail.get("name", cid)
                 continue
-            log.error("LI batch (numeric) %s ids=%s: %s — %s",
-                      resp.status_code, chunk[:2], url, resp.text[:400])
+            log.error("LI /adCampaigns batch %s: %s", resp.status_code, resp.text[:400])
         except Exception as exc:
-            log.error("LI batch (numeric) exception %s: %s", chunk[:2], exc)
+            log.error("LI /adCampaigns batch exception: %s", exc)
 
-    # Attempt 2: per-campaign GET for any still missing
-    missing = [cid for cid in campaign_ids if cid not in names]
-    for cid in missing:
-        url = f"{BASE_URL}/adCampaigns/{cid}"
+    for cid in [c for c in campaign_ids if c not in names]:
         try:
-            resp = requests.get(url, headers=_headers(), timeout=10)
-            if resp.ok:
-                names[cid] = resp.json().get("name", cid)
-            else:
-                log.error("LI GET /adCampaigns/%s: %s — %s", cid, resp.status_code, resp.text[:400])
-                names[cid] = cid
-        except Exception as exc:
-            log.error("LI GET /adCampaigns/%s exception: %s", cid, exc)
+            resp = requests.get(f"{base}/{cid}", headers=_headers(), timeout=10)
+            names[cid] = resp.json().get("name", cid) if resp.ok else cid
+        except Exception:
             names[cid] = cid
 
     return names
