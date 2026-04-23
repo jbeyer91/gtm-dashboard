@@ -119,9 +119,10 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
             "dateRange":       date_range,
             "timeGranularity": "ALL",
             "accounts":        f"List({account_urn})",
-            "fields":          "impressions,clicks,costInLocalCurrency,oneClickLeads",
         }
         data     = _get("/adAnalytics", params)
+        log.info("LinkedIn adAnalytics raw keys: %s",
+                 [list(el.keys()) for el in data.get("elements", [])[:2]])
         elements = data.get("elements", [])
 
         rows = []
