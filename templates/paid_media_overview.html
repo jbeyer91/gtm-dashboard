@@ -20,37 +20,43 @@
 {% set li_leads = li_totals.get('leads', 0) or 0 %}
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  {% macro total_card(label, value, sub='') %}
+  {% macro total_card(label, value, sub='', tip='') %}
   <div class="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm relative overflow-hidden">
     <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-500/60 to-blue-500/40"></div>
     <p class="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{{ value }}</p>
-    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2">{{ label }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.08em] mt-2"
+       {% if tip %}data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
     {% if sub %}<p class="text-[11px] text-slate-400 mt-0.5">{{ sub }}</p>{% endif %}
   </div>
   {% endmacro %}
 
   {{ total_card("Total Spend",
       "$" ~ ((total_spend / 1000)|round(1)|string ~ "k") if total_spend >= 1000 else ("$" ~ total_spend|round(0)|int),
-      sub="Google Ads + LinkedIn") }}
+      sub="Google Ads + LinkedIn",
+      tip="Combined ad spend across Google Ads and LinkedIn for the selected period") }}
 
   {{ total_card("LinkedIn Leads",
       li_leads if li_leads else "—",
-      sub="Lead Gen Form completions") }}
+      sub="Lead Gen Form completions",
+      tip="Prospects who completed a Lead Gen Form embedded directly inside a LinkedIn ad — no landing page visit required") }}
 
   {% if total_spend and li_leads %}
     {{ total_card("Blended CPL",
         "$" ~ (total_spend / li_leads)|round(0)|int,
-        sub="total spend ÷ LI leads") }}
+        sub="total spend ÷ LI leads",
+        tip="Cost per lead: combined spend across all channels ÷ LinkedIn Lead Gen Form completions") }}
   {% else %}
-    {{ total_card("Blended CPL", "—") }}
+    {{ total_card("Blended CPL", "—", tip="Requires ad spend and LinkedIn Lead Gen Form data") }}
   {% endif %}
 
   {% if li_pipeline and li_pipeline.has_data %}
     {{ total_card("Paid Pipeline",
         "$" ~ ((li_pipeline.pipeline_amt / 1000)|round(1)|string ~ "k") if li_pipeline.pipeline_amt else "—",
-        sub="from paid social contacts") }}
+        sub="from paid social contacts",
+        tip="Open deal value in HubSpot from contacts attributed to paid social via LinkedIn Lead Gen Form sync") }}
   {% else %}
-    {{ total_card("Paid Pipeline", "—", sub="HubSpot integration needed") }}
+    {{ total_card("Paid Pipeline", "—", sub="HubSpot integration needed",
+        tip="Requires LinkedIn Lead Gen Form sync to be enabled in HubSpot — contact records from LGF submissions flow in as paid social contacts") }}
   {% endif %}
 </div>
 
@@ -70,15 +76,19 @@
       {% if not ga4_ok %}<span class="ml-auto text-[10px] text-amber-500 font-medium">Not configured</span>{% endif %}
     </div>
     <div class="grid grid-cols-3 divide-x divide-gray-100">
-      {% macro ga_stat(label, value) %}
+      {% macro ga_stat(label, value, tip='') %}
       <div class="px-4 py-4 text-center">
         <p class="text-lg font-bold tabular-nums text-slate-900">{{ value }}</p>
-        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1">{{ label }}</p>
+        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1"
+           {% if tip %}data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
       </div>
       {% endmacro %}
-      {{ ga_stat("Spend", ("$" ~ ((ga_spend/1000)|round(1)|string ~ "k")) if ga_spend >= 1000 else (("$" ~ ga_spend|round(0)|int) if ga_spend else "—")) }}
-      {{ ga_stat("Clicks", ((ga.get('clicks',0)/1000)|round(1)|string ~ "k") if ga.get('clicks',0) >= 1000 else (ga.get('clicks',0) or "—")) }}
-      {{ ga_stat("Sessions", ((ga_campaigns.rows | sum(attribute='sessions') / 1000)|round(1)|string ~ "k") if ga_campaigns and ga_campaigns.rows else "—") }}
+      {{ ga_stat("Spend", ("$" ~ ((ga_spend/1000)|round(1)|string ~ "k")) if ga_spend >= 1000 else (("$" ~ ga_spend|round(0)|int) if ga_spend else "—"),
+          tip="Total Google Ads spend for the period") }}
+      {{ ga_stat("Clicks", ((ga.get('clicks',0)/1000)|round(1)|string ~ "k") if ga.get('clicks',0) >= 1000 else (ga.get('clicks',0) or "—"),
+          tip="Users who clicked a Google Ad and were sent to your site") }}
+      {{ ga_stat("Sessions", ((ga_campaigns.rows | sum(attribute='sessions') / 1000)|round(1)|string ~ "k") if ga_campaigns and ga_campaigns.rows else "—",
+          tip="Website sessions attributed to paid search campaigns in GA4") }}
     </div>
   </div>
 
@@ -92,15 +102,19 @@
       {% if not li_ok %}<span class="ml-auto text-[10px] text-amber-500 font-medium">Not configured</span>{% endif %}
     </div>
     <div class="grid grid-cols-3 divide-x divide-gray-100">
-      {% macro li_stat(label, value) %}
+      {% macro li_stat(label, value, tip='') %}
       <div class="px-4 py-4 text-center">
         <p class="text-lg font-bold tabular-nums text-slate-900">{{ value }}</p>
-        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1">{{ label }}</p>
+        <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1"
+           {% if tip %}data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
       </div>
       {% endmacro %}
-      {{ li_stat("Spend", ("$" ~ ((li_spend/1000)|round(1)|string ~ "k")) if li_spend >= 1000 else (("$" ~ li_spend|round(0)|int) if li_spend else "—")) }}
-      {{ li_stat("Impressions", ((li_totals.get('impressions',0)/1000)|round(1)|string ~ "k") if li_totals.get('impressions',0) >= 1000 else (li_totals.get('impressions',0) or "—")) }}
-      {{ li_stat("Leads", li_leads if li_leads else "—") }}
+      {{ li_stat("Spend", ("$" ~ ((li_spend/1000)|round(1)|string ~ "k")) if li_spend >= 1000 else (("$" ~ li_spend|round(0)|int) if li_spend else "—"),
+          tip="Total LinkedIn Campaign Manager spend for the period") }}
+      {{ li_stat("Impressions", ((li_totals.get('impressions',0)/1000)|round(1)|string ~ "k") if li_totals.get('impressions',0) >= 1000 else (li_totals.get('impressions',0) or "—"),
+          tip="Number of times your LinkedIn ads were displayed to members") }}
+      {{ li_stat("Leads", li_leads if li_leads else "—",
+          tip="Lead Gen Form completions — in-app form fills without leaving LinkedIn") }}
     </div>
   </div>
 
@@ -125,11 +139,11 @@
       <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
           <th class="px-4 py-3 text-left">Campaign</th>
-          <th class="px-4 py-3 text-right">Spend</th>
-          <th class="px-4 py-3 text-right">Clicks</th>
-          <th class="px-4 py-3 text-right">Sessions</th>
-          <th class="px-4 py-3 text-right" data-tip="Cost per click">CPC</th>
-          <th class="px-4 py-3 text-right">Impressions</th>
+          <th class="px-4 py-3 text-right" data-tip="Total ad spend for this campaign">Spend</th>
+          <th class="px-4 py-3 text-right" data-tip="Users who clicked the ad">Clicks</th>
+          <th class="px-4 py-3 text-right" data-tip="Website sessions attributed to this campaign in GA4 — may differ from clicks due to bounces or tracking gaps">Sessions</th>
+          <th class="px-4 py-3 text-right" data-tip="Cost per click: spend ÷ clicks">CPC</th>
+          <th class="px-4 py-3 text-right" data-tip="Times this ad was displayed">Impressions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -192,12 +206,12 @@
       <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
           <th class="px-4 py-3 text-left">Campaign</th>
-          <th class="px-4 py-3 text-right">Spend</th>
-          <th class="px-4 py-3 text-right">Impressions</th>
-          <th class="px-4 py-3 text-right">Clicks</th>
-          <th class="px-4 py-3 text-right" data-tip="Click-through rate">CTR</th>
-          <th class="px-4 py-3 text-right" data-tip="Lead Gen Form completions">Leads</th>
-          <th class="px-4 py-3 text-right" data-tip="Cost per lead">CPL</th>
+          <th class="px-4 py-3 text-right" data-tip="Total ad spend for this campaign">Spend</th>
+          <th class="px-4 py-3 text-right" data-tip="Times this ad was displayed to LinkedIn members">Impressions</th>
+          <th class="px-4 py-3 text-right" data-tip="Users who clicked the ad">Clicks</th>
+          <th class="px-4 py-3 text-right" data-tip="Click-through rate: clicks ÷ impressions. LinkedIn benchmark is ~0.4%">CTR</th>
+          <th class="px-4 py-3 text-right" data-tip="Lead Gen Form completions — in-app form fills without leaving LinkedIn">Leads</th>
+          <th class="px-4 py-3 text-right" data-tip="Cost per lead: campaign spend ÷ Lead Gen Form completions">CPL</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -268,11 +282,11 @@
       <thead class="border-b border-slate-200 text-[11px] font-semibold text-slate-400 tracking-[0.06em] uppercase" style="background: var(--surface-sub);">
         <tr>
           <th class="px-4 py-3 text-left">Channel</th>
-          <th class="px-4 py-3 text-right">Sessions</th>
-          <th class="px-4 py-3 text-right">Engaged</th>
-          <th class="px-4 py-3 text-right" data-tip="Engaged sessions ÷ total sessions">Eng. Rate</th>
-          <th class="px-4 py-3 text-right" data-tip="Average session duration in seconds">Avg Duration</th>
-          <th class="px-4 py-3 text-right">Key Events</th>
+          <th class="px-4 py-3 text-right" data-tip="Total website visits from this channel">Sessions</th>
+          <th class="px-4 py-3 text-right" data-tip="Sessions where the user spent 30+ seconds, viewed 2+ pages, or triggered a conversion">Engaged</th>
+          <th class="px-4 py-3 text-right" data-tip="Engagement rate: engaged sessions ÷ total sessions. Above 60% is healthy.">Eng. Rate</th>
+          <th class="px-4 py-3 text-right" data-tip="Average time users spent in a session for this channel">Avg Duration</th>
+          <th class="px-4 py-3 text-right" data-tip="GA4 conversion events fired from this channel (e.g. demo requests, form submissions)">Key Events</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">

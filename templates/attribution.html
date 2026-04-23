@@ -28,10 +28,11 @@
 
 <div class="grid gap-0 mb-1" style="grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;">
   {# helper macro for funnel step #}
-  {% macro fstep(label, value, sub='', color='indigo') %}
+  {% macro fstep(label, value, sub='', tip='', color='indigo') %}
   <div class="bg-white border border-gray-100 rounded-xl px-3 py-4 text-center shadow-sm hover:shadow-md transition-all">
     <p class="text-xl font-bold text-slate-900 tabular-nums leading-tight">{{ value }}</p>
-    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1.5">{{ label }}</p>
+    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.07em] mt-1.5"
+       {% if tip %}data-tip="{{ tip }}"{% endif %}>{{ label }}</p>
     {% if sub %}<p class="text-[10px] text-slate-400 mt-0.5">{{ sub }}</p>{% endif %}
   </div>
   {% endmacro %}
@@ -51,7 +52,8 @@
   {% if spend_total %}
     {{ fstep("Spend",
              "$" ~ (spend_total|round(0)|int if spend_total < 10000 else ((spend_total/1000)|round(1)|string ~ "k")),
-             sub=("GA + LinkedIn" if ga and li else ("Google Ads" if ga else "LinkedIn"))) }}
+             sub=("GA + LinkedIn" if ga and li else ("Google Ads" if ga else "LinkedIn")),
+             tip="Total paid ad spend for the period across all configured channels") }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
@@ -62,7 +64,8 @@
 
   {# Clicks #}
   {% if ga %}
-    {{ fstep("Clicks", s.clicks if s.clicks < 10000 else ((s.clicks/1000)|round(1)|string ~ "k")) }}
+    {{ fstep("Clicks", s.clicks if s.clicks < 10000 else ((s.clicks/1000)|round(1)|string ~ "k"),
+             tip="Ad clicks from Google Ads — users who clicked through to your site") }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
@@ -77,7 +80,8 @@
     {% set sess = spend.rows | sum(attribute='sessions') %}
     {% set click_pct = (sess / s.clicks * 100)|round(1) if s.clicks else none %}
     {{ fstep("Sessions", sess if sess < 10000 else ((sess/1000)|round(1)|string ~ "k"),
-             sub=(click_pct|string ~ "% of clicks") if (click_pct is not none and click_pct <= 100) else '') }}
+             sub=(click_pct|string ~ "% of clicks") if (click_pct is not none and click_pct <= 100) else '',
+             tip="Website sessions from paid campaigns in GA4 — lower than clicks due to bounces and cross-device gaps") }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
@@ -87,19 +91,23 @@
   {{ arrow() }}
 
   {# Inbound Leads #}
-  {{ fstep("Inbound Leads", leads) }}
+  {{ fstep("Inbound Leads", leads,
+           tip="New contacts created in HubSpot via inbound sources (forms, chat, direct outreach) during the period") }}
   {{ arrow(conv=((deals / leads * 100)|round(0)|int|string ~ "%") if leads else none) }}
 
   {# Deals Created #}
-  {{ fstep("Deals", deals) }}
+  {{ fstep("Deals", deals,
+           tip="Deals created in HubSpot from inbound leads — the percentage shown is lead-to-deal conversion rate") }}
   {{ arrow(conv=((won / deals * 100)|round(0)|int|string ~ "%") if deals else none) }}
 
   {# Pipeline #}
-  {{ fstep("Pipeline", "$" ~ (pg|round(0)|int if pg < 10000 else ((pg/1000)|round(0)|int|string ~ "k"))) }}
+  {{ fstep("Pipeline", "$" ~ (pg|round(0)|int if pg < 10000 else ((pg/1000)|round(0)|int|string ~ "k")),
+           tip="Total value of open (not yet won or lost) deals created from inbound leads") }}
   {{ arrow() }}
 
   {# Revenue Won #}
-  {{ fstep("Revenue Won", "$" ~ (rev|round(0)|int if rev < 10000 else ((rev/1000)|round(0)|int|string ~ "k"))) }}
+  {{ fstep("Revenue Won", "$" ~ (rev|round(0)|int if rev < 10000 else ((rev/1000)|round(0)|int|string ~ "k")),
+           tip="Closed-won revenue from inbound deals — used to calculate ROAS below") }}
 
 </div>
 
