@@ -88,12 +88,27 @@ def _date_range(period: str) -> tuple[date, date]:
     return today - timedelta(days=30), today
 
 
-def _campaign_name(campaign_id: str) -> str:
-    try:
-        data = _get(f"/adCampaigns/{campaign_id}")
-        return data.get("name", campaign_id)
-    except Exception:
-        return campaign_id
+def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
+    """Batch-fetch campaign names for a list of campaign ID strings."""
+    if not campaign_ids:
+        return {}
+    names = {}
+    for i in range(0, len(campaign_ids), 20):
+        chunk = campaign_ids[i:i + 20]
+        encoded_ids = ",".join(
+            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe="")
+            for cid in chunk
+        )
+        try:
+            data = _get("/adCampaigns", {"ids": f"List({encoded_ids})"})
+            for urn, detail in data.get("results", {}).items():
+                cid = urn.split(":")[-1]
+                names[cid] = detail.get("name", cid)
+        except Exception as exc:
+            log.warning("LinkedIn campaign name batch fetch failed: %s", exc)
+            for cid in chunk:
+                names[cid] = cid
+    return names
 
 
 def fetch_campaign_analytics(period: str = "last_30") -> dict:
@@ -136,17 +151,25 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
         data     = _get("/adAnalytics", params)
         elements = data.get("elements", [])
 
+        # Collect all campaign IDs then batch-fetch names in one request
+        campaign_ids = []
+        for el in elements:
+            pv = (el.get("pivotValues") or [""])[0]
+            if "sponsoredCampaign:" in pv:
+                campaign_ids.append(pv.split(":")[-1])
+        names = _fetch_campaign_names(list(set(campaign_ids)))
+
         rows = []
         for el in elements:
-            pivot_vals  = el.get("pivotValues", [])
-            pv          = pivot_vals[0] if pivot_vals else ""
+            pivot_vals  = el.get("pivotValues") or [""]
+            pv          = pivot_vals[0]
             cid         = pv.split(":")[-1] if "sponsoredCampaign:" in pv else None
             cost        = float(el.get("costInLocalCurrency", 0))
             impressions = int(el.get("impressions", 0))
             clicks      = int(el.get("clicks", 0))
             leads       = int(el.get("oneClickLeads", 0))
             rows.append({
-                "campaign":    _campaign_name(cid) if cid else "Unknown",
+                "campaign":    names.get(cid, cid or "Unknown"),
                 "cost":        round(cost, 2),
                 "impressions": impressions,
                 "clicks":      clicks,
