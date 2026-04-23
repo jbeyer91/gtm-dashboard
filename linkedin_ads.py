@@ -89,28 +89,30 @@ def _date_range(period: str) -> tuple[date, date]:
 
 
 def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
-    """Batch-fetch campaign names via ids=List() with literal colons in URNs.
-
-    LinkedIn's RestLi parser rejects percent-encoded colons (%3A) inside
-    List() values — URN colons must be passed as literals.
-    """
+    """Batch-fetch campaign names — bypass _get() to capture raw response for debugging."""
     if not campaign_ids:
         return {}
     names = {}
     for i in range(0, len(campaign_ids), 20):
         chunk = campaign_ids[i:i + 20]
-        # safe=":" keeps colons literal; RestLi List() requires urn:li:... not urn%3Ali%3A...
-        encoded_ids = ",".join(
-            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe=":")
-            for cid in chunk
-        )
+        ids_param = ",".join(f"urn:li:sponsoredCampaign:{cid}" for cid in chunk)
+        url = f"{BASE_URL}/adCampaigns?ids=List({ids_param})"
         try:
-            data = _get("/adCampaigns", {"ids": f"List({encoded_ids})"})
-            for urn, detail in data.get("results", {}).items():
+            resp = requests.get(url, headers=_headers(), timeout=10)
+            if not resp.ok:
+                log.error("LinkedIn /adCampaigns batch %s — body: %s", resp.status_code, resp.text[:500])
+                for cid in chunk:
+                    names[cid] = cid
+                continue
+            data = resp.json()
+            results = data.get("results", {})
+            if not results:
+                log.error("LinkedIn /adCampaigns batch: no results key — full body: %s", resp.text[:500])
+            for urn, detail in results.items():
                 cid = urn.split(":")[-1]
                 names[cid] = detail.get("name", cid)
         except Exception as exc:
-            log.warning("LinkedIn campaign name batch fetch failed: %s", exc)
+            log.error("LinkedIn /adCampaigns batch exception: %s", exc)
             for cid in chunk:
                 names[cid] = cid
     return names
