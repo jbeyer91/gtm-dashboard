@@ -89,26 +89,30 @@ def _date_range(period: str) -> tuple[date, date]:
 
 
 def _fetch_campaign_names(campaign_ids: list[str]) -> dict[str, str]:
-    """Fetch campaign names one-by-one using GET /adCampaigns/{id}.
+    """Batch-fetch campaign names via ids=List() with literal colons in URNs.
 
-    Simple per-resource GET avoids RestLi batch-read and search parameter
-    encoding issues that silently fail across API versions.
+    LinkedIn's RestLi parser rejects percent-encoded colons (%3A) inside
+    List() values — URN colons must be passed as literals.
     """
+    if not campaign_ids:
+        return {}
     names = {}
-    for cid in campaign_ids:
-        # LinkedIn REST API keys resources by URN; numeric ID alone returns 404
-        urn = urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe="")
-        url = f"{BASE_URL}/adCampaigns/{urn}"
+    for i in range(0, len(campaign_ids), 20):
+        chunk = campaign_ids[i:i + 20]
+        # safe=":" keeps colons literal; RestLi List() requires urn:li:... not urn%3Ali%3A...
+        encoded_ids = ",".join(
+            urllib.parse.quote(f"urn:li:sponsoredCampaign:{cid}", safe=":")
+            for cid in chunk
+        )
         try:
-            resp = requests.get(url, headers=_headers(), timeout=10)
-            if resp.ok:
-                names[cid] = resp.json().get("name", cid)
-            else:
-                log.warning("LinkedIn campaign %s: %s %s", cid, resp.status_code, resp.text[:300])
-                names[cid] = cid
+            data = _get("/adCampaigns", {"ids": f"List({encoded_ids})"})
+            for urn, detail in data.get("results", {}).items():
+                cid = urn.split(":")[-1]
+                names[cid] = detail.get("name", cid)
         except Exception as exc:
-            log.warning("LinkedIn campaign %s fetch failed: %s", cid, exc)
-            names[cid] = cid
+            log.warning("LinkedIn campaign name batch fetch failed: %s", exc)
+            for cid in chunk:
+                names[cid] = cid
     return names
 
 
