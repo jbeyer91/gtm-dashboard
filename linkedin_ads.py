@@ -119,10 +119,7 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
             "dateRange":       date_range,
             "timeGranularity": "ALL",
             "accounts":        f"List({account_urn})",
-            "fields":          (
-                "pivot,pivotValue,impressions,clicks,"
-                "costInLocalCurrency,leadGenerationMailContactInfoShares"
-            ),
+            "fields":          "impressions,clicks,costInLocalCurrency,oneClickLeads",
         }
         data     = _get("/adAnalytics", params)
         elements = data.get("elements", [])
@@ -134,7 +131,7 @@ def fetch_campaign_analytics(period: str = "last_30") -> dict:
             cost        = float(el.get("costInLocalCurrency", 0))
             impressions = int(el.get("impressions", 0))
             clicks      = int(el.get("clicks", 0))
-            leads       = int(el.get("leadGenerationMailContactInfoShares", 0))
+            leads       = int(el.get("oneClickLeads", 0))
             rows.append({
                 "campaign":    _campaign_name(cid) if cid else "Unknown",
                 "cost":        round(cost, 2),
