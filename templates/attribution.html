@@ -24,7 +24,7 @@
 {% set rev   = t.get('won_amt', 0) %}
 {% set spend_total = s.get('cost', 0) if ga else 0 %}
 
-<div class="grid gap-0 mb-1" style="grid-template-columns: repeat(8, 1fr) repeat(7, 24px);">
+<div class="grid gap-0 mb-1" style="grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;">
   {# helper macro for funnel step #}
   {% macro fstep(label, value, sub='', color='indigo') %}
   <div class="bg-white border border-gray-100 rounded-xl px-3 py-4 text-center shadow-sm hover:shadow-md transition-all">
@@ -71,8 +71,9 @@
   {% set ch_total = inbound_sessions if inbound_sessions is defined else none %}
   {% if ga and spend %}
     {% set sess = spend.rows | sum(attribute='sessions') %}
+    {% set click_pct = (sess / s.clicks * 100)|round(1) if s.clicks else none %}
     {{ fstep("Sessions", sess if sess < 10000 else ((sess/1000)|round(1)|string ~ "k"),
-             sub=((sess / s.clicks * 100)|round(1)|string ~ "% of clicks") if s.clicks else '') }}
+             sub=(click_pct|string ~ "% of clicks") if (click_pct is not none and click_pct <= 100) else '') }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
@@ -83,8 +84,8 @@
 
   {# Key Events #}
   {% if ga %}
-    {{ fstep("Key Events", s.get('key_events', 0) if s.get('key_events', 0) is defined else '—',
-             sub="form fills / demos") }}
+    {% set ke = s.get('key_events', 0) %}
+    {{ fstep("Key Events", ke if ke else '—', sub="form fills / demos") }}
   {% else %}
     <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">
       <p class="text-xl font-bold text-gray-300">—</p>
