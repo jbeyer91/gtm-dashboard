@@ -28,20 +28,33 @@
         <th class="px-4 py-3 text-left font-semibold">AE</th>
         <th class="px-4 py-3 text-right font-semibold">Total Named Accounts</th>
         <th class="px-4 py-3 text-right font-semibold" title="Highest-priority named accounts (A+, A, B, C tiers) that reps should be actively working.">A+ to C Accounts</th>
-        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts where Active Since Transfer is FALSE (outside Rules of Engagement). Accounts where the property is unset are excluded.">% Outside ROE</th>
+        <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts flagged as outside Rules of Engagement. Click a rep's name to see the accounts.">% Outside ROE</th>
         <th class="px-4 py-3 text-right font-semibold" title="% of A+-C accounts currently enrolled in an automated outreach sequence.">% In Sequence</th>
         <th class="px-4 py-3 text-right font-semibold" title="HubSpot tasks that are past their due date. Should be 0.">Overdue Tasks</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-100">
+    <tbody class="divide-y divide-gray-100" id="coverage-tbody">
       {% for row in data.rows %}
-      <tr class="hover:bg-slate-50 transition-colors duration-100">
-        <td class="px-4 py-3 font-medium">{{ row.ae }}</td>
+      {% set expandable = row.outside_roe > 0 %}
+      <tr class="coverage-row transition-colors duration-100 {{ 'cursor-pointer hover:bg-slate-50' if expandable else '' }}"
+          data-owner="{{ row.owner_id }}"
+          data-outside-roe="{{ row.outside_roe }}">
+        <td class="px-4 py-3 font-medium whitespace-nowrap">
+          {% if expandable %}
+          <span class="row-toggle inline-block mr-1.5 text-gray-300 select-none" style="font-size:.6rem;transition:color .15s,transform .15s;transform:rotate(0deg);">▶</span>
+          {% else %}
+          <span class="inline-block mr-1.5" style="font-size:.6rem;visibility:hidden;">▶</span>
+          {% endif %}
+          {{ row.ae }}
+        </td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.total_accounts) }}</td>
         <td class="px-4 py-3 text-right tabular-nums">{{ "{:,}".format(row.ac_accounts) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
           {% if row.pct_outside_roe <= 25 %}text-green-600{% elif row.pct_outside_roe <= 50 %}text-yellow-600{% else %}text-red-500{% endif %}">
           {{ fmt_pct(row.pct_outside_roe) }}
+          {% if expandable %}
+          <span class="ml-1 text-gray-300 roe-expand-hint" style="font-size:.65rem;" title="Click to see outside ROE accounts">↓</span>
+          {% endif %}
         </td>
         <td class="px-4 py-3 text-right tabular-nums">{{ fmt_pct(row.pct_in_sequence) }}</td>
         <td class="px-4 py-3 text-right tabular-nums font-semibold
@@ -64,4 +77,99 @@
     </tfoot>
   </table>
 </div>
+
+<script>
+(function () {
+  var ICP_COLORS = {
+    'A+': ['#ede9fe','#6d28d9'],
+    'A':  ['#dbeafe','#1d4ed8'],
+    'B':  ['#dcfce7','#15803d'],
+    'C':  ['#fef9c3','#a16207'],
+  };
+
+  function icpBadge(rank) {
+    var c = ICP_COLORS[rank] || ['#f1f5f9','#64748b'];
+    return '<span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:9999px;'
+         + 'background:' + c[0] + ';color:' + c[1] + ';">' + (rank || '—') + '</span>';
+  }
+
+  function fmtDate(raw) {
+    if (!raw) return '<span style="color:#d1d5db;">—</span>';
+    // HubSpot returns dates as "YYYY-MM-DD" strings
+    var d = new Date(raw);
+    if (isNaN(d)) return raw;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function renderRows(accounts) {
+    if (!accounts.length) {
+      return '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-400 text-xs">No accounts outside ROE</td></tr>';
+    }
+    return accounts.map(function (a) {
+      return '<tr class="border-t border-slate-100 hover:bg-white">'
+        + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
+        + '<td class="px-4 py-2 text-center">' + icpBadge(a.icp_rank) + '</td>'
+        + '<td class="px-4 py-2 text-right text-slate-500 tabular-nums">' + fmtDate(a.last_activity) + '</td>'
+        + '<td colspan="3"></td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  var SPINNER = '<svg style="width:13px;height:13px;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:middle;" fill="none" viewBox="0 0 24 24">'
+    + '<circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>'
+    + '<path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+
+  document.querySelectorAll('.coverage-row[data-outside-roe]').forEach(function (tr) {
+    if (parseInt(tr.getAttribute('data-outside-roe'), 10) <= 0) return;
+
+    tr.addEventListener('click', function () {
+      var ownerId   = tr.getAttribute('data-owner');
+      var toggle    = tr.querySelector('.row-toggle');
+      var expandRow = tr.nextElementSibling;
+
+      // Collapse if already open
+      if (expandRow && expandRow.classList.contains('roe-expand-row')) {
+        var isOpen = expandRow.style.display !== 'none';
+        expandRow.style.display = isOpen ? 'none' : '';
+        if (toggle) {
+          toggle.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+          toggle.style.color     = isOpen ? '#d1d5db'      : '#6366f1';
+        }
+        return;
+      }
+
+      // Insert loading row
+      var newRow = document.createElement('tr');
+      newRow.className = 'roe-expand-row';
+      newRow.innerHTML = '<td colspan="6" class="p-0 bg-slate-50">'
+        + '<table class="w-full text-xs border-t border-slate-200">'
+        + '<thead><tr style="background:#f1f5f9;">'
+        + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;color:#dc2626;">Outside ROE Accounts</th>'
+        + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP Rank</th>'
+        + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Activity</th>'
+        + '<th colspan="3"></th>'
+        + '</tr></thead>'
+        + '<tbody><tr><td colspan="6" class="px-6 py-4 text-center text-gray-400 text-xs">' + SPINNER + ' Loading…</td></tr></tbody>'
+        + '</table></td>';
+      tr.after(newRow);
+
+      if (toggle) {
+        toggle.style.transform = 'rotate(90deg)';
+        toggle.style.color     = '#6366f1';
+      }
+
+      fetch('/api/book-coverage/outside-roe-accounts?owner_id=' + encodeURIComponent(ownerId), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var tbody = newRow.querySelector('tbody');
+          if (tbody) tbody.innerHTML = renderRows(data.accounts || []);
+        })
+        .catch(function () {
+          var tbody = newRow.querySelector('tbody');
+          if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-400 text-xs">Failed to load accounts</td></tr>';
+        });
+    });
+  });
+})();
+</script>
 {% endblock %}
