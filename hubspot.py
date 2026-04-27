@@ -962,6 +962,42 @@ def _batch_associations(from_type: str, to_type: str, from_ids: list) -> dict:
     return result
 
 
+def get_deal_close_data_for_companies(company_ids: list) -> dict:
+    """Return deal close data for the given company IDs.
+
+    Used to distinguish ROE Branch 3a from 3b.
+    Returns {company_id: [{"closedate": str, "closed_lost_reason": str}, ...]}.
+    """
+    if not company_ids:
+        return {}
+
+    company_to_deal_ids = _batch_associations("companies", "deals",
+                                               [str(cid) for cid in company_ids])
+    if not company_to_deal_ids:
+        return {}
+
+    all_deal_ids = list({did for ids in company_to_deal_ids.values() for did in ids})
+    deal_props: dict = {}
+    for i in range(0, len(all_deal_ids), 100):
+        batch = all_deal_ids[i:i + 100]
+        resp = _post_with_retry(
+            f"{BASE_URL}/crm/v3/objects/deals/batch/read",
+            {"inputs": [{"id": did} for did in batch],
+             "properties": ["closedate", "closed_lost_reason"]},
+            "deals batch/read for ROE branch",
+        )
+        if not resp.ok:
+            log.warning("deals batch/read (ROE) %s: %s", resp.status_code, resp.text[:200])
+            continue
+        for obj in resp.json().get("results", []):
+            deal_props[str(obj["id"])] = obj.get("properties", {})
+
+    return {
+        cid: [deal_props[did] for did in dids if did in deal_props]
+        for cid, dids in company_to_deal_ids.items()
+    }
+
+
 @ttl_cache
 def get_deal_contact_windows() -> dict:
     """
@@ -1068,6 +1104,8 @@ def get_companies_for_coverage() -> list:
                 "in_active_sequence",
                 "active_since_transfer",
                 "outside_roe",
+                "hubspot_owner_assigneddate",
+                "num_associated_deals",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
