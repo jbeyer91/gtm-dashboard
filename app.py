@@ -1337,6 +1337,16 @@ def book_coverage():
                            is_admin=is_admin, nav=NAV, active="book_coverage")
 
 
+@app.route("/api/book-coverage/outside-roe-accounts")
+@login_required
+def api_book_coverage_outside_roe_accounts():
+    owner_id = request.args.get("owner_id", "").strip()
+    if not owner_id:
+        return jsonify({"accounts": []})
+    accounts = analytics.get_outside_roe_accounts(owner_id)
+    return jsonify({"accounts": accounts})
+
+
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():

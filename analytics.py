@@ -3849,6 +3849,44 @@ def compute_book_coverage() -> dict:
     return {"rows": rows, "totals": totals}
 
 
+def get_outside_roe_accounts(owner_id: str) -> list:
+    """Return A+-C accounts flagged outside ROE for a single owner."""
+    companies = get_companies_for_coverage()
+    AC_TIERS = {"superior", "strong", "moderate", "conservative"}
+
+    def _is_truthy(val) -> bool:
+        return str(val).strip().lower() in ("true", "yes", "1")
+
+    ICP_GRADE = {
+        "superior": "A+", "strong": "A", "moderate": "B",
+        "conservative": "C", "least_priority": "D",
+    }
+
+    result = []
+    for company in companies:
+        props = company["properties"]
+        if props.get("hubspot_owner_id", "") != owner_id:
+            continue
+        tier = (props.get("icp_rank") or "").strip().lower()
+        if tier not in AC_TIERS:
+            continue
+        outside_val = props.get("outside_roe")
+        if outside_val is None or not _is_truthy(outside_val):
+            continue
+        raw_rank = (props.get("icp_rank") or "").strip()
+        result.append({
+            "name": props.get("name") or "",
+            "icp_rank": ICP_GRADE.get(raw_rank.lower(), raw_rank),
+            "last_activity": props.get("notes_last_activity_date") or "",
+        })
+
+    result.sort(key=lambda r: (
+        {"A+": 0, "A": 1, "B": 2, "C": 3}.get(r["icp_rank"], 9),
+        r["name"].lower(),
+    ))
+    return result
+
+
 @ttl_cache
 def _rep_trailing_deal_stats(lookback_days: int = 90) -> dict:
     """Compute per-rep win rate, stage-2 advancement rate, and ACV from closed deals.
