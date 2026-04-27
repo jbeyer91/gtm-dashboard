@@ -172,7 +172,10 @@ NAV = [
         {"endpoint": "pipeline_generated", "label": "Pipeline Generated"},
         {"endpoint": "pipeline_coverage",  "label": "Pipeline Coverage"},
     ]},
-    {"type": "link",  "endpoint": "book_coverage",     "label": "Account Coverage"},
+    {"type": "group", "label": "Accounts", "children": [
+        {"endpoint": "book_coverage", "label": "Account Coverage"},
+        {"endpoint": "tam_funnel",    "label": "TAM Funnel"},
+    ]},
     {"type": "group", "label": "Calls", "children": [
         {"endpoint": "call_stats",                          "label": "Summary"},
         {"endpoint": "calls_drilldown.calls_drilldown",     "label": "Connect Analysis"},
@@ -183,7 +186,6 @@ NAV = [
         {"endpoint": "inbound_funnel",  "label": "Inbound Funnel"},
         {"endpoint": "abm",             "label": "ABM"},
         {"endpoint": "speed_to_lead",   "label": "Speed to Lead"},
-        {"endpoint": "tam_funnel",      "label": "TAM Funnel"},
         {"endpoint": "paid_media",      "label": "Paid Media"},
         {"endpoint": "attribution",     "label": "Attribution"},
     ]},
