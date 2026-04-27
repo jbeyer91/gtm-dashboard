@@ -3936,7 +3936,8 @@ def get_outside_roe_accounts(owner_id: str) -> list:
             continue
 
         raw_rank   = (props.get("icp_rank") or "").strip()
-        dt_activity = _to_dt(props.get("notes_last_activity_date"))
+        dt_activity = _to_dt(props.get("notes_last_activity_date")
+                             or props.get("notes_last_updated"))
         dt_assigned = _to_dt(props.get("hubspot_owner_assigneddate"))
         num_deals   = int(props.get("num_associated_deals") or 0)
         days_act    = _days(dt_activity)

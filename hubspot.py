@@ -1106,6 +1106,7 @@ def get_companies_for_coverage() -> list:
                 "outside_roe",
                 "hubspot_owner_assigneddate",
                 "num_associated_deals",
+                "notes_last_updated",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
