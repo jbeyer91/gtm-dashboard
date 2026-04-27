@@ -17,7 +17,7 @@ from hubspot import (
     get_owner_team_map, TEAM_MANAGER,
     get_quotas, get_companies_for_coverage, get_sequence_enrolled_company_ids,
     get_overdue_sequence_tasks, _parse_hs_datetime, get_forecast_submissions,
-    get_target_account_companies, _search_all,
+    get_target_account_companies, _search_all, get_deal_close_data_for_companies,
     get_calls_enriched,
     get_rh_contacts, get_calls_for_contacts, get_deals_for_contacts, HUBSPOT_PORTAL_ID,
 )
@@ -3853,12 +3853,12 @@ def get_outside_roe_accounts(owner_id: str) -> list:
     """Return A+-C accounts flagged outside ROE for a single owner.
 
     Derives a roe_reason for each account by replaying the workflow's
-    top-down branch logic using company-level fields:
-      Branch 1 — owner assigned 15–45 days ago AND assigned_date > last_activity
-      Branch 2 — last activity 46–90 days ago
-      Branch 3 — last activity 91–180 days ago + has deals  (3a/3b; deal-level
-                  data needed to distinguish, surfaced as 'stale_deal')
-      Branch 4 — last activity 90+ days ago + no deals
+    top-down branch logic:
+      Branch 1  — owner assigned 15–45 days ago AND assigned_date > last_activity
+      Branch 2  — last activity 46–90 days ago
+      Branch 3b — last activity 91–180 days, deal close >60d, reason = 'demo never held'
+      Branch 3a — last activity 91–180 days, deal close >90d, reason ≠ 'demo never held'
+      Branch 4  — last activity 90+ days, no deals
     """
     companies = get_companies_for_coverage()
     now = datetime.now(timezone.utc)
@@ -3884,30 +3884,46 @@ def get_outside_roe_accounts(owner_id: str) -> list:
     REASON_LABELS = {
         "new_ownership": "New ownership — no activity since transfer",
         "stale_medium":  "No activity 46–90 days",
+        "stale_deal_3b": "Closed lost (demo never held) — inactive 60–180 days",
+        "stale_deal_3a": "Closed lost — inactive 90–180 days",
         "stale_deal":    "Long inactive + closed deal",
         "no_deals":      "No deals + inactive 90+ days",
         "other":         "Inactive",
     }
 
-    def _branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals):
-        # Branch 1: recently reassigned with no activity since transfer
+    def _coarse_branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals):
         if (days_asgn is not None and dt_assigned is not None
                 and dt_activity is not None
                 and 14 < days_asgn < 46
                 and dt_assigned > dt_activity):
             return "new_ownership"
-        # Branch 2: stale 46–90 days
         if days_act is not None and 45 < days_act < 91:
             return "stale_medium"
-        # Branches 3a/3b: 91–180 days + has an associated deal
         if days_act is not None and 60 < days_act < 181 and (num_deals or 0) > 0:
-            return "stale_deal"
-        # Branch 4: 90+ days + no deals
+            return "stale_deal"   # refined to 3a/3b after deal fetch
         if days_act is not None and days_act > 90 and not (num_deals or 0) > 0:
             return "no_deals"
         return "other"
 
-    result = []
+    def _refine_with_deals(days_act, deals: list) -> str:
+        # Branch 3b: deal close >60d + reason = "demo never held"
+        for d in deals:
+            close_dt = _to_dt(d.get("closedate"))
+            lost = (d.get("closed_lost_reason") or "").strip().lower()
+            if close_dt and _days(close_dt) > 60 and lost == "demo never held":
+                return "stale_deal_3b"
+        # Branch 3a: deal close >90d + reason ≠ "demo never held"
+        for d in deals:
+            close_dt = _to_dt(d.get("closedate"))
+            lost = (d.get("closed_lost_reason") or "").strip().lower()
+            if close_dt and _days(close_dt) > 90 and lost != "demo never held":
+                return "stale_deal_3a"
+        return "stale_deal"  # deal data present but no qualifying close date
+
+    # ── First pass: collect candidates ──────────────────────────────────────
+    candidates = []
+    stale_deal_company_ids = []
+
     for company in companies:
         props = company["properties"]
         if props.get("hubspot_owner_id", "") != owner_id:
@@ -3919,15 +3935,16 @@ def get_outside_roe_accounts(owner_id: str) -> list:
         if outside_val is None or not _is_truthy(outside_val):
             continue
 
-        raw_rank = (props.get("icp_rank") or "").strip()
+        raw_rank   = (props.get("icp_rank") or "").strip()
         dt_activity = _to_dt(props.get("notes_last_activity_date"))
         dt_assigned = _to_dt(props.get("hubspot_owner_assigneddate"))
         num_deals   = int(props.get("num_associated_deals") or 0)
         days_act    = _days(dt_activity)
         days_asgn   = _days(dt_assigned)
-        reason      = _branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals)
+        reason      = _coarse_branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals)
 
-        result.append({
+        acct = {
+            "_company_id":        company["id"],
             "name":               props.get("name") or "",
             "icp_rank":           ICP_GRADE.get(raw_rank.lower(), raw_rank),
             "roe_reason":         reason,
@@ -3935,15 +3952,30 @@ def get_outside_roe_accounts(owner_id: str) -> list:
             "days_since_activity": days_act,
             "days_since_assigned": days_asgn,
             "num_deals":          num_deals,
-            "last_activity":      props.get("notes_last_activity_date") or "",
-            "owner_assigned":     props.get("hubspot_owner_assigneddate") or "",
-        })
+        }
+        candidates.append(acct)
+        if reason == "stale_deal":
+            stale_deal_company_ids.append(company["id"])
 
-    result.sort(key=lambda r: (
+    # ── Second pass: refine stale_deal → 3a/3b using associated deal data ──
+    if stale_deal_company_ids:
+        deal_data = get_deal_close_data_for_companies(stale_deal_company_ids)
+        for acct in candidates:
+            if acct["roe_reason"] != "stale_deal":
+                continue
+            deals = deal_data.get(acct["_company_id"], [])
+            refined = _refine_with_deals(acct["days_since_activity"], deals)
+            acct["roe_reason"]       = refined
+            acct["roe_reason_label"] = REASON_LABELS[refined]
+
+    for acct in candidates:
+        del acct["_company_id"]
+
+    candidates.sort(key=lambda r: (
         {"A+": 0, "A": 1, "B": 2, "C": 3}.get(r["icp_rank"], 9),
         r["name"].lower(),
     ))
-    return result
+    return candidates
 
 
 @ttl_cache
