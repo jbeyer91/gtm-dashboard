@@ -1067,6 +1067,7 @@ def get_companies_for_coverage() -> list:
                 "name",
                 "in_active_sequence",
                 "active_since_transfer",
+                "outside_roe",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
