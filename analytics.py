@@ -3850,17 +3850,62 @@ def compute_book_coverage() -> dict:
 
 
 def get_outside_roe_accounts(owner_id: str) -> list:
-    """Return A+-C accounts flagged outside ROE for a single owner."""
+    """Return A+-C accounts flagged outside ROE for a single owner.
+
+    Derives a roe_reason for each account by replaying the workflow's
+    top-down branch logic using company-level fields:
+      Branch 1 — owner assigned 15–45 days ago AND assigned_date > last_activity
+      Branch 2 — last activity 46–90 days ago
+      Branch 3 — last activity 91–180 days ago + has deals  (3a/3b; deal-level
+                  data needed to distinguish, surfaced as 'stale_deal')
+      Branch 4 — last activity 90+ days ago + no deals
+    """
     companies = get_companies_for_coverage()
+    now = datetime.now(timezone.utc)
     AC_TIERS = {"superior", "strong", "moderate", "conservative"}
 
     def _is_truthy(val) -> bool:
         return str(val).strip().lower() in ("true", "yes", "1")
 
+    def _to_dt(raw):
+        try:
+            return _parse_hs_datetime(str(raw)) if raw else None
+        except Exception:
+            return None
+
+    def _days(dt) -> int | None:
+        return (now - dt).days if dt else None
+
     ICP_GRADE = {
         "superior": "A+", "strong": "A", "moderate": "B",
         "conservative": "C", "least_priority": "D",
     }
+
+    REASON_LABELS = {
+        "new_ownership": "New ownership — no activity since transfer",
+        "stale_medium":  "No activity 46–90 days",
+        "stale_deal":    "Long inactive + closed deal",
+        "no_deals":      "No deals + inactive 90+ days",
+        "other":         "Inactive",
+    }
+
+    def _branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals):
+        # Branch 1: recently reassigned with no activity since transfer
+        if (days_asgn is not None and dt_assigned is not None
+                and dt_activity is not None
+                and 14 < days_asgn < 46
+                and dt_assigned > dt_activity):
+            return "new_ownership"
+        # Branch 2: stale 46–90 days
+        if days_act is not None and 45 < days_act < 91:
+            return "stale_medium"
+        # Branches 3a/3b: 91–180 days + has an associated deal
+        if days_act is not None and 60 < days_act < 181 and (num_deals or 0) > 0:
+            return "stale_deal"
+        # Branch 4: 90+ days + no deals
+        if days_act is not None and days_act > 90 and not (num_deals or 0) > 0:
+            return "no_deals"
+        return "other"
 
     result = []
     for company in companies:
@@ -3873,11 +3918,25 @@ def get_outside_roe_accounts(owner_id: str) -> list:
         outside_val = props.get("outside_roe")
         if outside_val is None or not _is_truthy(outside_val):
             continue
+
         raw_rank = (props.get("icp_rank") or "").strip()
+        dt_activity = _to_dt(props.get("notes_last_activity_date"))
+        dt_assigned = _to_dt(props.get("hubspot_owner_assigneddate"))
+        num_deals   = int(props.get("num_associated_deals") or 0)
+        days_act    = _days(dt_activity)
+        days_asgn   = _days(dt_assigned)
+        reason      = _branch(days_act, days_asgn, dt_assigned, dt_activity, num_deals)
+
         result.append({
-            "name": props.get("name") or "",
-            "icp_rank": ICP_GRADE.get(raw_rank.lower(), raw_rank),
-            "last_activity": props.get("notes_last_activity_date") or "",
+            "name":               props.get("name") or "",
+            "icp_rank":           ICP_GRADE.get(raw_rank.lower(), raw_rank),
+            "roe_reason":         reason,
+            "roe_reason_label":   REASON_LABELS[reason],
+            "days_since_activity": days_act,
+            "days_since_assigned": days_asgn,
+            "num_deals":          num_deals,
+            "last_activity":      props.get("notes_last_activity_date") or "",
+            "owner_assigned":     props.get("hubspot_owner_assigneddate") or "",
         })
 
     result.sort(key=lambda r: (

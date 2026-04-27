@@ -86,6 +86,13 @@
     'B':  ['#dcfce7','#15803d'],
     'C':  ['#fef9c3','#a16207'],
   };
+  var REASON_STYLES = {
+    'new_ownership': ['#fff7ed','#c2410c'],  // orange
+    'stale_medium':  ['#fefce8','#a16207'],  // yellow
+    'stale_deal':    ['#fff1f2','#be123c'],  // rose
+    'no_deals':      ['#fef2f2','#dc2626'],  // red
+    'other':         ['#f8fafc','#64748b'],  // slate
+  };
 
   function icpBadge(rank) {
     var c = ICP_COLORS[rank] || ['#f1f5f9','#64748b'];
@@ -93,12 +100,39 @@
          + 'background:' + c[0] + ';color:' + c[1] + ';">' + (rank || '—') + '</span>';
   }
 
-  function fmtDate(raw) {
-    if (!raw) return '<span style="color:#d1d5db;">—</span>';
-    // HubSpot returns dates as "YYYY-MM-DD" strings
-    var d = new Date(raw);
-    if (isNaN(d)) return raw;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  function reasonBadge(reason, label) {
+    var c = REASON_STYLES[reason] || REASON_STYLES['other'];
+    return '<span style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap;'
+         + 'background:' + c[0] + ';color:' + c[1] + ';">' + label + '</span>';
+  }
+
+  // N days ago with color thresholds from the workflow spec
+  function activityCell(days) {
+    if (days === null || days === undefined) return '<span style="color:#d1d5db;">—</span>';
+    var label = days + 'd ago';
+    var color;
+    if      (days >= 180) color = '#991b1b';   // dark red
+    else if (days >= 90)  color = '#dc2626';   // red
+    else if (days >= 45)  color = '#d97706';   // yellow/amber
+    else                  color = '#64748b';   // slate (shouldn't appear)
+    return '<span style="font-weight:600;color:' + color + ';">' + label + '</span>';
+  }
+
+  // Owner Since — red only when it's the trigger (new_ownership branch)
+  function assignedCell(days, reason) {
+    if (days === null || days === undefined) return '<span style="color:#d1d5db;">—</span>';
+    var label = days + 'd ago';
+    var color = (reason === 'new_ownership') ? '#c2410c' : '#94a3b8';
+    return '<span style="font-weight:' + (reason === 'new_ownership' ? '600' : '400')
+         + ';color:' + color + ';">' + label + '</span>';
+  }
+
+  // # Deals — red when 0 + the account is in branch 4 (no_deals)
+  function dealsCell(num, reason) {
+    if (num === null || num === undefined) num = 0;
+    var color = (reason === 'no_deals') ? '#dc2626' : '#94a3b8';
+    var weight = (reason === 'no_deals') ? '600' : '400';
+    return '<span style="font-weight:' + weight + ';color:' + color + ';">' + num + '</span>';
   }
 
   function renderRows(accounts) {
@@ -109,8 +143,10 @@
       return '<tr class="border-t border-slate-100 hover:bg-white">'
         + '<td class="py-2 font-medium text-slate-800 whitespace-nowrap" style="padding-left:3rem;">' + (a.name || '—') + '</td>'
         + '<td class="px-4 py-2 text-center">' + icpBadge(a.icp_rank) + '</td>'
-        + '<td class="px-4 py-2 text-right text-slate-500 tabular-nums">' + fmtDate(a.last_activity) + '</td>'
-        + '<td colspan="3"></td>'
+        + '<td class="px-4 py-2">' + reasonBadge(a.roe_reason, a.roe_reason_label) + '</td>'
+        + '<td class="px-4 py-2 text-right tabular-nums">' + activityCell(a.days_since_activity) + '</td>'
+        + '<td class="px-4 py-2 text-right tabular-nums">' + assignedCell(a.days_since_assigned, a.roe_reason) + '</td>'
+        + '<td class="px-4 py-2 text-right tabular-nums">' + dealsCell(a.num_deals, a.roe_reason) + '</td>'
         + '</tr>';
     }).join('');
   }
@@ -118,6 +154,15 @@
   var SPINNER = '<svg style="width:13px;height:13px;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:middle;" fill="none" viewBox="0 0 24 24">'
     + '<circle style="opacity:.25" cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="4"/>'
     + '<path style="opacity:.75" fill="#6366f1" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+
+  var SUB_HEADERS = '<thead><tr style="background:#f1f5f9;">'
+    + '<th class="px-6 py-2 text-left font-semibold uppercase tracking-wider" style="padding-left:3rem;color:#dc2626;font-size:.65rem;">Outside ROE Accounts</th>'
+    + '<th class="px-4 py-2 text-center font-semibold text-slate-400 uppercase tracking-wider" style="font-size:.65rem;">ICP</th>'
+    + '<th class="px-4 py-2 text-left font-semibold text-slate-400 uppercase tracking-wider" style="font-size:.65rem;">Reason</th>'
+    + '<th class="px-4 py-2 text-right font-semibold text-slate-400 uppercase tracking-wider" style="font-size:.65rem;">Last Activity</th>'
+    + '<th class="px-4 py-2 text-right font-semibold text-slate-400 uppercase tracking-wider" style="font-size:.65rem;">Owner Since</th>'
+    + '<th class="px-4 py-2 text-right font-semibold text-slate-400 uppercase tracking-wider" style="font-size:.65rem;"># Deals</th>'
+    + '</tr></thead>';
 
   document.querySelectorAll('.coverage-row[data-outside-roe]').forEach(function (tr) {
     if (parseInt(tr.getAttribute('data-outside-roe'), 10) <= 0) return;
@@ -143,12 +188,7 @@
       newRow.className = 'roe-expand-row';
       newRow.innerHTML = '<td colspan="6" class="p-0 bg-slate-50">'
         + '<table class="w-full text-xs border-t border-slate-200">'
-        + '<thead><tr style="background:#f1f5f9;">'
-        + '<th class="px-6 py-2 text-left font-semibold text-slate-500 uppercase tracking-wider" style="padding-left:3rem;color:#dc2626;">Outside ROE Accounts</th>'
-        + '<th class="px-4 py-2 text-center font-semibold text-slate-500 uppercase tracking-wider">ICP Rank</th>'
-        + '<th class="px-4 py-2 text-right font-semibold text-slate-500 uppercase tracking-wider">Last Activity</th>'
-        + '<th colspan="3"></th>'
-        + '</tr></thead>'
+        + SUB_HEADERS
         + '<tbody><tr><td colspan="6" class="px-6 py-4 text-center text-gray-400 text-xs">' + SPINNER + ' Loading…</td></tr></tbody>'
         + '</table></td>';
       tr.after(newRow);
@@ -166,7 +206,7 @@
         })
         .catch(function () {
           var tbody = newRow.querySelector('tbody');
-          if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-400 text-xs">Failed to load accounts</td></tr>';
+          if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-400 text-xs">Failed to load</td></tr>';
         });
     });
   });

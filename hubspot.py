@@ -1068,6 +1068,8 @@ def get_companies_for_coverage() -> list:
                 "in_active_sequence",
                 "active_since_transfer",
                 "outside_roe",
+                "hubspot_owner_assigneddate",
+                "num_associated_deals",
             ],
         }
         all_companies.extend(_search_all("companies", payload))
